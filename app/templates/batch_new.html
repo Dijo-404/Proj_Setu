@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}New batch · Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ batch_type.value }}</p>
+    <h1>New batch</h1>
+  </div>
+</section>
+
+<section class="panel narrow">
+  {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+  <form method="post" action="/batches" class="stack">
+    <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
+    <label>
+      {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
+      <input name="party_name" placeholder="Name">
+    </label>
+    {% if batch_type.value == 'SALES_RETURN' %}
+    <label>Return condition
+      <select name="reason_code">
+        <option value="GOOD">Good condition</option>
+        <option value="DAMAGED">Damaged</option>
+        <option value="EXPIRED">Expired</option>
+      </select>
+    </label>
+    {% elif batch_type.value == 'ISSUE' %}
+    <label>Issue reason
+      <select name="reason_code">
+        <option value="SAMPLE">Sample</option>
+        <option value="MARKETING">Marketing</option>
+        <option value="OFFICE_USE">Office use</option>
+        <option value="PRODUCTION_USE">Production use</option>
+        <option value="FREE_DISTRIBUTION">Free distribution</option>
+      </select>
+    </label>
+    {% elif batch_type.value == 'PURCHASE_RETURN' %}
+    <label>Return reason
+      <select name="reason_code">
+        <option value="SUPPLIER_RETURN">Supplier return</option>
+        <option value="DAMAGED">Damaged</option>
+        <option value="EXPIRED">Expired</option>
+      </select>
+    </label>
+    {% endif %}
+    <label>Notes<textarea name="notes" rows="3"></textarea></label>
+    <button class="button primary full" type="submit">Start {{ batch_type.value|lower }} batch</button>
+  </form>
+</section>
+{% endblock %}

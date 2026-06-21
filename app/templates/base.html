@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Setu QR Tally Bridge{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  {% if user %}
+  <header class="topbar">
+    <a class="brand" href="/">Setu</a>
+    <nav class="nav">
+      <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
+      <a href="/batches/new?batch_type=RECEIVE">Receive</a>
+      <a href="/batches/new?batch_type=SALE">Sale</a>
+      <a href="/batches/new?batch_type=AUDIT">Audit</a>
+      <a href="/batches" class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</a>
+      <a href="/serials" class="{{ 'active' if request.url.path.startswith('/serials') else '' }}">Serials</a>
+      {% if user.role in ['admin', 'super_admin'] %}
+      <a href="/products" class="{{ 'active' if request.url.path.startswith('/products') else '' }}">Products</a>
+      <a href="/reports" class="{{ 'active' if request.url.path.startswith('/reports') else '' }}">Reports</a>
+      <a href="/tally-check" class="{{ 'active' if request.url.path.startswith('/tally-check') else '' }}">Tally Check</a>
+      <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') else '' }}">Settings</a>
+      <a href="/maintenance" class="{{ 'active' if request.url.path.startswith('/maintenance') else '' }}">Maintenance</a>
+      <a href="/qr-replacement" class="{{ 'active' if request.url.path.startswith('/qr-replacement') else '' }}">QR Replace</a>
+      <a href="/users" class="{{ 'active' if request.url.path.startswith('/users') else '' }}">Users</a>
+      {% endif %}
+    </nav>
+    <form method="post" action="/logout" class="logout">
+      <span>{{ user.username }}</span>
+      <button type="submit" class="button ghost">Logout</button>
+    </form>
+  </header>
+  {% endif %}
+  <main class="page">
+    {% block content %}{% endblock %}
+  </main>
+</body>
+</html>

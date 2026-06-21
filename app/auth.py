@@ -1,0 +1,41 @@
+from fastapi import HTTPException, Request, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from app.models import Role, User
+from app.security import read_session_token
+
+SESSION_COOKIE = "setu_session"
+
+
+def redirect_exception(url: str) -> HTTPException:
+    return HTTPException(status_code=status.HTTP_303_SEE_OTHER, headers={"Location": url})
+
+
+def current_user(request: Request, db: Session) -> User | None:
+    user_id = read_session_token(request.cookies.get(SESSION_COOKIE))
+    if not user_id:
+        return None
+    user = db.get(User, user_id)
+    if not user or not user.active:
+        return None
+    return user
+
+
+def require_user(request: Request, db: Session, roles: set[Role] | None = None) -> User:
+    user = current_user(request, db)
+    if not user:
+        raise redirect_exception("/login")
+    if roles and Role(user.role) not in roles:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    return user
+
+
+def get_user_by_username(db: Session, username: str) -> User | None:
+    return db.scalar(select(User).where(User.username == username.strip().lower()))
+
+
+ADMIN_ROLES = {Role.ADMIN, Role.SUPER_ADMIN}
+PURCHASE_ROLES = {Role.PURCHASE, Role.ADMIN, Role.SUPER_ADMIN}
+SALES_ROLES = {Role.SALES, Role.ADMIN, Role.SUPER_ADMIN}
+AUDIT_ROLES = {Role.AUDITOR, Role.ADMIN, Role.SUPER_ADMIN}

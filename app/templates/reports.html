@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Reports · Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Audit trail</p>
+    <h1>Reports</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Export CSV</a>
+    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Export XLSX</a>
+  </div>
+</section>
+
+<section class="panel">
+  <form method="get" class="filters">
+    <label>Action
+      <select name="action">
+        <option value="">All</option>
+        {% for value in ['RECEIVE','SALE','AUDIT'] %}
+        <option value="{{ value }}" {{ 'selected' if action == value else '' }}>{{ value }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>From<input name="start" type="date" value="{{ start }}"></label>
+    <label>To<input name="end" type="date" value="{{ end }}"></label>
+    <button class="button" type="submit">Apply</button>
+  </form>
+</section>
+
+<section class="split">
+  <div>
+    <div class="section-title"><h2>Scans</h2></div>
+    <table>
+      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Serial</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for scan in scans %}
+        <tr>
+          <td>{{ scan.created_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ scan.user.username }}</td>
+          <td>{{ scan.action }}</td>
+          <td>{{ scan.serial_number_raw }}</td>
+          <td><span class="status {{ scan.status|lower }}">{{ scan.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No scan records</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div>
+    <div class="section-title"><h2>Pending sync</h2></div>
+    <table>
+      <thead><tr><th>Batch</th><th>Status</th><th>Retries</th><th>Last retry</th><th>Error</th></tr></thead>
+      <tbody>
+        {% for batch in pending %}
+        <tr>
+          <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
+          <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+          <td>{{ batch.retry_count or 0 }}</td>
+          <td>{{ batch.last_retry_at.strftime('%d %b %H:%M') if batch.last_retry_at else '-' }}</td>
+          <td>{{ batch.last_error or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No pending sync</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

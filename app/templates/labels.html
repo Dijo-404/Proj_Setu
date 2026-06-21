@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Labels · Setu{% endblock %}
+{% block content %}
+<section class="page-head print-hide">
+  <div>
+    <p class="eyebrow">QR labels</p>
+    <h1>Print labels</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/serials/labels.pdf?ids={{ request.query_params.get('ids', '') }}">Download PDF</a>
+    <button class="button primary" onclick="window.print()">Print</button>
+  </div>
+</section>
+
+<section class="label-sheet">
+  {% for serial in serials %}
+  <div class="qr-label">
+    <img src="/serials/{{ serial.id }}/qr.png" alt="{{ serial.serial_number }}">
+    <strong>{{ serial.serial_number }}</strong>
+    <span>{{ serial.product.product_name }}</span>
+  </div>
+  {% else %}
+  <div class="empty">No labels selected</div>
+  {% endfor %}
+</section>
+{% endblock %}

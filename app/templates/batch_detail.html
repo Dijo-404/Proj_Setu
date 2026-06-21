@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+{% block title %}{{ batch.batch_number }} · Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">{{ batch.batch_type }}</p>
+    <h1>{{ batch.batch_number }}</h1>
+  </div>
+  <div class="actions">
+    <span class="status {{ batch.status|lower }}">{{ batch.status }}</span>
+    {% if batch.batch_type == 'AUDIT' and batch.status != 'DRAFT' %}
+    <a class="button" href="/batches/{{ batch.id }}/audit.pdf">Audit PDF</a>
+    {% endif %}
+    {% if user.role in ['admin', 'super_admin'] and batch.batch_type in ['RECEIVE', 'SALE'] and batch.items|length > 0 %}
+    <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
+    {% endif %}
+    <a class="button" href="/batches">Batches</a>
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if batch.last_error %}<div class="alert warn">{{ batch.last_error }}</div>{% endif %}
+
+<section class="batch-layout">
+  <div class="panel scanner-panel">
+    <div class="section-title">
+      <h2>Scanner</h2>
+      <span>{{ batch.items|length }} scanned</span>
+    </div>
+    {% if batch.status == 'DRAFT' %}
+    <div id="scan-alert" class="alert hidden"></div>
+    <div class="scanner-box">
+      <video id="scanner-video" playsinline muted></video>
+    </div>
+    <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form">
+      <input id="serial-input" name="serial_number" placeholder="Serial number" autocomplete="off" required>
+      <button class="button primary" type="submit">Add</button>
+      <button class="button" type="button" id="camera-button">Camera</button>
+    </form>
+    {% else %}
+    <div class="empty">Batch submitted</div>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <div class="section-title">
+      <h2>Details</h2>
+    </div>
+    <dl class="details">
+      <dt>Party</dt><dd>{{ batch.party_name or '-' }}</dd>
+      <dt>Reason</dt><dd>{{ batch.reason_code or '-' }}</dd>
+      <dt>Created by</dt><dd>{{ batch.user.username }}</dd>
+      <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+      <dt>Tally reference</dt><dd>{{ batch.tally_reference or '-' }}</dd>
+      <dt>Retry count</dt><dd>{{ batch.retry_count or 0 }}</dd>
+      <dt>Last retry</dt><dd>{{ batch.last_retry_at.strftime('%d %b %Y %H:%M') if batch.last_retry_at else '-' }}</dd>
+    </dl>
+    {% if batch.status == 'DRAFT' %}
+    <form method="post" action="/batches/{{ batch.id }}/submit">
+      <button class="button success full" type="submit" {{ 'disabled' if batch.items|length == 0 else '' }}>Submit batch</button>
+    </form>
+    {% elif user.role in ['admin', 'super_admin'] and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] %}
+    <form method="post" action="/batches/{{ batch.id }}/retry">
+      <button class="button primary full" type="submit">Retry Tally sync</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+
+{% if batch.batch_type != 'AUDIT' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Voucher preview</h2>
+    <span>{{ summary.lines|length }} product line{{ 's' if summary.lines|length != 1 else '' }}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>HSN</th>
+        <th>Qty</th>
+        <th>Rate</th>
+        <th>Taxable</th>
+        <th>CGST</th>
+        <th>SGST</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for line in summary.lines %}
+      <tr>
+        <td>
+          <strong>{{ line.product_name }}</strong>
+          <small>{{ line.tally_stock_item_name }}</small>
+        </td>
+        <td>{{ line.hsn }}</td>
+        <td>{{ line.quantity }} {{ line.unit }}</td>
+        <td>
+          {% if batch.status == 'DRAFT' %}
+          <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline">
+            <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
+            <button class="button small" type="submit">Set</button>
+          </form>
+          {% else %}
+          {{ '%.2f'|format(line.rate) }}
+          {% endif %}
+        </td>
+        <td>{{ '%.2f'|format(line.taxable_value) }}</td>
+        <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
+        <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
+        <td>{{ '%.2f'|format(line.line_total) }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">Scan serials to build the voucher preview</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if summary.lines %}
+    <tfoot>
+      <tr><th colspan="4">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
+      <tr><th colspan="4">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
+      <tr><th colspan="4">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
+      <tr><th colspan="4">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
+      <tr class="grand-total"><th colspan="4">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</section>
+{% elif batch.status != 'DRAFT' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Audit reconciliation</h2>
+    <span>{{ audit_summary.total }} findings</span>
+  </div>
+  <section class="metric-grid audit-grid">
+    <div class="metric"><span>Verified</span><strong>{{ audit_summary.verified }}</strong></div>
+    <div class="metric danger"><span>Missing</span><strong>{{ audit_summary.missing }}</strong></div>
+    <div class="metric warn"><span>Extra</span><strong>{{ audit_summary.extra }}</strong></div>
+  </section>
+  <table>
+    <thead><tr><th>Finding</th><th>Serial</th><th>Product</th><th>Expected</th><th>Scanned</th></tr></thead>
+    <tbody>
+      {% for finding in batch.audit_findings %}
+      <tr>
+        <td><span class="status {{ finding.finding_type|lower }}">{{ finding.finding_type }}</span></td>
+        <td>{{ finding.serial_number }}</td>
+        <td>{{ finding.product_name or '-' }}</td>
+        <td>{{ finding.expected_status or '-' }}</td>
+        <td>{{ finding.scanned_status or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">No audit findings</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<section class="panel">
+  <div class="section-title"><h2>Scanned serials</h2></div>
+  <table>
+    <thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Rate</th><th></th></tr></thead>
+    <tbody>
+      {% for item in batch.items %}
+      <tr>
+        <td>{{ item.serial.serial_number }}</td>
+        <td>{{ item.serial.product.product_name }}</td>
+        <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
+        <td>
+          {% if batch.status == 'DRAFT' and batch.batch_type != 'AUDIT' %}
+          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline">
+            <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
+            <button class="button small" type="submit">Set</button>
+          </form>
+          {% else %}
+          {{ item.rate if item.rate is not none else item.serial.product.default_rate }}
+          {% endif %}
+        </td>
+        <td>
+          {% if batch.status == 'DRAFT' %}
+          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/delete">
+            <button class="button small ghost" type="submit">Remove</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">No scans yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if batch.sync_attempts %}
+<section class="panel">
+  <div class="section-title"><h2>Sync attempts</h2></div>
+  <table>
+    <thead><tr><th>Time</th><th>Status</th><th>Error</th><th></th></tr></thead>
+    <tbody>
+      {% for attempt in batch.sync_attempts %}
+      <tr>
+        <td>{{ attempt.created_at.strftime('%d %b %Y %H:%M') }}</td>
+        <td><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></td>
+        <td>{{ attempt.error or '-' }}</td>
+        <td><a href="/batches/{{ batch.id }}/sync-attempts/{{ attempt.id }}">Details</a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+<script src="/static/scanner.js" data-batch-id="{{ batch.id }}"></script>
+{% endblock %}
