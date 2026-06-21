@@ -1,85 +1,334 @@
 # Setu QR Tally Bridge
 
-Setu is a LAN-first QR transaction bridge for Tally Prime. It captures product-level QR scans from phones, keeps serial history locally, and syncs purchase/sales stock movements to Tally through its XML gateway.
+Setu is a LAN-first QR transaction bridge for Tally Prime. It lets staff scan product QR codes from phones, keeps serial-level history locally, and syncs supported stock movements to Tally through its XML gateway.
 
-## What is built
+## Current Features
 
-- Role-based login for super admin, admin, purchase, sales, and auditor users.
-- Product master with HSN, GST, unit, default rate, and exact Tally stock item name.
-- Bulk QR serial generation with printable labels.
-- Batch-based receive, sale, and audit workflows.
-- Phone camera scanning through the browser `BarcodeDetector` API, with manual entry fallback.
-- Serial state validation to prevent duplicate receiving and double selling.
-- Local scan logs and transaction history.
-- Tally XML request generation, response capture, retry tracking, and pending sync queue.
-- Admin reports with CSV export.
-- Tally settings screen for company, host, port, voucher types, and ledger names.
-- Tally Check screen for master readiness, exact-name confirmation, and gateway testing.
-- Automatic retry worker for `PENDING_SYNC` batches, with retry count and last retry time.
-- Audit reconciliation for verified, missing, and extra serials.
-- XLSX scan report export plus PDF QR labels and audit reports.
-- Admin maintenance page with SQLite-safe backup download and restore procedure.
-- Sales return, purchase return, and stock issue workflows with reason codes.
-- QR replacement workflow with linked old/new serial history.
+- Role-based login for admin, purchase, sales, and audit users
+- Product master with HSN, GST, unit, default rate, and exact Tally stock item name
+- Bulk QR serial generation and printable/PDF labels
+- Receive, sale, audit, sales return, purchase return, stock issue, and QR replacement workflows
+- Batch pricing, GST split, round off, and voucher preview before submit
+- Tally XML generation for receive and sale batches
+- Tally Check screen for exact-name master readiness
+- Pending sync queue, manual retry, and automatic retry worker
+- Audit reconciliation for verified, missing, and extra serials
+- CSV/XLSX reports and PDF audit reports
+- SQLite-safe backup download and restore procedure
 
-## Local setup
+## Prerequisites
+
+- Python 3.11 or newer
+- Tally Prime installed and running on the server machine or reachable on the LAN
+- Chrome or Edge for staff phones
+- For phone camera use over LAN: HTTPS reverse proxy later, usually Caddy plus a local certificate
+
+## 1. Open The Project Folder
 
 ```bash
-python -m venv .venv
+cd /home/dj/Projects/Proj_Setu
+```
+
+On Windows, use the folder where this project is copied, for example:
+
+```powershell
+cd C:\Setu
+```
+
+## 2. Create A Virtual Environment
+
+Linux/macOS:
+
+```bash
+python3 -m venv .venv
 source .venv/bin/activate
+```
+
+Windows PowerShell:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, run:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+Then activate again.
+
+## 3. Install Dependencies
+
+```bash
 pip install -r requirements.txt
+```
+
+If `pip` is missing on Linux, install it with your OS package manager, then rerun the command.
+
+## 4. Create The Environment File
+
+Linux/macOS:
+
+```bash
 cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+copy .env.example .env
+```
+
+Open `.env` and update these before real use:
+
+```text
+APP_SECRET_KEY=replace-with-a-long-random-secret
+BOOTSTRAP_ADMIN_USERNAME=admin
+BOOTSTRAP_ADMIN_PASSWORD=change-this-password
+DATABASE_URL=sqlite:///./data/setu.db
+```
+
+For first local testing, the example values work, but do not use the default secret/password for production.
+
+## 5. Start The App
+
+Development mode:
+
+```bash
 uvicorn app.main:app --reload
 ```
 
-Open `http://127.0.0.1:8000`.
+Production-style local run:
 
-Default bootstrap login:
+```bash
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open:
+
+```text
+http://127.0.0.1:8000
+```
+
+## 6. First Login
+
+Default login from `.env.example`:
 
 ```text
 username: admin
 password: admin123
 ```
 
-Change `APP_SECRET_KEY` and the bootstrap password before deployment.
+After logging in:
 
-## Tally mode
+1. Open `Users`.
+2. Create named users for purchase, sales, auditor, and admin roles.
+3. Disable or change the bootstrap admin password before production.
 
-Tally sync is disabled by default. Submitted receive and sale batches are stored as `PENDING_SYNC` until an admin enables Tally sync in Settings.
+## 7. Basic Setup Inside The App
 
-When Tally sync is enabled, a background worker retries pending batches at the interval configured in Settings. Manual retry remains available on each pending or failed batch.
+Do this in order:
 
-Before enabling sync, confirm exact Tally master names:
+1. Open `Settings`.
+2. Enter Tally host, port, company name, voucher type names, ledger names, and default party.
+3. Open `Products`.
+4. Create products using the exact Tally stock item names.
+5. Generate QR serials for products.
+6. Open `Tally Check`.
+7. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
+8. Keep Tally sync disabled until Tally Check has no missing or unchecked items.
 
-- Company name
-- Stock item names
-- Unit names
-- Sales and purchase voucher type names
-- Sales and purchase ledger names
-- GST ledger names
-- Round off ledger name
+## 8. Normal Workflow
 
-Use `Tally Check` in the app to review these names, mark them confirmed, and test whether the Tally HTTP gateway responds.
+Receive stock:
 
-Live sync cannot be enabled until Tally Check has no missing or unchecked masters. Batch pages also expose a Tally XML download for validating the generated voucher envelope against the real Tally company.
+1. Open `Receive`.
+2. Enter supplier/reference.
+3. Scan serials.
+4. Check the voucher preview.
+5. Submit the batch.
 
-Tally Prime must be running as a server on port `9000`, with inventory and accounting integration enabled.
+Sell stock:
 
-## Phase 1 workflow
+1. Open `Sale`.
+2. Enter customer/reference.
+3. Scan in-stock serials.
+4. Check pricing, GST, round off, and final value.
+5. Submit the batch.
 
-1. Admin creates products.
-2. Admin generates QR serials.
-3. Purchase user starts a receive batch and scans serials.
-4. Sales user starts a sale batch and scans in-stock serials.
-5. Auditor starts an audit batch and scans physical stock.
-6. Admin monitors reports and pending sync.
+Audit stock:
 
-Sales and receive batches submit as one transaction per batch, not one voucher per scanned unit.
+1. Open `Audit`.
+2. Enter location/reference.
+3. Scan physical stock.
+4. Submit the audit.
+5. Review verified, missing, and extra findings.
 
-## Deployment notes
+Returns and issue:
 
-For phone camera access on a LAN hostname or IP, serve the app over HTTPS. For the factory deployment, use a local reverse proxy such as Caddy or nginx with a locally trusted certificate.
+- `Sales return`: scan sold items returned by customer.
+- `Purchase return`: scan in-stock items returned to supplier.
+- `Issue`: scan in-stock items issued for sample, marketing, office use, production use, or free distribution.
 
-The SQLite database is stored at `data/setu.db` by default. Use Maintenance to download a safe backup, and keep `.env` backed up separately.
+QR replacement:
 
-Deployment guides are in `docs/deployment/`.
+1. Open `QR Replace`.
+2. Enter the damaged/old serial.
+3. Leave new serial blank to auto-generate, or enter a new serial manually.
+4. Print the new label.
+
+## 9. Tally Integration
+
+Tally sync is disabled by default.
+
+Before enabling sync:
+
+1. In Tally Prime, open the target company.
+2. Enable Tally as a server on port `9000`.
+3. Confirm inventory is maintained.
+4. Confirm accounts and inventory are integrated.
+5. In Setu, complete `Tally Check`.
+6. Download `Tally XML` from a receive/sale batch and validate it against the real company.
+7. Enable sync in `Settings`.
+
+Supported live XML posting:
+
+- Receive
+- Sale
+
+Implemented locally but intentionally not live-posted yet:
+
+- Sales return
+- Purchase return
+- Stock issue
+
+Those remain `PENDING_SYNC` until the exact Tally voucher XML for the client company is validated.
+
+## 10. Reports And Exports
+
+Use `Reports` for:
+
+- Scan history
+- Pending sync
+- CSV export
+- XLSX export
+
+Use batch detail pages for:
+
+- Tally XML download
+- Sync attempt request/response details
+- Audit PDF export
+
+Use label pages for:
+
+- Browser print
+- QR label PDF download
+
+## 11. Backup And Restore
+
+Backup:
+
+1. Open `Maintenance`.
+2. Click `Download backup`.
+3. Store the downloaded `.db` file safely.
+4. Keep a separate copy of `.env`.
+
+Restore:
+
+1. Stop the app/server.
+2. Copy the current `data/setu.db` somewhere safe.
+3. Replace `data/setu.db` with the backup file.
+4. Start the app again.
+5. Check Dashboard, Products, Serials, and Reports.
+
+## 12. Run Tests
+
+```bash
+pytest
+```
+
+Or:
+
+```bash
+python -m pytest
+```
+
+Expected result:
+
+```text
+24 passed
+```
+
+## 13. LAN Phone Camera Setup
+
+Phone camera access usually requires HTTPS when accessed from another device on the LAN.
+
+Recommended production shape:
+
+```text
+Phone browser -> https://setu.local -> Caddy -> http://127.0.0.1:8000
+```
+
+Use:
+
+- `docs/deployment/https-lan-guide.md`
+- `deployment/caddy/Caddyfile.example`
+
+Install the local certificate authority on staff phones if using `mkcert`.
+
+## 14. Windows Service Setup
+
+For production, run Setu as a Windows service using NSSM.
+
+See:
+
+- `docs/deployment/windows-service.md`
+- `deployment/windows/install_service.ps1`
+
+The service should run:
+
+```text
+.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000
+```
+
+Then Caddy/nginx can expose it over HTTPS on the LAN.
+
+## 15. Useful Deployment Docs
+
+- `docs/deployment/installation-guide.md`
+- `docs/deployment/windows-service.md`
+- `docs/deployment/https-lan-guide.md`
+- `docs/deployment/user-manual.md`
+- `docs/deployment/backup-restore-guide.md`
+- `docs/deployment/tally-integration-guide.md`
+
+## Troubleshooting
+
+If login does not work:
+
+- Confirm `.env` exists.
+- Confirm the app was restarted after editing `.env`.
+- Check the bootstrap username/password.
+
+If camera does not open on phone:
+
+- Use Chrome or Edge.
+- Serve the app over HTTPS on the LAN.
+- Confirm the browser has camera permission.
+
+If Tally sync stays pending:
+
+- Confirm Tally is open.
+- Confirm Tally server mode is enabled on port `9000`.
+- Open `Tally Check`.
+- Confirm every required master is checked.
+- Open the batch and review sync attempt details.
+
+If the app fails to start:
+
+- Confirm the virtual environment is active.
+- Run `pip install -r requirements.txt`.
+- Confirm port `8000` is free.
+- Check that `data/` is writable.
