@@ -50,11 +50,7 @@ def qr_labels_pdf(serials: list[Serial]) -> bytes:
         image_stream = BytesIO()
         image.save(image_stream, format="PNG")
         image_stream.seek(0)
-        cell = [
-            Image(image_stream, width=32 * mm, height=32 * mm),
-            serial.serial_number,
-            serial.product.product_name,
-        ]
+        cell = [Image(image_stream, width=36 * mm, height=36 * mm), serial.serial_number]
         row.append(cell)
         if len(row) == 3:
             data.append(row)
@@ -73,7 +69,7 @@ def qr_labels_pdf(serials: list[Serial]) -> bytes:
             if not cell:
                 rendered.append("")
                 continue
-            rendered.append(make_label_cell(cell[0], cell[1], cell[2]))
+            rendered.append(make_label_cell(cell[0], cell[1]))
         table_data.append(rendered)
     if table_data:
         table = Table(table_data, colWidths=[58 * mm, 58 * mm, 58 * mm], rowHeights=58 * mm)
@@ -83,15 +79,14 @@ def qr_labels_pdf(serials: list[Serial]) -> bytes:
     return stream.getvalue()
 
 
-def make_label_cell(image: Image, serial_number: str, product_name: str):
+def make_label_cell(image: Image, serial_number: str):
     styles = getSampleStyleSheet()
     return Table(
         [
             [image],
             [Paragraph(serial_number, styles["BodyText"])],
-            [Paragraph(product_name, styles["BodyText"])],
         ],
-        rowHeights=[35 * mm, 8 * mm, 10 * mm],
+        rowHeights=[40 * mm, 10 * mm],
     )
 
 

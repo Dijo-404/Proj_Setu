@@ -19,6 +19,7 @@ def replacement_page(request: Request, db: Session = Depends(get_db)):
         select(ScanLog).where(ScanLog.action == "QR_REPLACEMENT").order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
     return templates.TemplateResponse(
+        request,
         "qr_replacement.html",
         {"request": request, "user": user, "logs": logs, "error": None, "replacement": None},
     )
@@ -40,6 +41,7 @@ def replace_qr(
         replacement = replace_qr_serial(db, user, old_serial_number, new_serial_number or None, reason)
     except InventoryError as exc:
         return templates.TemplateResponse(
+            request,
             "qr_replacement.html",
             {"request": request, "user": user, "logs": logs, "error": str(exc), "replacement": None},
             status_code=400,
@@ -48,6 +50,7 @@ def replace_qr(
         select(ScanLog).where(ScanLog.action == "QR_REPLACEMENT").order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
     return templates.TemplateResponse(
+        request,
         "qr_replacement.html",
         {"request": request, "user": user, "logs": logs, "error": None, "replacement": replacement},
     )

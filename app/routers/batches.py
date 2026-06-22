@@ -45,7 +45,7 @@ def roles_for_batch(batch_type: BatchType):
 def batches(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
     rows = db.scalars(select(Batch).order_by(desc(Batch.created_at)).limit(80)).all()
-    return templates.TemplateResponse("batches.html", {"request": request, "user": user, "batches": rows})
+    return templates.TemplateResponse(request, "batches.html", {"request": request, "user": user, "batches": rows})
 
 
 @router.get("/new")
@@ -53,6 +53,7 @@ def new_batch(request: Request, batch_type: str = BatchType.RECEIVE.value, db: S
     parsed = BatchType(batch_type)
     user = require_user(request, db, roles_for_batch(parsed))
     return templates.TemplateResponse(
+        request,
         "batch_new.html",
         {"request": request, "user": user, "batch_type": parsed, "error": None},
     )
@@ -88,6 +89,7 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
         return RedirectResponse("/batches", status_code=303)
     user = require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
     return templates.TemplateResponse(
+        request,
         "batch_detail.html",
         {
             "request": request,
@@ -199,6 +201,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
             reconcile_audit_batch(db, batch)
     except (InventoryError, ValueError) as exc:
         return templates.TemplateResponse(
+            request,
             "batch_detail.html",
             {
                 "request": request,
@@ -278,6 +281,7 @@ def sync_attempt_detail(request: Request, batch_id: int, attempt_id: int, db: Se
         return RedirectResponse("/batches", status_code=303)
     user = require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
     return templates.TemplateResponse(
+        request,
         "sync_attempt_detail.html",
         {"request": request, "user": user, "batch": batch, "attempt": attempt},
     )

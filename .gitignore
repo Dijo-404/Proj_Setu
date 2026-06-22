@@ -11,3 +11,6 @@ data/*.db-wal
 .pytest_cache/
 .coverage
 htmlcov/
+docs/context/*.zip
+docs/context/*.7z
+docs/context/*.rar

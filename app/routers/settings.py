@@ -15,6 +15,7 @@ router = APIRouter(prefix="/settings")
 def settings_page(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db, ADMIN_ROLES)
     return templates.TemplateResponse(
+        request,
         "settings.html",
         {"request": request, "user": user, "settings": get_all_settings(db), "keys": DEFAULT_SETTINGS.keys(), "error": None},
     )
@@ -62,6 +63,7 @@ def save_settings(
             settings = get_all_settings(db)
             settings["tally_enabled"] = current_settings.get("tally_enabled", "false")
             return templates.TemplateResponse(
+                request,
                 "settings.html",
                 {
                     "request": request,

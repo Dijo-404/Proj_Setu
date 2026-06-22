@@ -25,6 +25,7 @@ def serials(request: Request, q: str = "", status: str = "", db: Session = Depen
         query = query.where(Serial.status == status)
     rows = db.scalars(query).all()
     return templates.TemplateResponse(
+        request,
         "serials.html",
         {"request": request, "user": user, "serials": rows, "q": q, "status": status},
     )
@@ -52,7 +53,7 @@ def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
-    return templates.TemplateResponse("labels.html", {"request": request, "user": user, "serials": rows})
+    return templates.TemplateResponse(request, "labels.html", {"request": request, "user": user, "serials": rows})
 
 
 @router.get("/labels.pdf")

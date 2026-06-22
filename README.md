@@ -6,7 +6,7 @@ Setu is a LAN-first QR transaction bridge for Tally Prime. It lets staff scan pr
 
 - Role-based login for admin, purchase, sales, and audit users
 - Product master with HSN, GST, unit, default rate, and exact Tally stock item name
-- Bulk QR serial generation and printable/PDF labels
+- Bulk QR serial generation and printable/PDF labels with QR plus serial number only
 - Receive, sale, audit, sales return, purchase return, stock issue, and QR replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit
 - Tally XML generation for receive and sale batches
@@ -297,6 +297,7 @@ Then Caddy/nginx can expose it over HTTPS on the LAN.
 
 ## 15. Useful Deployment Docs
 
+- `docs/codex-windows-handoff.md`
 - `docs/deployment/installation-guide.md`
 - `docs/deployment/windows-service.md`
 - `docs/deployment/https-lan-guide.md`

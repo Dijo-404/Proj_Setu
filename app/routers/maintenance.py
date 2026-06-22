@@ -14,6 +14,7 @@ router = APIRouter(prefix="/maintenance")
 def maintenance_page(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db, ADMIN_ROLES)
     return templates.TemplateResponse(
+        request,
         "maintenance.html",
         {"request": request, "user": user, "database_path": sqlite_database_path()},
     )

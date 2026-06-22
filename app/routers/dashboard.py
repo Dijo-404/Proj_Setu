@@ -17,6 +17,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
     recent_batches = db.scalars(select(Batch).order_by(desc(Batch.created_at)).limit(8)).all()
     recent_scans = db.scalars(select(ScanLog).order_by(desc(ScanLog.created_at)).limit(8)).all()
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
         {
             "request": request,

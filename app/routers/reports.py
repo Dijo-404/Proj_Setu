@@ -43,6 +43,7 @@ def reports(request: Request, action: str = "", start: str = "", end: str = "", 
         .limit(50)
     ).all()
     return templates.TemplateResponse(
+        request,
         "reports.html",
         {
             "request": request,

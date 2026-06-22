@@ -23,6 +23,7 @@ def render_check_page(request: Request, db: Session, result=None):
     requirements = collect_master_requirements(db)
     confirmations = confirmation_lookup(db)
     return templates.TemplateResponse(
+        request,
         "tally_check.html",
         {
             "request": request,

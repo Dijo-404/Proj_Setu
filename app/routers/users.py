@@ -17,6 +17,7 @@ def users_page(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db, ADMIN_ROLES)
     users = db.scalars(select(User).order_by(User.username)).all()
     return templates.TemplateResponse(
+        request,
         "users.html",
         {"request": request, "user": user, "users": users, "roles": list(Role), "error": None},
     )
@@ -38,6 +39,7 @@ def create_user(
         db.rollback()
         users = db.scalars(select(User).order_by(User.username)).all()
         return templates.TemplateResponse(
+            request,
             "users.html",
             {"request": request, "user": user, "users": users, "roles": list(Role), "error": "Username already exists"},
             status_code=400,

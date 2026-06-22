@@ -17,7 +17,7 @@ router = APIRouter()
 def login_page(request: Request, db: Session = Depends(get_db)):
     if current_user(request, db):
         return RedirectResponse("/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
 
 
 @router.post("/login")
@@ -42,6 +42,7 @@ def login(
     if not ok:
         db.commit()
         return templates.TemplateResponse(
+            request,
             "login.html",
             {"request": request, "error": "Invalid username or password"},
             status_code=400,

@@ -21,6 +21,7 @@ def products(request: Request, q: str = "", db: Session = Depends(get_db)):
         query = query.where(or_(Product.product_code.ilike(like), Product.product_name.ilike(like)))
     rows = db.scalars(query).all()
     return templates.TemplateResponse(
+        request,
         "products.html",
         {"request": request, "user": user, "products": rows, "q": q, "error": None},
     )
@@ -57,6 +58,7 @@ def create_product(
         db.rollback()
         rows = db.scalars(select(Product).order_by(Product.product_code)).all()
         return templates.TemplateResponse(
+            request,
             "products.html",
             {"request": request, "user": user, "products": rows, "q": "", "error": "Product code already exists"},
             status_code=400,
