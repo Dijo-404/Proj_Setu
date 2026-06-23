@@ -7,9 +7,20 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.platypus import Image, SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-import qrcode
+import barcode
+from barcode.writer import ImageWriter
+from PIL import Image as PILImage
 
 from app.models import Batch, ScanLog, Serial
+
+
+def barcode_png(value: str) -> bytes:
+    """Render a Code128 barcode (with the value as human-readable text) as PNG bytes."""
+    writer = ImageWriter()
+    code = barcode.get("code128", value, writer=writer)
+    stream = BytesIO()
+    code.write(stream, options={"module_height": 12.0, "font_size": 10, "text_distance": 3.0, "quiet_zone": 2.0})
+    return stream.getvalue()
 
 
 def scans_xlsx(scans: list[ScanLog]) -> bytes:
@@ -40,54 +51,41 @@ def scans_xlsx(scans: list[ScanLog]) -> bytes:
     return stream.getvalue()
 
 
-def qr_labels_pdf(serials: list[Serial]) -> bytes:
+def _label_image(value: str, target_width_mm: float = 52.0) -> Image:
+    png = barcode_png(value)
+    px_w, px_h = PILImage.open(BytesIO(png)).size
+    width = target_width_mm * mm
+    height = width * (px_h / px_w)
+    return Image(BytesIO(png), width=width, height=height)
+
+
+def barcode_labels_pdf(serials: list[Serial]) -> bytes:
     stream = BytesIO()
     doc = SimpleDocTemplate(stream, pagesize=A4, rightMargin=12 * mm, leftMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm)
-    data = []
-    row = []
-    for serial in serials:
-        image = qrcode.make(serial.serial_number)
-        image_stream = BytesIO()
-        image.save(image_stream, format="PNG")
-        image_stream.seek(0)
-        cell = [Image(image_stream, width=36 * mm, height=36 * mm), serial.serial_number]
-        row.append(cell)
-        if len(row) == 3:
-            data.append(row)
-            row = []
-    if row:
+    cells = [_label_image(serial.serial_number) for serial in serials]
+    rows = []
+    for start in range(0, len(cells), 3):
+        row = cells[start:start + 3]
         while len(row) < 3:
             row.append("")
-        data.append(row)
+        rows.append(row)
 
     styles = getSampleStyleSheet()
-    story = [Paragraph("QR Labels", styles["Title"]), Spacer(1, 6 * mm)]
-    table_data = []
-    for row in data:
-        rendered = []
-        for cell in row:
-            if not cell:
-                rendered.append("")
-                continue
-            rendered.append(make_label_cell(cell[0], cell[1]))
-        table_data.append(rendered)
-    if table_data:
-        table = Table(table_data, colWidths=[58 * mm, 58 * mm, 58 * mm], rowHeights=58 * mm)
-        table.setStyle(TableStyle([("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey), ("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    story = [Paragraph("Barcode Labels", styles["Title"]), Spacer(1, 6 * mm)]
+    if rows:
+        table = Table(rows, colWidths=[58 * mm, 58 * mm, 58 * mm], rowHeights=34 * mm)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ]
+            )
+        )
         story.append(table)
     doc.build(story)
     return stream.getvalue()
-
-
-def make_label_cell(image: Image, serial_number: str):
-    styles = getSampleStyleSheet()
-    return Table(
-        [
-            [image],
-            [Paragraph(serial_number, styles["BodyText"])],
-        ],
-        rowHeights=[40 * mm, 10 * mm],
-    )
 
 
 def audit_report_pdf(batch: Batch) -> bytes:

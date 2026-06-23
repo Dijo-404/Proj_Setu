@@ -53,7 +53,7 @@ async function startCamera() {
     input.focus();
     return;
   }
-  detector = new BarcodeDetector({ formats: ["qr_code"] });
+  detector = new BarcodeDetector({ formats: ["code_128"] });
   try {
     stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
   } catch (error) {

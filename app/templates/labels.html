@@ -3,7 +3,7 @@
 {% block content %}
 <section class="page-head print-hide">
   <div>
-    <p class="eyebrow">QR labels</p>
+    <p class="eyebrow">Barcode labels</p>
     <h1>Print labels</h1>
   </div>
   <div class="actions">
@@ -14,8 +14,8 @@
 
 <section class="label-sheet">
   {% for serial in serials %}
-  <div class="qr-label">
-    <img src="/serials/{{ serial.id }}/qr.png" alt="{{ serial.serial_number }}">
+  <div class="barcode-label">
+    <img src="/serials/{{ serial.id }}/barcode.png" alt="{{ serial.serial_number }}">
     <strong>{{ serial.serial_number }}</strong>
   </div>
   {% else %}

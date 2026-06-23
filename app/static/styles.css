@@ -804,19 +804,19 @@ small {
 .scan-form { margin-top: 14px; }
 .scan-form input { flex: 1; border-radius: var(--r-pill); padding-left: 18px; }
 
-/* ---------- QR labels ---------- */
+/* ---------- Barcode labels ---------- */
 
 .label-sheet {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 14px;
 }
 
-.qr-label {
+.barcode-label {
   display: grid;
   justify-items: center;
   gap: 8px;
-  min-height: 210px;
+  min-height: 120px;
   border: 1px solid var(--hairline);
   border-radius: var(--r-lg);
   padding: 16px;
@@ -825,8 +825,8 @@ small {
   break-inside: avoid;
 }
 
-.qr-label img { width: 132px; height: 132px; }
-.qr-label span { color: var(--ink-48); font-size: 12px; }
+.barcode-label img { width: 100%; max-width: 180px; height: auto; }
+.barcode-label strong { color: var(--ink-48); font-size: 12px; }
 
 /* ---------- Auth ---------- */
 
@@ -925,7 +925,7 @@ small {
   body { background: #fff; }
   .global-nav, .subnav, .print-hide { display: none; }
   .page { width: 100%; margin: 0; }
-  .qr-label { border-color: #000; }
+  .barcode-label { border-color: #000; }
 }
 
 @media (prefers-reduced-motion: reduce) {
