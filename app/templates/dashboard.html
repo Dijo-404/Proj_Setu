@@ -6,20 +6,20 @@
     <p class="eyebrow">Today</p>
     <h1>Operations</h1>
   </div>
-  <div class="actions">
+  <div class="actions quick-actions">
     <a class="button primary" href="/batches/new?batch_type=RECEIVE">Receive</a>
-    <a class="button success" href="/batches/new?batch_type=SALE">Sale</a>
+    <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
     <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
   </div>
 </section>
 
-<section class="metric-grid">
-  <div class="metric"><span>In stock</span><strong>{{ counts.in_stock }}</strong></div>
-  <div class="metric"><span>Sold</span><strong>{{ counts.sold }}</strong></div>
-  <div class="metric"><span>Today scans</span><strong>{{ counts.today_scans }}</strong></div>
-  <div class="metric warn"><span>Pending sync</span><strong>{{ counts.pending_sync }}</strong></div>
-  <div class="metric danger"><span>Failed sync</span><strong>{{ counts.failed }}</strong></div>
-  <div class="metric"><span>Total serials</span><strong>{{ counts.serials }}</strong></div>
+<section class="metric-grid" data-live-url="/dashboard/data">
+  <div class="metric"><span>In stock</span><strong data-metric="in_stock">{{ counts.in_stock }}</strong></div>
+  <div class="metric"><span>Sold</span><strong data-metric="sold">{{ counts.sold }}</strong></div>
+  <div class="metric"><span>Today scans</span><strong data-metric="today_scans">{{ counts.today_scans }}</strong></div>
+  <div class="metric warn"><span>Pending sync</span><strong data-metric="pending_sync">{{ counts.pending_sync }}</strong></div>
+  <div class="metric danger"><span>Failed sync</span><strong data-metric="failed">{{ counts.failed }}</strong></div>
+  <div class="metric"><span>Total serials</span><strong data-metric="serials">{{ counts.serials }}</strong></div>
 </section>
 
 <section class="split">
@@ -28,41 +28,29 @@
       <h2>Recent batches</h2>
       <a href="/batches">View all</a>
     </div>
-    <table>
-      <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
-      <tbody>
-        {% for batch in recent_batches %}
-        <tr>
-          <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
-          <td>{{ batch.batch_type }}</td>
-          <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
-          <td>{{ batch.items|length }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="empty">No batches yet</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
+        <tbody data-live-batches>
+          {% include "partials/dashboard_batches.html" %}
+        </tbody>
+      </table>
+    </div>
   </div>
   <div>
     <div class="section-title">
       <h2>Recent scans</h2>
       <a href="/reports">Reports</a>
     </div>
-    <table>
-      <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
-      <tbody>
-        {% for scan in recent_scans %}
-        <tr>
-          <td>{{ scan.serial_number_raw }}</td>
-          <td>{{ scan.action }}</td>
-          <td><span class="status {{ scan.status|lower }}">{{ scan.status }}</span></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="3" class="empty">No scans yet</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="panel">
+      <table>
+        <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
+        <tbody data-live-scans>
+          {% include "partials/dashboard_scans.html" %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>
+<script src="/static/live.js"></script>
 {% endblock %}

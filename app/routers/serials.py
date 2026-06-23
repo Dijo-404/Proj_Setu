@@ -32,7 +32,8 @@ def serials(request: Request, q: str = "", status: str = "", db: Session = Depen
 
 
 @router.get("/{serial_id}/qr.png")
-def serial_qr(serial_id: int, db: Session = Depends(get_db)):
+def serial_qr(serial_id: int, request: Request, db: Session = Depends(get_db)):
+    require_user(request, db)
     serial = db.get(Serial, serial_id)
     if not serial:
         raise HTTPException(status_code=404)

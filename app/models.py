@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from enum import Enum
+import json
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -181,6 +182,29 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class Company(Base):
+    """A saved Tally company profile (connection + voucher/ledger names).
+
+    The active company's config is mirrored into the `settings` table, which
+    remains the single source the sync layer reads from.
+    """
+
+    __tablename__ = "companies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    config: Mapped[str] = mapped_column(Text)  # JSON of the per-company setting keys
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    @property
+    def tally_company_name(self) -> str:
+        try:
+            return json.loads(self.config).get("company_name", "")
+        except (ValueError, TypeError):
+            return ""
 
 
 class LoginAudit(Base):

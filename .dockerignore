@@ -1,0 +1,22 @@
+# Keep the build context (and image) lean. Runtime needs app/ + requirements.txt only.
+.venv
+venv
+__pycache__
+*.pyc
+.git
+.gitignore
+.pytest_cache
+.coverage
+htmlcov
+
+# Never bake the database or secrets into the image.
+data/
+*.db
+*.db-*
+.env
+
+# Not needed at runtime.
+docs/
+tests/
+README.md
+CLAUDE.md

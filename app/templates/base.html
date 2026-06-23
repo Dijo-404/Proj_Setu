@@ -3,19 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
   <title>{% block title %}Setu QR Tally Bridge{% endblock %}</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
   {% if user %}
-  <header class="topbar">
-    <a class="brand" href="/">Setu</a>
-    <nav class="nav">
+  <header class="global-nav">
+    <a class="brand" href="/">
+      <span class="brand__mark">Setu</span>
+      <span class="brand__sub">QR Tally Bridge</span>
+    </a>
+    <div class="global-nav__spacer"></div>
+    <form method="post" action="/logout" class="session">
+      <span class="session__user">{{ user.username }}</span>
+      <button type="submit" class="button on-dark small">Sign out</button>
+    </form>
+  </header>
+  <nav class="subnav" aria-label="Sections">
+    <div class="subnav__inner">
       <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
-      <a href="/batches/new?batch_type=RECEIVE">Receive</a>
-      <a href="/batches/new?batch_type=SALE">Sale</a>
-      <a href="/batches/new?batch_type=AUDIT">Audit</a>
-      <a href="/batches" class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</a>
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</summary>
+        <div class="nav-menu__panel">
+          <a href="/batches/new?batch_type=RECEIVE">Receive</a>
+          <a href="/batches/new?batch_type=SALE">Sale</a>
+          <a href="/batches/new?batch_type=AUDIT">Audit</a>
+          <a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
+          <a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>
+          <a href="/batches/new?batch_type=ISSUE">Issue</a>
+          <a href="/batches">All batches</a>
+        </div>
+      </details>
       <a href="/serials" class="{{ 'active' if request.url.path.startswith('/serials') else '' }}">Serials</a>
       {% if user.role in ['admin', 'super_admin'] %}
       <a href="/products" class="{{ 'active' if request.url.path.startswith('/products') else '' }}">Products</a>
@@ -26,15 +45,24 @@
       <a href="/qr-replacement" class="{{ 'active' if request.url.path.startswith('/qr-replacement') else '' }}">QR Replace</a>
       <a href="/users" class="{{ 'active' if request.url.path.startswith('/users') else '' }}">Users</a>
       {% endif %}
-    </nav>
-    <form method="post" action="/logout" class="logout">
-      <span>{{ user.username }}</span>
-      <button type="submit" class="button ghost">Logout</button>
-    </form>
-  </header>
+    </div>
+  </nav>
+  <script>
+    document.addEventListener("click", (event) => {
+      document.querySelectorAll("details.nav-menu[open]").forEach((menu) => {
+        if (!menu.contains(event.target)) menu.removeAttribute("open");
+      });
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        document.querySelectorAll("details.nav-menu[open]").forEach((menu) => menu.removeAttribute("open"));
+      }
+    });
+  </script>
   {% endif %}
   <main class="page">
     {% block content %}{% endblock %}
   </main>
+  <script src="/static/autosave.js"></script>
 </body>
 </html>

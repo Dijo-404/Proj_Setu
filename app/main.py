@@ -1,7 +1,11 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
+
+logger = logging.getLogger("setu")
 from app.database import Base, SessionLocal, engine
 from app.routers import auth, batches, dashboard, maintenance, products, replacements, reports, serials, settings, tally_check, users
 from app.services.bootstrap import bootstrap
@@ -26,6 +30,11 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup() -> None:
+        if get_settings().using_default_secret:
+            logger.warning(
+                "APP_SECRET_KEY is using the insecure default value. "
+                "Set APP_SECRET_KEY to a long random string before production use."
+            )
         Base.metadata.create_all(bind=engine)
         ensure_runtime_schema()
         with SessionLocal() as db:

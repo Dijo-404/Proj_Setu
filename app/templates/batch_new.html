@@ -10,7 +10,7 @@
 
 <section class="panel narrow">
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
-  <form method="post" action="/batches" class="stack">
+  <form method="post" action="/batches" class="stack" data-draft="setu:newbatch:{{ batch_type.value }}">
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
     <label>
       {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}

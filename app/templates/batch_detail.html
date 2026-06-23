@@ -97,7 +97,7 @@
         <td>{{ line.quantity }} {{ line.unit }}</td>
         <td>
           {% if batch.status == 'DRAFT' %}
-          <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline">
+          <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate">
             <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
             <button class="button small" type="submit">Set</button>
           </form>
@@ -167,7 +167,7 @@
         <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
         <td>
           {% if batch.status == 'DRAFT' and batch.batch_type != 'AUDIT' %}
-          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline">
+          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">
             <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
             <button class="button small" type="submit">Set</button>
           </form>

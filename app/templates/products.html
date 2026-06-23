@@ -16,7 +16,7 @@
 
 <section class="panel">
   <h2>New product</h2>
-  <form method="post" action="/products" class="grid-form">
+  <form method="post" action="/products" class="grid-form" data-draft="setu:newproduct">
     <label>Code<input name="product_code" required></label>
     <label>Name<input name="product_name" required></label>
     <label>Category<input name="category"></label>
@@ -26,6 +26,7 @@
     <label>Default rate<input name="default_rate" type="number" step="0.01" value="0"></label>
     <label>Tally stock item<input name="tally_stock_item_name"></label>
     <button class="button primary" type="submit">Create product</button>
+    <span data-autosave-status class="autosave-status"></span>
   </form>
 </section>
 

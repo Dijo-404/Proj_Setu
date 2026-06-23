@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 import sqlite3
-from tempfile import NamedTemporaryFile
+from tempfile import TemporaryDirectory
 
 from app.config import get_settings
 
@@ -26,16 +26,19 @@ def create_sqlite_backup() -> BackupInfo:
     if not source_path.exists():
         raise RuntimeError("SQLite database file does not exist yet")
 
-    with NamedTemporaryFile(suffix=".db") as temp_file:
+    # Use a temp directory rather than NamedTemporaryFile: on Windows the latter
+    # holds an open handle, so sqlite3 cannot open the same path by name.
+    with TemporaryDirectory() as temp_dir:
+        temp_path = Path(temp_dir) / "setu-backup.db"
         source = sqlite3.connect(source_path)
         try:
-            target = sqlite3.connect(temp_file.name)
+            target = sqlite3.connect(temp_path)
             try:
                 source.backup(target)
             finally:
                 target.close()
         finally:
             source.close()
-        data = Path(temp_file.name).read_bytes()
+        data = temp_path.read_bytes()
 
     return BackupInfo(filename="setu-backup.db", data=data)

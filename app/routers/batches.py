@@ -25,6 +25,10 @@ from app.templates import templates
 router = APIRouter(prefix="/batches")
 
 
+def wants_json(request: Request) -> bool:
+    return "application/json" in request.headers.get("accept", "")
+
+
 def roles_for_batch(batch_type: BatchType):
     if batch_type == BatchType.RECEIVE:
         return PURCHASE_ROLES
@@ -154,8 +158,12 @@ def update_item_rate(
     require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
     try:
         update_batch_item_rate(db, batch, item_id, rate)
-    except InventoryError:
-        pass
+    except InventoryError as exc:
+        if wants_json(request):
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    if wants_json(request):
+        return JSONResponse({"ok": True})
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 
 
@@ -177,8 +185,12 @@ def update_product_rate(
     require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
     try:
         update_product_rate_in_batch(db, batch, product_id, rate)
-    except InventoryError:
-        pass
+    except InventoryError as exc:
+        if wants_json(request):
+            return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+        return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    if wants_json(request):
+        return JSONResponse({"ok": True})
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 
 
