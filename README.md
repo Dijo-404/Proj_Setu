@@ -35,11 +35,11 @@ The setup helper will check/install Python if possible, create `.venv`, install 
 
 After setup, start the app anytime with:
 
-```powershell
-.\start_setu.ps1
+```text
+start_setu.bat
 ```
 
-If Windows blocks PowerShell scripts, use `setup.bat`; it starts PowerShell with the required one-time bypass for this setup run.
+Use `setup.bat` for first-time setup and `start_setu.bat` for normal app startup. No root-level PowerShell helper files are needed for the client-facing flow.
 
 ## 1. Open The Project Folder
 

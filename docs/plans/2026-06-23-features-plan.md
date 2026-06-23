@@ -5,10 +5,10 @@ Phased, self-contained plan for four requests:
 2. **Install all packages + set up SQLite** (reproducible venv).
 3. **Dynamic, DB-backed data** for mobile + desktop users → keep server-rendered pages (no GraphQL), add **live auto-refresh**.
 4. **Auto-save** for new-batch draft, settings/company, batch rate edits, product create/edit.
-Plus: **Docker-deployable** on the single LAN server (SQLite retained).
+Plus: simple Windows batch-file setup for the single LAN server (SQLite retained).
 
 ## Decisions already made (do not re-litigate)
-- **Deployment:** Docker image + Caddy on ONE Windows LAN server. **Keep SQLite.** No load balancer / multi-replica (SQLite is single-writer; the SRS scope is ~10 users on one machine). Structure config so a future PostgreSQL switch is possible, but do not implement it now.
+- **Deployment:** Windows batch-file setup on ONE Windows LAN server. **Keep SQLite.** No load balancer / multi-replica (SQLite is single-writer; the SRS scope is ~10 users on one machine). Caddy remains optional for HTTPS on the LAN.
 - **No GraphQL.** Both mobile and desktop users use the **browser** (SRS: "No dedicated Android application required"). Pages are already DB-backed via SQLAlchemy. The real need is *freshness for concurrent users* → solve with lightweight JSON polling + DOM updates, not a new API layer.
 - **Auto-save tech:** vanilla `fetch` + debounce, mirroring the existing pattern in [app/static/scanner.js](../../app/static/scanner.js). **No new JS framework, no CDN** (LAN/offline). HTMX is explicitly NOT used.
 - **Creation vs. edit auto-save:** auto-save *existing* records to the DB; auto-save *creation* forms (new batch, new product) to `localStorage` drafts and restore them — this avoids orphan DRAFT/empty rows. Editing existing records hits the DB.
@@ -114,21 +114,22 @@ Mirror [app/static/scanner.js](../../app/static/scanner.js): one small `app/stat
 
 ---
 
-## Phase 5 — Docker deployment, single server + SQLite (request #3, deploy)
+## Phase 5 — Windows deployment, single server + SQLite
 
 **What to implement**
-1. `Dockerfile`: base `python:3.11-slim`; install pinned requirements; create non-root user; `VOLUME /app/data`; `EXPOSE 8000`; `HEALTHCHECK` curling `/health`; `CMD ["uvicorn","app.main:app","--host","0.0.0.0","--port","8000"]`.
-2. `.dockerignore` (exclude `.venv`, `__pycache__`, `data/`, `*.db*`, `.git`).
-3. `docker-compose.yml`: `app` service (env from `.env`, named volume for `data/`, restart unless-stopped) + `caddy` service (reverse proxy to `app:8000`, HTTPS on the LAN, volumes for Caddy data/config). Reuse [deployment/caddy/Caddyfile.example](../../deployment/caddy/Caddyfile.example).
-4. Set `SESSION_COOKIE_SECURE=true` in the compose env (served via Caddy HTTPS).
-5. Docs: `docs/deployment/docker-guide.md` — build, run, where `data/setu.db` lives, backup (the Maintenance page still works; also `docker cp`/volume backup), and a clear note: **single replica only because SQLite is single-writer; scaling horizontally requires PostgreSQL (out of scope).**
+1. `setup.bat`: first-time setup for non-technical users. It prepares Python/venv, installs requirements, writes `.env`, creates `data/` and `logs/`, verifies app import, and optionally starts the app.
+2. `start_setu.bat`: normal launcher after setup.
+3. Keep [deployment/windows/install_service.ps1](../../deployment/windows/install_service.ps1) for optional NSSM service installs.
+4. Keep [deployment/caddy/Caddyfile.example](../../deployment/caddy/Caddyfile.example) for optional LAN HTTPS when phone camera access requires it.
+5. Docs: [README.md](../../README.md), [docs/deployment/installation-guide.md](../deployment/installation-guide.md), and [docs/deployment/backup-restore-guide.md](../deployment/backup-restore-guide.md) document the batch-file setup and backup requirements.
 
 **Verification**
-- `docker compose build` succeeds; `docker compose up` → `GET http://localhost/health` (through Caddy) returns ok.
-- Bootstrap admin login works; data persists across `docker compose down && up` (named volume).
-- `data/` volume is writable; WAL files created.
+- `setup.bat -SkipStart` succeeds against an existing `.env`.
+- App boots with `start_setu.bat`; `GET /health` returns `{"status":"ok"}`.
+- Bootstrap admin login works on a fresh `data/setu.db`.
+- `data/` is writable; WAL files are created.
 
-**Anti-pattern guards:** don't bake `.env`/secrets or `data/setu.db` into the image; don't run as root; don't add a second app replica against SQLite.
+**Anti-pattern guards:** don't require container tooling for the client handoff; don't delete or reset `data/` during setup; keep `.env` and the whole `data/` folder in scheduled backups.
 
 ---
 
@@ -139,8 +140,8 @@ Mirror [app/static/scanner.js](../../app/static/scanner.js): one small `app/stat
 3. Grep guards:
    - autosave endpoint does not set `tally_enabled` (`grep -n tally_enabled app/routers/settings.py` → only in `save_settings`).
    - no `graphql`, `websocket`, `flask` imports introduced.
-4. `docker compose up` end-to-end on the target server; verify `/health` via Caddy HTTPS and data persistence.
-5. Update [CLAUDE.md](../../CLAUDE.md): nav dropdown, autosave endpoints (and the tally_enabled exclusion), live-refresh endpoints, Docker/compose deployment + single-replica/SQLite note.
+4. `setup.bat -SkipStart`, then `start_setu.bat`; verify `/health` and data persistence.
+5. Update [CLAUDE.md](../../CLAUDE.md): nav dropdown, autosave endpoints (and the tally_enabled exclusion), live-refresh endpoints, Windows setup flow + SQLite note.
 
 ## Suggested execution order
 Phase 1 → 2 → 3 → 4 → 5 → 6. Phases 2, 3, 4 are largely independent and can be parallelized by separate agents; Phase 5 depends on Phase 1's pinned requirements.

@@ -22,6 +22,12 @@ For a non-technical Windows install, run this from the project folder instead of
 
 It prompts for the first admin login, writes `.env`, installs dependencies, and can start the app when finished.
 
+After setup, start the app anytime with:
+
+```text
+start_setu.bat
+```
+
 Manual install:
 
 ```bash
