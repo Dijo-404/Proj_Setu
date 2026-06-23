@@ -49,7 +49,7 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
 )
 
 echo Starting Setu QR Tally Bridge...
-echo Open: http://127.0.0.1:%PORT%
+echo Open: http://%HOST_ADDRESS%:%PORT%
 echo Press Ctrl+C in this window to stop the app.
 "%~dp0.venv\Scripts\python.exe" -m uvicorn app.main:app --host "%HOST_ADDRESS%" --port "%PORT%"
 set "APP_EXIT=%ERRORLEVEL%"

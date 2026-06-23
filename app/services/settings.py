@@ -149,10 +149,10 @@ def delete_company(db: Session, company_id: int) -> None:
     company = db.get(Company, company_id)
     if not company:
         return _raise("Company not found.")
-    if company.is_active:
-        return _raise("Activate another company before deleting this one.")
     if (db.scalar(select(func.count(Company.id))) or 0) <= 1:
         return _raise("At least one company is required.")
+    if company.is_active:
+        return _raise("Activate another company before deleting this one.")
     db.delete(company)
     db.commit()
 

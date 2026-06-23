@@ -4,13 +4,13 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
-
-logger = logging.getLogger("setu")
 from app.database import Base, SessionLocal, engine
 from app.routers import auth, batches, dashboard, maintenance, products, replacements, reports, serials, settings, tally_check, users
 from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
 from app.services.sync_worker import start_retry_worker, stop_retry_worker
+
+logger = logging.getLogger("setu")
 
 
 def create_app() -> FastAPI:
