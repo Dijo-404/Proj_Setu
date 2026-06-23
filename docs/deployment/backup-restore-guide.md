@@ -9,6 +9,11 @@
 
 The backup uses SQLite's backup API, so WAL data is included.
 
+For scheduled server backups such as Cobian Reflector, include the whole project
+`data/` folder. Do not back up only `data/setu.db` while the app is running,
+because SQLite may also have active `setu.db-wal` and `setu.db-shm` sidecar
+files.
+
 Also keep a separate copy of:
 
 ```text
@@ -18,7 +23,7 @@ Also keep a separate copy of:
 ## Restore
 
 1. Stop the Setu service.
-2. Copy the current database file to a safe location.
+2. Copy the current `data/` folder to a safe location.
 3. Replace `data/setu.db` with the backup file.
 4. Start the Setu service.
 5. Log in and check Dashboard, Products, Serials, and Reports.

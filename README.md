@@ -23,6 +23,24 @@ Setu is a LAN-first QR transaction bridge for Tally Prime. It lets staff scan pr
 - Chrome or Edge for staff phones
 - For phone camera use over LAN: HTTPS reverse proxy later, usually Caddy plus a local certificate
 
+## Quick Windows Setup For Non-Technical Users
+
+On the Windows server, double-click:
+
+```text
+setup.bat
+```
+
+The setup helper will check/install Python if possible, create `.venv`, install packages, ask for the first admin username/password, create `.env`, run a smoke test, and offer to start the app.
+
+After setup, start the app anytime with:
+
+```powershell
+.\start_setu.ps1
+```
+
+If Windows blocks PowerShell scripts, use `setup.bat`; it starts PowerShell with the required one-time bypass for this setup run.
+
 ## 1. Open The Project Folder
 
 ```bash
@@ -235,10 +253,14 @@ Backup:
 3. Store the downloaded `.db` file safely.
 4. Keep a separate copy of `.env`.
 
+For scheduled server backups such as Cobian Reflector, include the whole
+`data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar files
+such as `setu.db-wal` and `setu.db-shm` while the app is running.
+
 Restore:
 
 1. Stop the app/server.
-2. Copy the current `data/setu.db` somewhere safe.
+2. Copy the current `data/` folder somewhere safe.
 3. Replace `data/setu.db` with the backup file.
 4. Start the app again.
 5. Check Dashboard, Products, Serials, and Reports.

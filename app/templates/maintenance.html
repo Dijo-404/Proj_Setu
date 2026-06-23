@@ -16,13 +16,14 @@
     <dt>Format</dt><dd>SQLite database copy</dd>
   </dl>
   <p class="muted">The backup uses SQLite's backup API, so pending WAL changes are included in the downloaded file.</p>
+  <p class="muted">For scheduled server backups, include the whole data folder and a separate copy of .env.</p>
 </section>
 
 <section class="panel">
   <div class="section-title"><h2>Restore procedure</h2></div>
   <div class="checklist">
     <div>Stop the Setu Windows service or FastAPI server.</div>
-    <div>Copy the current database file to a safe location before replacing it.</div>
+    <div>Copy the current data folder to a safe location before replacing the database.</div>
     <div>Replace the database at <strong>{{ database_path }}</strong> with the downloaded backup file.</div>
     <div>Start the Setu service again and log in as admin.</div>
     <div>Open Dashboard, Products, and Reports to confirm the restored data is visible.</div>

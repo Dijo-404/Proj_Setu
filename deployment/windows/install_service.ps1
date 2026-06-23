@@ -9,6 +9,7 @@ $ErrorActionPreference = "Stop"
 $pythonExe = Join-Path $ProjectDir ".venv\Scripts\uvicorn.exe"
 $logDir = Join-Path $ProjectDir "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+New-Item -ItemType Directory -Force -Path (Join-Path $ProjectDir "data") | Out-Null
 
 & $NssmPath install $ServiceName $pythonExe "app.main:app" "--host" "127.0.0.1" "--port" "$Port"
 & $NssmPath set $ServiceName AppDirectory $ProjectDir

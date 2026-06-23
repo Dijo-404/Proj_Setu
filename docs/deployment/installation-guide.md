@@ -14,6 +14,16 @@ Factory LAN deployment on the SERVER machine with Tally Prime running locally or
 
 ## Install
 
+For a non-technical Windows install, run this from the project folder instead of typing the manual commands:
+
+```powershell
+.\setup.bat
+```
+
+It prompts for the first admin login, writes `.env`, installs dependencies, and can start the app when finished.
+
+Manual install:
+
 ```bash
 python -m venv .venv
 source .venv/bin/activate
@@ -63,4 +73,10 @@ Use the bootstrap admin from `.env`, then create named users from `Users`.
 4. Open `Tally Check`.
 5. Mark each master checked only after comparing with Tally.
 6. Enable Tally sync only after Tally Check is complete.
+
+## Backup Reminder
+
+Configure the server backup software to include the whole project `data/` folder
+and a separate copy of `.env`. The app's Maintenance page also provides a
+SQLite-safe database download for manual backups.
 

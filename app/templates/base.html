@@ -48,16 +48,60 @@
     </div>
   </nav>
   <script>
+    const navMenus = Array.from(document.querySelectorAll("details.nav-menu"));
+
+    function positionNavMenu(menu) {
+      if (!menu.open) return;
+      const summary = menu.querySelector("summary");
+      const panel = menu.querySelector(".nav-menu__panel");
+      const subnav = menu.closest(".subnav");
+      const container = menu.closest(".subnav__inner");
+      if (!summary || !panel) return;
+
+      const margin = 12;
+      const summaryRect = summary.getBoundingClientRect();
+      const subnavRect = subnav ? subnav.getBoundingClientRect() : summaryRect;
+      const containerRect = container ? container.getBoundingClientRect() : subnavRect;
+      const top = subnavRect.bottom - containerRect.top + 6;
+      const maxHeight = Math.max(140, window.innerHeight - subnavRect.bottom - margin);
+
+      panel.style.maxHeight = `${maxHeight}px`;
+      const panelWidth = panel.getBoundingClientRect().width;
+      const maxLeft = window.innerWidth - panelWidth - margin;
+      const left = Math.min(Math.max(summaryRect.left, margin), Math.max(margin, maxLeft));
+
+      panel.style.top = `${top}px`;
+      panel.style.left = `${left - containerRect.left}px`;
+    }
+
+    navMenus.forEach((menu) => {
+      menu.addEventListener("toggle", () => {
+        if (!menu.open) return;
+        navMenus.forEach((otherMenu) => {
+          if (otherMenu !== menu) otherMenu.removeAttribute("open");
+        });
+        requestAnimationFrame(() => positionNavMenu(menu));
+      });
+    });
+
+    function positionOpenNavMenus() {
+      navMenus.forEach(positionNavMenu);
+    }
+
+    window.addEventListener("resize", positionOpenNavMenus);
+    window.addEventListener("scroll", positionOpenNavMenus, true);
+
     document.addEventListener("click", (event) => {
-      document.querySelectorAll("details.nav-menu[open]").forEach((menu) => {
+      navMenus.forEach((menu) => {
         if (!menu.contains(event.target)) menu.removeAttribute("open");
       });
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
-        document.querySelectorAll("details.nav-menu[open]").forEach((menu) => menu.removeAttribute("open"));
+        navMenus.forEach((menu) => menu.removeAttribute("open"));
       }
     });
+    positionOpenNavMenus();
   </script>
   {% endif %}
   <main class="page">

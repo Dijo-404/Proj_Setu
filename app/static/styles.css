@@ -231,10 +231,11 @@ tfoot th, tfoot td {
 }
 
 .subnav__inner {
+  position: relative;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: safe center;
+  justify-content: flex-start;
   gap: 4px 2px;
   width: min(1280px, calc(100vw - 44px));
   margin: 0 auto;
@@ -266,7 +267,7 @@ tfoot th, tfoot td {
 
 /* Batches dropdown (native <details>) */
 .nav-menu {
-  position: relative;
+  position: static;
   flex: none;
 }
 
@@ -282,6 +283,11 @@ tfoot th, tfoot td {
 .nav-menu > summary::-webkit-details-marker { display: none; }
 .nav-menu > summary::after { content: "\25BE"; font-size: 10px; opacity: 0.65; }
 .nav-menu > summary:hover { background: rgba(0, 0, 0, 0.05); }
+.nav-menu > summary.active:hover,
+.nav-menu[open] > summary.active {
+  background: var(--ink);
+  color: var(--on-dark);
+}
 .nav-menu[open] > summary:not(.active) { background: rgba(0, 0, 0, 0.06); }
 
 .nav-menu__panel {
@@ -292,6 +298,10 @@ tfoot th, tfoot td {
   display: grid;
   gap: 2px;
   min-width: 184px;
+  width: max-content;
+  max-width: min(280px, calc(100vw - 24px));
+  max-height: min(420px, calc(100vh - 24px));
+  overflow-y: auto;
   padding: 6px;
   background: var(--canvas);
   border: 1px solid var(--hairline-soft);
@@ -301,6 +311,7 @@ tfoot th, tfoot td {
 }
 
 .nav-menu__panel a {
+  display: block;
   padding: 8px 12px;
   border-radius: var(--r-sm);
   color: var(--ink-80);
@@ -870,6 +881,10 @@ small {
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .split, .batch-layout { grid-template-columns: 1fr; }
   .grid-form, .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 980px) {
+  .subnav__inner { justify-content: center; }
 }
 
 @media (max-width: 640px) {
