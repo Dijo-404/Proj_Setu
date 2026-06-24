@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.routers import auth, batches, dashboard, maintenance, products, replacements, reports, serials, settings, tally_check, users
+from app.routers import auth, barcode_assignment, batches, dashboard, maintenance, products, replacements, reports, serials, settings, tally_check, users
 from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
 from app.services.sync_worker import start_retry_worker, stop_retry_worker
@@ -18,6 +18,7 @@ def create_app() -> FastAPI:
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     app.include_router(auth.router)
     app.include_router(dashboard.router)
+    app.include_router(barcode_assignment.router)
     app.include_router(products.router)
     app.include_router(serials.router)
     app.include_router(batches.router)

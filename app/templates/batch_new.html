@@ -13,7 +13,7 @@
   <form method="post" action="/batches" class="stack" data-draft="setu:newbatch:{{ batch_type.value }}">
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
     <label>
-      {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
+      {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
       <input name="party_name" placeholder="Name">
     </label>
     {% if batch_type.value == 'SALES_RETURN' %}
@@ -28,10 +28,11 @@
     <label>Issue reason
       <select name="reason_code">
         <option value="SAMPLE">Sample</option>
-        <option value="MARKETING">Marketing</option>
         <option value="OFFICE_USE">Office use</option>
-        <option value="PRODUCTION_USE">Production use</option>
-        <option value="FREE_DISTRIBUTION">Free distribution</option>
+        <option value="DAMAGE">Damage</option>
+        <option value="MARKETING">Marketing</option>
+        <option value="PRODUCTION">Production</option>
+        <option value="OTHER">Other</option>
       </select>
     </label>
     {% elif batch_type.value == 'PURCHASE_RETURN' %}
@@ -44,7 +45,7 @@
     </label>
     {% endif %}
     <label>Notes<textarea name="notes" rows="3"></textarea></label>
-    <button class="button primary full" type="submit">Start {{ batch_type.value|lower }} batch</button>
+    <button class="button primary full" type="submit">Start {{ 'purchase' if batch_type.value in ['PURCHASE', 'RECEIVE'] else batch_type.value|lower }} batch</button>
   </form>
 </section>
 {% endblock %}

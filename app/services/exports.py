@@ -11,7 +11,7 @@ import barcode
 from barcode.writer import ImageWriter
 from PIL import Image as PILImage
 
-from app.models import Batch, ScanLog, Serial
+from app.models import Batch, InventoryTransaction, ScanLog, Serial
 
 
 def barcode_png(value: str) -> bytes:
@@ -49,6 +49,82 @@ def scans_xlsx(scans: list[ScanLog]) -> bytes:
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
+
+
+def serials_xlsx(serials: list[Serial]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Barcodes"
+    sheet.append(["Product Code", "Product Name", "Tally Stock Item", "Serial Number", "Status", "Created At"])
+    for serial in serials:
+        product = serial.product
+        sheet.append(
+            [
+                product.product_code,
+                product.product_name,
+                product.tally_stock_item_name,
+                serial.serial_number,
+                serial.status,
+                serial.created_at.isoformat(),
+            ]
+        )
+    _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Transactions"
+    sheet.append(
+        [
+            "Date",
+            "User",
+            "Type",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "From Status",
+            "To Status",
+            "Reason",
+            "Batch/Reference",
+            "Tally Reference",
+            "Notes",
+        ]
+    )
+    for txn in transactions:
+        sheet.append(
+            [
+                txn.created_at.isoformat(),
+                txn.user.username,
+                txn.transaction_type,
+                txn.serial_number or "",
+                txn.product.product_code if txn.product else "",
+                txn.product.product_name if txn.product else "",
+                txn.status_from or "",
+                txn.status_to or "",
+                txn.reason_code or "",
+                txn.reference_number or "",
+                txn.tally_reference or "",
+                txn.notes or "",
+            ]
+        )
+    _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def _autosize(sheet) -> None:
+    for column in sheet.columns:
+        width = max(len(str(cell.value or "")) for cell in column)
+        sheet.column_dimensions[column[0].column_letter].width = min(max(width + 2, 12), 42)
 
 
 def _label_image(value: str, target_width_mm: float = 52.0) -> Image:

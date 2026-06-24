@@ -1,4 +1,6 @@
-from app.models import BatchStatus, BatchType, Product, SerialStatus, User
+from sqlalchemy import select
+
+from app.models import BatchStatus, BatchType, InventoryTransaction, Product, SerialStatus, TransactionType, User
 from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 from app.services.tally import sync_batch
 
@@ -25,6 +27,10 @@ def test_sales_return_good_condition_moves_sold_item_to_stock(db_session):
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
     assert serial.status == SerialStatus.IN_STOCK.value
+    txn = db_session.scalar(select(InventoryTransaction).where(InventoryTransaction.serial_id == serial.id))
+    assert txn.transaction_type == TransactionType.SALES_RETURN.value
+    assert txn.status_from == SerialStatus.SOLD.value
+    assert txn.status_to == SerialStatus.IN_STOCK.value
 
 
 def test_sales_return_damaged_marks_item_damaged(db_session):
@@ -53,6 +59,8 @@ def test_purchase_return_and_issue_statuses(db_session):
     apply_batch_statuses(db_session, issue, user)
     assert serials[0].status == SerialStatus.PURCHASE_RETURN.value
     assert serials[1].status == SerialStatus.ISSUED.value
+    txn_types = db_session.scalars(select(InventoryTransaction.transaction_type).order_by(InventoryTransaction.id)).all()
+    assert txn_types == [TransactionType.PURCHASE_RETURN.value, TransactionType.ISSUE.value]
 
 
 def test_unsupported_return_tally_sync_is_queued_not_posted(db_session):

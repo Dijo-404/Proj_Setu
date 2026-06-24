@@ -10,7 +10,7 @@
     <input name="q" value="{{ q }}" placeholder="Serial or product">
     <select name="status">
       <option value="">All status</option>
-      {% for value in ['GENERATED','IN_STOCK','SOLD','RETURNED','PURCHASE_RETURN','ISSUED','DAMAGED','MISSING','REPLACED'] %}
+      {% for value in ['GENERATED','PURCHASED','IN_STOCK','SOLD','RETURNED','PURCHASE_RETURN','ISSUED','DAMAGED','MISSING','INVALID','REPLACED'] %}
       <option value="{{ value }}" {{ 'selected' if status == value else '' }}>{{ value }}</option>
       {% endfor %}
     </select>
@@ -24,7 +24,7 @@
     <tbody>
       {% for serial in serials %}
       <tr>
-        <td>{{ serial.serial_number }}</td>
+        <td><a href="/serials/{{ serial.id }}">{{ serial.serial_number }}</a></td>
         <td>{{ serial.product.product_name }}</td>
         <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
         <td><a href="/serials/labels?ids={{ serial.id }}">Label</a></td>

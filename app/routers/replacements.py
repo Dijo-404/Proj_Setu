@@ -4,19 +4,20 @@ from sqlalchemy.orm import Session
 
 from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
-from app.models import ScanLog
+from app.models import ScanLog, TransactionType
 from app.services.inventory import InventoryError
-from app.services.replacement import replace_qr_serial
+from app.services.replacement import replace_barcode_serial
 from app.templates import templates
 
-router = APIRouter(prefix="/qr-replacement")
+router = APIRouter()
 
 
-@router.get("")
+@router.get("/qr-replacement")
+@router.get("/barcode-replacement")
 def replacement_page(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db, ADMIN_ROLES)
     logs = db.scalars(
-        select(ScanLog).where(ScanLog.action == "QR_REPLACEMENT").order_by(desc(ScanLog.created_at)).limit(40)
+        select(ScanLog).where(ScanLog.action == TransactionType.QR_REPLACEMENT.value).order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
     return templates.TemplateResponse(
         request,
@@ -25,7 +26,8 @@ def replacement_page(request: Request, db: Session = Depends(get_db)):
     )
 
 
-@router.post("")
+@router.post("/qr-replacement")
+@router.post("/barcode-replacement")
 def replace_qr(
     request: Request,
     old_serial_number: str = Form(...),
@@ -35,10 +37,10 @@ def replace_qr(
 ):
     user = require_user(request, db, ADMIN_ROLES)
     logs = db.scalars(
-        select(ScanLog).where(ScanLog.action == "QR_REPLACEMENT").order_by(desc(ScanLog.created_at)).limit(40)
+        select(ScanLog).where(ScanLog.action == TransactionType.QR_REPLACEMENT.value).order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
     try:
-        replacement = replace_qr_serial(db, user, old_serial_number, new_serial_number or None, reason)
+        replacement = replace_barcode_serial(db, user, old_serial_number, new_serial_number or None, reason)
     except InventoryError as exc:
         return templates.TemplateResponse(
             request,
@@ -47,7 +49,7 @@ def replace_qr(
             status_code=400,
         )
     logs = db.scalars(
-        select(ScanLog).where(ScanLog.action == "QR_REPLACEMENT").order_by(desc(ScanLog.created_at)).limit(40)
+        select(ScanLog).where(ScanLog.action == TransactionType.QR_REPLACEMENT.value).order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
     return templates.TemplateResponse(
         request,

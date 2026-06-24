@@ -1,15 +1,15 @@
-# Setu QR Tally Bridge
+# Setu Barcode Tally Bridge
 
-Setu is a LAN-first QR transaction bridge for Tally Prime. It lets staff scan product QR codes from phones, keeps serial-level history locally, and syncs supported stock movements to Tally through its XML gateway.
+Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff scan product barcodes from phones, keeps serial-level history locally, and syncs supported stock movements to Tally through its XML gateway.
 
 ## Current Features
 
 - Role-based login for admin, purchase, sales, and audit users
 - Product master with HSN, GST, unit, default rate, and exact Tally stock item name
-- Bulk QR serial generation and printable/PDF labels with QR plus serial number only
-- Receive, sale, audit, sales return, purchase return, stock issue, and QR replacement workflows
+- Bulk barcode serial generation and printable/PDF labels with barcode plus serial number only
+- Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit
-- Tally XML generation for receive and sale batches
+- Tally XML generation for purchase and sale batches
 - Tally Check screen for exact-name master readiness
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation for verified, missing, and extra serials
@@ -153,16 +153,16 @@ Do this in order:
 2. Enter Tally host, port, company name, voucher type names, ledger names, and default party.
 3. Open `Products`.
 4. Create products using the exact Tally stock item names.
-5. Generate QR serials for products.
+5. Generate barcode serials for products, or use `Barcode Assignment` for existing Tally stock.
 6. Open `Tally Check`.
 7. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
 8. Keep Tally sync disabled until Tally Check has no missing or unchecked items.
 
 ## 8. Normal Workflow
 
-Receive stock:
+Purchase stock:
 
-1. Open `Receive`.
+1. Open `Purchase`.
 2. Enter supplier/reference.
 3. Scan serials.
 4. Check the voucher preview.
@@ -188,11 +188,17 @@ Returns and issue:
 
 - `Sales return`: scan sold items returned by customer.
 - `Purchase return`: scan in-stock items returned to supplier.
-- `Issue`: scan in-stock items issued for sample, marketing, office use, production use, or free distribution.
+- `Issue`: scan in-stock items issued for sample, office use, damage, marketing, production, or other reasons.
 
-QR replacement:
+Barcode assignment:
 
-1. Open `QR Replace`.
+1. Open `Barcode Assignment`.
+2. Select an existing product or upload an Excel file with `Product Code` and `Quantity`.
+3. Download the generated Excel file and labels PDF.
+
+Barcode replacement:
+
+1. Open `Barcode Replace`.
 2. Enter the damaged/old serial.
 3. Leave new serial blank to auto-generate, or enter a new serial manually.
 4. Print the new label.
@@ -208,12 +214,12 @@ Before enabling sync:
 3. Confirm inventory is maintained.
 4. Confirm accounts and inventory are integrated.
 5. In Setu, complete `Tally Check`.
-6. Download `Tally XML` from a receive/sale batch and validate it against the real company.
+6. Download `Tally XML` from a purchase/sale batch and validate it against the real company.
 7. Enable sync in `Settings`.
 
 Supported live XML posting:
 
-- Receive
+- Purchase
 - Sale
 
 Implemented locally but intentionally not live-posted yet:
@@ -229,6 +235,7 @@ Those remain `PENDING_SYNC` until the exact Tally voucher XML for the client com
 Use `Reports` for:
 
 - Scan history
+- Transaction history
 - Pending sync
 - CSV export
 - XLSX export
@@ -242,7 +249,7 @@ Use batch detail pages for:
 Use label pages for:
 
 - Browser print
-- QR label PDF download
+- Barcode label PDF download
 
 ## 11. Backup And Restore
 

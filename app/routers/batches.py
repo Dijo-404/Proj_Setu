@@ -30,7 +30,7 @@ def wants_json(request: Request) -> bool:
 
 
 def roles_for_batch(batch_type: BatchType):
-    if batch_type == BatchType.RECEIVE:
+    if batch_type in {BatchType.PURCHASE, BatchType.RECEIVE}:
         return PURCHASE_ROLES
     if batch_type == BatchType.SALE:
         return SALES_ROLES
@@ -41,6 +41,8 @@ def roles_for_batch(batch_type: BatchType):
     if batch_type == BatchType.PURCHASE_RETURN:
         return PURCHASE_ROLES
     if batch_type == BatchType.ISSUE:
+        return ADMIN_ROLES
+    if batch_type == BatchType.QR_ASSIGNMENT:
         return ADMIN_ROLES
     return ADMIN_ROLES
 
@@ -53,7 +55,7 @@ def batches(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/new")
-def new_batch(request: Request, batch_type: str = BatchType.RECEIVE.value, db: Session = Depends(get_db)):
+def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: Session = Depends(get_db)):
     parsed = BatchType(batch_type)
     user = require_user(request, db, roles_for_batch(parsed))
     return templates.TemplateResponse(
@@ -91,6 +93,8 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
     )
     if not batch:
         return RedirectResponse("/batches", status_code=303)
+    if batch.batch_type == BatchType.QR_ASSIGNMENT.value:
+        return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)
     user = require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
     return templates.TemplateResponse(
         request,
@@ -276,7 +280,7 @@ def tally_xml_preview(request: Request, batch_id: int, db: Session = Depends(get
     require_user(request, db, ADMIN_ROLES)
     if batch.batch_type == BatchType.AUDIT.value:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
-    if batch.batch_type not in {BatchType.RECEIVE.value, BatchType.SALE.value}:
+    if batch.batch_type not in {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     return Response(
         build_voucher_xml(batch, get_all_settings(db)),

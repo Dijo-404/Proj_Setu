@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Barcode Assignment · Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Existing stock</p>
+    <h1>Barcode Assignment</h1>
+  </div>
+</section>
+
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+
+<section class="split">
+  <div class="panel">
+    <div class="section-title"><h2>Assign to product</h2></div>
+    <form method="post" action="/barcode-assignment/generate" class="stack">
+      <label>Existing product
+        <select name="product_id" required>
+          {% for product in products %}
+          <option value="{{ product.id }}">{{ product.product_code }} · {{ product.product_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <div class="two-col">
+        <label>Quantity<input name="quantity" type="number" min="1" max="5000" required></label>
+        <label>Prefix<input name="prefix" placeholder="Uses product code"></label>
+      </div>
+      <label>Notes<textarea name="notes" rows="3"></textarea></label>
+      <button class="button primary full" type="submit">Generate barcodes</button>
+    </form>
+  </div>
+
+  <div class="panel">
+    <div class="section-title"><h2>Bulk assignment</h2></div>
+    <form method="post" action="/barcode-assignment/bulk" enctype="multipart/form-data" class="stack">
+      <label>Excel file<input name="upload" type="file" accept=".xlsx" required></label>
+      <label>Notes<textarea name="notes" rows="3"></textarea></label>
+      <button class="button primary full" type="submit">Upload and generate</button>
+    </form>
+  </div>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Recent assignments</h2></div>
+  <table>
+    <thead><tr><th>Batch</th><th>Source</th><th>Items</th><th>Created</th><th></th></tr></thead>
+    <tbody>
+      {% for batch in batches %}
+      <tr>
+        <td>{{ batch.batch_number }}</td>
+        <td>{{ batch.reason_code or '-' }}</td>
+        <td>{{ batch.items|length }}</td>
+        <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+        <td><a href="/barcode-assignment/{{ batch.id }}">Open</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="empty">No assignments yet</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

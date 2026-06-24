@@ -11,10 +11,12 @@ from app.models import (
     BatchItem,
     BatchStatus,
     BatchType,
+    InventoryTransaction,
     Product,
     ScanLog,
     Serial,
     SerialStatus,
+    TransactionType,
     User,
 )
 
@@ -29,12 +31,14 @@ def normalize_serial(serial_number: str) -> str:
 
 def next_batch_number(db: Session, batch_type: BatchType) -> str:
     prefix = {
+        BatchType.PURCHASE: "PUR",
         BatchType.RECEIVE: "RCV",
         BatchType.SALE: "SAL",
         BatchType.AUDIT: "AUD",
         BatchType.PURCHASE_RETURN: "PRT",
         BatchType.SALES_RETURN: "SRT",
         BatchType.ISSUE: "ISS",
+        BatchType.QR_ASSIGNMENT: "ASN",
     }[batch_type]
     today = datetime.now(timezone.utc).strftime("%Y%m%d")
     count = db.scalar(select(func.count(Batch.id)).where(Batch.batch_number.like(f"{prefix}-{today}-%"))) or 0
@@ -56,17 +60,68 @@ def create_batch(db: Session, user: User, batch_type: BatchType, party_name: str
     return batch
 
 
+def transaction_type_for_batch(batch_type: BatchType) -> TransactionType:
+    if batch_type in {BatchType.PURCHASE, BatchType.RECEIVE}:
+        return TransactionType.PURCHASE
+    if batch_type == BatchType.SALE:
+        return TransactionType.SALE
+    if batch_type == BatchType.SALES_RETURN:
+        return TransactionType.SALES_RETURN
+    if batch_type == BatchType.PURCHASE_RETURN:
+        return TransactionType.PURCHASE_RETURN
+    if batch_type == BatchType.ISSUE:
+        return TransactionType.ISSUE
+    if batch_type == BatchType.AUDIT:
+        return TransactionType.AUDIT
+    if batch_type == BatchType.QR_ASSIGNMENT:
+        return TransactionType.QR_ASSIGNMENT
+    raise InventoryError(f"{batch_type.value} is not a supported transaction type")
+
+
+def log_inventory_transaction(
+    db: Session,
+    user: User,
+    transaction_type: TransactionType,
+    serial: Serial | None = None,
+    product: Product | None = None,
+    batch: Batch | None = None,
+    status_from: str | None = None,
+    status_to: str | None = None,
+    reason_code: str | None = None,
+    tally_reference: str | None = None,
+    reference_number: str | None = None,
+    notes: str | None = None,
+) -> InventoryTransaction:
+    row = InventoryTransaction(
+        transaction_type=transaction_type.value,
+        serial_id=serial.id if serial else None,
+        product_id=(product.id if product else serial.product_id if serial else None),
+        batch_id=batch.id if batch else None,
+        user_id=user.id,
+        serial_number=serial.serial_number if serial else None,
+        status_from=status_from,
+        status_to=status_to,
+        reason_code=reason_code.strip().upper() if reason_code else None,
+        tally_reference=tally_reference,
+        reference_number=reference_number or (batch.batch_number if batch else None),
+        notes=notes.strip() if notes else None,
+    )
+    db.add(row)
+    return row
+
+
 def serial_allowed_for_batch(serial: Serial, batch_type: BatchType) -> None:
     status = SerialStatus(serial.status)
-    if batch_type == BatchType.RECEIVE:
+    if not serial.active or status in {SerialStatus.REPLACED, SerialStatus.INVALID}:
+        raise InventoryError(f"{serial.serial_number} is inactive")
+    if batch_type in {BatchType.PURCHASE, BatchType.RECEIVE}:
         if status not in {SerialStatus.GENERATED, SerialStatus.PURCHASE_RETURN}:
-            raise InventoryError(f"{serial.serial_number} cannot be received from {serial.status}")
+            raise InventoryError(f"{serial.serial_number} cannot be purchased from {serial.status}")
     elif batch_type == BatchType.SALE:
         if status not in {SerialStatus.IN_STOCK, SerialStatus.RETURNED}:
             raise InventoryError(f"{serial.serial_number} is not available for sale")
     elif batch_type == BatchType.AUDIT:
-        if status in {SerialStatus.REPLACED}:
-            raise InventoryError(f"{serial.serial_number} is inactive")
+        return
     elif batch_type == BatchType.SALES_RETURN:
         if status != SerialStatus.SOLD:
             raise InventoryError(f"{serial.serial_number} is not sold")
@@ -76,8 +131,11 @@ def serial_allowed_for_batch(serial: Serial, batch_type: BatchType) -> None:
     elif batch_type == BatchType.ISSUE:
         if status != SerialStatus.IN_STOCK:
             raise InventoryError(f"{serial.serial_number} is not available for issue")
+    elif batch_type == BatchType.QR_ASSIGNMENT:
+        if status != SerialStatus.GENERATED:
+            raise InventoryError(f"{serial.serial_number} is already assigned")
     else:
-        raise InventoryError(f"{batch_type.value} is not active in Phase 1")
+        raise InventoryError(f"{batch_type.value} is not supported")
 
 
 def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: str) -> BatchItem:
@@ -142,16 +200,28 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
     for item in batch.items:
         serial_allowed_for_batch(item.serial, batch_type)
     for item in batch.items:
+        previous_status = item.serial.status
+        scan_status = "SUBMITTED"
         if batch_type == BatchType.RECEIVE:
             item.serial.status = SerialStatus.IN_STOCK.value
+            scan_status = SerialStatus.PURCHASED.value
+        elif batch_type == BatchType.PURCHASE:
+            item.serial.status = SerialStatus.IN_STOCK.value
+            scan_status = SerialStatus.PURCHASED.value
         elif batch_type == BatchType.SALE:
             item.serial.status = SerialStatus.SOLD.value
+            scan_status = SerialStatus.SOLD.value
         elif batch_type == BatchType.SALES_RETURN:
             item.serial.status = SerialStatus.DAMAGED.value if batch.reason_code in {"DAMAGED", "EXPIRED"} else SerialStatus.IN_STOCK.value
+            scan_status = SerialStatus.DAMAGED.value if batch.reason_code in {"DAMAGED", "EXPIRED"} else SerialStatus.RETURNED.value
         elif batch_type == BatchType.PURCHASE_RETURN:
             item.serial.status = SerialStatus.PURCHASE_RETURN.value
+            scan_status = SerialStatus.PURCHASE_RETURN.value
         elif batch_type == BatchType.ISSUE:
             item.serial.status = SerialStatus.ISSUED.value
+            scan_status = SerialStatus.ISSUED.value
+        elif batch_type == BatchType.AUDIT:
+            scan_status = SerialStatus.AUDITED.value
         db.add(
             ScanLog(
                 serial_id=item.serial.id,
@@ -159,11 +229,32 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
                 user_id=user.id,
                 action=batch.batch_type,
                 batch_id=batch.id,
-                status="SUBMITTED",
+                status=scan_status,
+                tally_reference=batch.tally_reference,
             )
+        )
+        log_inventory_transaction(
+            db,
+            user,
+            transaction_type_for_batch(batch_type),
+            serial=item.serial,
+            batch=batch,
+            status_from=previous_status,
+            status_to=item.serial.status,
+            reason_code=batch.reason_code,
+            tally_reference=batch.tally_reference,
+            notes=batch.notes,
         )
     batch.status = BatchStatus.SUBMITTED.value
     batch.submitted_at = datetime.now(timezone.utc)
+
+
+def update_batch_transaction_references(db: Session, batch: Batch) -> None:
+    if not batch.tally_reference:
+        return
+    rows = db.scalars(select(InventoryTransaction).where(InventoryTransaction.batch_id == batch.id)).all()
+    for row in rows:
+        row.tally_reference = batch.tally_reference
 
 
 def group_batch_items(batch: Batch) -> list[dict[str, object]]:

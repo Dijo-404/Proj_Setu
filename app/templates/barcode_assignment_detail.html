@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ batch.batch_number }} · Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Barcode assignment</p>
+    <h1>{{ batch.batch_number }}</h1>
+  </div>
+  <div class="actions">
+    <a class="button" href="/barcode-assignment/{{ batch.id }}/serials.xlsx">Download Excel</a>
+    <a class="button" href="/barcode-assignment/{{ batch.id }}/labels.pdf">Download labels PDF</a>
+    <a class="button" href="/barcode-assignment">Assignments</a>
+  </div>
+</section>
+
+<section class="panel">
+  <dl class="details">
+    <dt>Source</dt><dd>{{ batch.reason_code or '-' }}</dd>
+    <dt>Created by</dt><dd>{{ batch.user.username }}</dd>
+    <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+    <dt>Total barcodes</dt><dd>{{ batch.items|length }}</dd>
+    <dt>Notes</dt><dd>{{ batch.notes or '-' }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Generated barcodes</h2></div>
+  <table>
+    <thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Label</th></tr></thead>
+    <tbody>
+      {% for item in batch.items %}
+      <tr>
+        <td><a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a></td>
+        <td>{{ item.serial.product.product_code }} · {{ item.serial.product.product_name }}</td>
+        <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
+        <td><a href="/serials/labels?ids={{ item.serial.id }}">Open</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="empty">No barcodes generated</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -7,6 +7,7 @@
     <h1>Print labels</h1>
   </div>
   <div class="actions">
+    <a class="button" href="/serials/labels.xlsx?ids={{ request.query_params.get('ids', '') }}">Download Excel</a>
     <a class="button" href="/serials/labels.pdf?ids={{ request.query_params.get('ids', '') }}">Download PDF</a>
     <button class="button primary" onclick="window.print()">Print</button>
   </div>

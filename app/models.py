@@ -22,6 +22,7 @@ class Role(str, Enum):
 
 class SerialStatus(str, Enum):
     GENERATED = "GENERATED"
+    PURCHASED = "PURCHASED"
     RECEIVED = "RECEIVED"
     IN_STOCK = "IN_STOCK"
     SOLD = "SOLD"
@@ -31,16 +32,30 @@ class SerialStatus(str, Enum):
     AUDITED = "AUDITED"
     DAMAGED = "DAMAGED"
     MISSING = "MISSING"
+    INVALID = "INVALID"
     REPLACED = "REPLACED"
 
 
 class BatchType(str, Enum):
+    PURCHASE = "PURCHASE"
     RECEIVE = "RECEIVE"
     SALE = "SALE"
     AUDIT = "AUDIT"
     PURCHASE_RETURN = "PURCHASE_RETURN"
     SALES_RETURN = "SALES_RETURN"
     ISSUE = "ISSUE"
+    QR_ASSIGNMENT = "QR_ASSIGNMENT"
+
+
+class TransactionType(str, Enum):
+    PURCHASE = "PURCHASE"
+    SALE = "SALE"
+    SALES_RETURN = "SALES_RETURN"
+    PURCHASE_RETURN = "PURCHASE_RETURN"
+    ISSUE = "ISSUE"
+    AUDIT = "AUDIT"
+    QR_ASSIGNMENT = "QR_ASSIGNMENT"
+    QR_REPLACEMENT = "QR_REPLACEMENT"
 
 
 class BatchStatus(str, Enum):
@@ -64,6 +79,7 @@ class User(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     batches: Mapped[list["Batch"]] = relationship(back_populates="user")
+    inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="user")
 
 
 class Product(Base):
@@ -82,6 +98,7 @@ class Product(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     serials: Mapped[list["Serial"]] = relationship(back_populates="product")
+    inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="product")
 
 
 class Serial(Base):
@@ -97,6 +114,7 @@ class Serial(Base):
 
     product: Mapped[Product] = relationship(back_populates="serials")
     batch_items: Mapped[list["BatchItem"]] = relationship(back_populates="serial")
+    inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="serial")
 
 
 class Batch(Base):
@@ -125,6 +143,7 @@ class Batch(Base):
     scan_logs: Mapped[list["ScanLog"]] = relationship(back_populates="batch")
     sync_attempts: Mapped[list["SyncAttempt"]] = relationship(back_populates="batch")
     audit_findings: Mapped[list["AuditFinding"]] = relationship(back_populates="batch", cascade="all, delete-orphan")
+    inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="batch")
 
 
 class BatchItem(Base):
@@ -160,6 +179,30 @@ class ScanLog(Base):
     batch: Mapped[Batch | None] = relationship(back_populates="scan_logs")
     serial: Mapped[Serial | None] = relationship()
     user: Mapped[User] = relationship()
+
+
+class InventoryTransaction(Base):
+    __tablename__ = "inventory_transactions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    transaction_type: Mapped[str] = mapped_column(String(40), index=True)
+    serial_id: Mapped[int | None] = mapped_column(ForeignKey("serials.id"), nullable=True, index=True)
+    product_id: Mapped[int | None] = mapped_column(ForeignKey("products.id"), nullable=True, index=True)
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey("batches.id"), nullable=True, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    serial_number: Mapped[str | None] = mapped_column(String(140), nullable=True, index=True)
+    status_from: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    status_to: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    tally_reference: Mapped[str | None] = mapped_column(String(180), nullable=True, index=True)
+    reference_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    serial: Mapped[Serial | None] = relationship(back_populates="inventory_transactions")
+    product: Mapped[Product | None] = relationship(back_populates="inventory_transactions")
+    batch: Mapped[Batch | None] = relationship(back_populates="inventory_transactions")
+    user: Mapped[User] = relationship(back_populates="inventory_transactions")
 
 
 class SyncAttempt(Base):

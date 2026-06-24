@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}QR Replacement · Setu{% endblock %}
+{% block title %}Barcode Replacement · Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
     <p class="eyebrow">Labels</p>
-    <h1>QR Replacement</h1>
+    <h1>Barcode Replacement</h1>
   </div>
   {% if replacement %}
   <a class="button primary" href="/serials/labels?ids={{ replacement.id }}">Print new label</a>
@@ -15,11 +15,11 @@
 {% if replacement %}<div class="alert">Replacement created: {{ replacement.serial_number }}</div>{% endif %}
 
 <section class="panel narrow">
-  <form method="post" action="/qr-replacement" class="stack">
+  <form method="post" action="{{ request.url.path }}" class="stack">
     <label>Old serial<input name="old_serial_number" placeholder="SG001-000001" required></label>
     <label>New serial<input name="new_serial_number" placeholder="Leave blank to auto-generate"></label>
     <label>Reason<textarea name="reason" rows="3" placeholder="Damaged label, reprint request, etc."></textarea></label>
-    <button class="button primary full" type="submit">Replace QR</button>
+    <button class="button primary full" type="submit">Replace barcode</button>
   </form>
 </section>
 

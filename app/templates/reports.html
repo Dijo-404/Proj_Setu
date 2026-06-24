@@ -7,8 +7,10 @@
     <h1>Reports</h1>
   </div>
   <div class="actions">
-    <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Export CSV</a>
-    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Export XLSX</a>
+    <a class="button" href="/reports/transactions.csv?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions CSV</a>
+    <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions XLSX</a>
+    <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Scans CSV</a>
+    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Scans XLSX</a>
   </div>
 </section>
 
@@ -17,15 +19,38 @@
     <label>Action
       <select name="action">
         <option value="">All</option>
-        {% for value in ['RECEIVE','SALE','AUDIT'] %}
+        {% for value in transaction_types %}
         <option value="{{ value }}" {{ 'selected' if action == value else '' }}>{{ value }}</option>
         {% endfor %}
       </select>
     </label>
+    <label>Search<input name="q" value="{{ q }}" placeholder="Serial, product, reference"></label>
     <label>From<input name="start" type="date" value="{{ start }}"></label>
     <label>To<input name="end" type="date" value="{{ end }}"></label>
     <button class="button" type="submit">Apply</button>
   </form>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Transactions</h2></div>
+  <table>
+    <thead><tr><th>Time</th><th>User</th><th>Type</th><th>Serial</th><th>Product</th><th>Status</th><th>Tally</th></tr></thead>
+    <tbody>
+      {% for txn in transactions %}
+      <tr>
+        <td>{{ txn.created_at.strftime('%d %b %H:%M') }}</td>
+        <td>{{ txn.user.username }}</td>
+        <td>{{ txn.transaction_type }}</td>
+        <td>{% if txn.serial %}<a href="/serials/{{ txn.serial.id }}">{{ txn.serial_number }}</a>{% else %}{{ txn.serial_number or '-' }}{% endif %}</td>
+        <td>{{ txn.product.product_code if txn.product else '-' }}</td>
+        <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
+        <td>{{ txn.tally_reference or '-' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="empty">No transactions found</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
 </section>
 
 <section class="split">

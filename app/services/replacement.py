@@ -4,16 +4,16 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import ScanLog, Serial, SerialStatus, User
-from app.services.inventory import InventoryError, generate_serials, normalize_serial
+from app.models import ScanLog, Serial, SerialStatus, TransactionType, User
+from app.services.inventory import InventoryError, generate_serials, log_inventory_transaction, normalize_serial
 
 
-def replace_qr_serial(db: Session, user: User, old_serial_number: str, new_serial_number: str | None = None, reason: str | None = None) -> Serial:
+def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_serial_number: str | None = None, reason: str | None = None) -> Serial:
     old_serial = db.scalar(select(Serial).where(Serial.serial_number == normalize_serial(old_serial_number)))
     if not old_serial:
         raise InventoryError("Serial number not found")
-    if old_serial.status == SerialStatus.REPLACED.value or not old_serial.active:
-        raise InventoryError("Serial is already inactive or replaced")
+    if old_serial.status in {SerialStatus.INVALID.value, SerialStatus.REPLACED.value} or not old_serial.active:
+        raise InventoryError("Serial is already inactive or invalid")
 
     original_status = SerialStatus(old_serial.status)
     if new_serial_number and new_serial_number.strip():
@@ -32,7 +32,7 @@ def replace_qr_serial(db: Session, user: User, old_serial_number: str, new_seria
     else:
         replacement = generate_serials(db, old_serial.product, 1, old_serial.product.product_code, original_status)[0]
 
-    old_serial.status = SerialStatus.REPLACED.value
+    old_serial.status = SerialStatus.INVALID.value
     old_serial.active = False
     old_serial.replaced_by_id = replacement.id
     db.add(
@@ -40,8 +40,8 @@ def replace_qr_serial(db: Session, user: User, old_serial_number: str, new_seria
             serial_id=old_serial.id,
             serial_number_raw=old_serial.serial_number,
             user_id=user.id,
-            action="QR_REPLACEMENT",
-            status="REPLACED",
+            action=TransactionType.QR_REPLACEMENT.value,
+            status=SerialStatus.INVALID.value,
             message=f"New serial: {replacement.serial_number}. {reason or ''}".strip(),
         )
     )
@@ -50,11 +50,33 @@ def replace_qr_serial(db: Session, user: User, old_serial_number: str, new_seria
             serial_id=replacement.id,
             serial_number_raw=replacement.serial_number,
             user_id=user.id,
-            action="QR_REPLACEMENT",
+            action=TransactionType.QR_REPLACEMENT.value,
             status="ACTIVE",
             message=f"Replaces: {old_serial.serial_number}. {reason or ''}".strip(),
         )
     )
+    log_inventory_transaction(
+        db,
+        user,
+        TransactionType.QR_REPLACEMENT,
+        serial=old_serial,
+        status_from=original_status.value,
+        status_to=SerialStatus.INVALID.value,
+        notes=f"New serial: {replacement.serial_number}. {reason or ''}".strip(),
+    )
+    log_inventory_transaction(
+        db,
+        user,
+        TransactionType.QR_REPLACEMENT,
+        serial=replacement,
+        status_from=None,
+        status_to=replacement.status,
+        notes=f"Replaces: {old_serial.serial_number}. {reason or ''}".strip(),
+    )
     db.commit()
     db.refresh(replacement)
     return replacement
+
+
+def replace_qr_serial(db: Session, user: User, old_serial_number: str, new_serial_number: str | None = None, reason: str | None = None) -> Serial:
+    return replace_barcode_serial(db, user, old_serial_number, new_serial_number, reason)

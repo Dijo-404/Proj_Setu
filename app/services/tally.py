@@ -10,11 +10,12 @@ from xml.etree import ElementTree as ET
 from sqlalchemy.orm import Session
 
 from app.models import Batch, BatchStatus, BatchType, SyncAttempt, utc_now
+from app.services.inventory import update_batch_transaction_references
 from app.services.settings import get_all_settings, is_tally_enabled
 from app.services.voucher import calculate_voucher_summary
 
 
-TALLY_XML_SUPPORTED_BATCH_TYPES = {BatchType.RECEIVE.value, BatchType.SALE.value}
+TALLY_XML_SUPPORTED_BATCH_TYPES = {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}
 
 
 class TallySyncError(RuntimeError):
@@ -65,7 +66,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     _text(voucher, "VOUCHERNUMBER", batch.batch_number)
     _text(voucher, "PARTYLEDGERNAME", party_name)
     _text(voucher, "PERSISTEDVIEW", "Accounting Voucher View")
-    _text(voucher, "NARRATION", f"Setu QR batch {batch.batch_number}")
+    _text(voucher, "NARRATION", f"Setu barcode batch {batch.batch_number}")
 
     summary = calculate_voucher_summary(batch)
     for line in summary.lines:
@@ -116,7 +117,7 @@ def sync_batch(db: Session, batch: Batch) -> None:
     if is_retry:
         batch.retry_count = (batch.retry_count or 0) + 1
         batch.last_retry_at = utc_now()
-    if BatchType(batch.batch_type) == BatchType.AUDIT:
+    if BatchType(batch.batch_type) in {BatchType.AUDIT, BatchType.QR_ASSIGNMENT}:
         batch.status = BatchStatus.CLOSED.value
         batch.synced_at = utc_now()
         db.commit()
@@ -155,6 +156,7 @@ def sync_batch(db: Session, batch: Batch) -> None:
     batch.tally_reference = result.reference
     batch.last_error = None
     batch.synced_at = utc_now()
+    update_batch_transaction_references(db, batch)
     db.add(
         SyncAttempt(
             batch_id=batch.id,

@@ -38,7 +38,7 @@ def _flag(name: str, default: str = "false") -> bool:
 
 
 class Settings:
-    app_name: str = os.getenv("APP_NAME", "Setu QR Tally Bridge")
+    app_name: str = os.getenv("APP_NAME", "Setu Barcode Tally Bridge")
     secret_key: str = os.getenv("APP_SECRET_KEY", DEFAULT_SECRET_KEY)
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setu.db")
     session_timeout_minutes: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))

@@ -11,7 +11,7 @@
     {% if batch.batch_type == 'AUDIT' and batch.status != 'DRAFT' %}
     <a class="button" href="/batches/{{ batch.id }}/audit.pdf">Audit PDF</a>
     {% endif %}
-    {% if user.role in ['admin', 'super_admin'] and batch.batch_type in ['RECEIVE', 'SALE'] and batch.items|length > 0 %}
+    {% if user.role in ['admin', 'super_admin'] and batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.items|length > 0 %}
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}
     <a class="button" href="/batches">Batches</a>

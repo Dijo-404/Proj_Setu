@@ -6,15 +6,17 @@ from sqlalchemy.orm import Session
 from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Product, SerialStatus
-from app.services.inventory import InventoryError, generate_serials
+from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
+from app.services.inventory import InventoryError
 from app.templates import templates
 
 router = APIRouter(prefix="/products")
 
 
 @router.get("")
-def products(request: Request, q: str = "", db: Session = Depends(get_db)):
+def products(request: Request, q: str = "", error: str = "", db: Session = Depends(get_db)):
     user = require_user(request, db)
+    error_message = {"serial_generation_failed": "Barcode generation failed"}.get(error, error)
     query = select(Product).order_by(Product.product_code)
     if q:
         like = f"%{q.strip()}%"
@@ -23,7 +25,7 @@ def products(request: Request, q: str = "", db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "products.html",
-        {"request": request, "user": user, "products": rows, "q": q, "error": None},
+        {"request": request, "user": user, "products": rows, "q": q, "error": error_message or None},
     )
 
 
@@ -75,19 +77,19 @@ def generate_product_serials(
     initial_status: str = Form(SerialStatus.GENERATED.value),
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, ADMIN_ROLES)
+    user = require_user(request, db, ADMIN_ROLES)
     product = db.get(Product, product_id)
     if not product:
         return RedirectResponse("/products", status_code=303)
     try:
-        created = generate_serials(
+        parsed_status = SerialStatus(initial_status)
+        batch = assign_barcodes_to_existing_stock(
             db,
-            product,
-            quantity,
-            prefix or None,
-            SerialStatus(initial_status),
+            user,
+            [AssignmentLine(product=product, quantity=quantity, prefix=prefix or None)],
+            source="MANUAL" if parsed_status == SerialStatus.IN_STOCK else "GENERATED",
+            initial_status=parsed_status,
         )
-    except InventoryError:
+    except (InventoryError, ValueError):
         return RedirectResponse(f"/products?error=serial_generation_failed", status_code=303)
-    ids = ",".join(str(serial.id) for serial in created[:300])
-    return RedirectResponse(f"/serials/labels?ids={ids}", status_code=303)
+    return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)

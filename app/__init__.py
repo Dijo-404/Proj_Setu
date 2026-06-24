@@ -1,1 +1,1 @@
-"""Setu QR Tally Bridge application."""
+"""Setu Barcode Tally Bridge application."""
