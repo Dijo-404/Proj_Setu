@@ -32,10 +32,19 @@
     <div class="scanner-box">
       <video id="scanner-video" playsinline muted></video>
     </div>
-    <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form">
-      <input id="serial-input" name="serial_number" placeholder="Serial number" autocomplete="off" required>
+    <div class="scanner-tools">
+      <button class="button primary" type="button" id="camera-button">Camera</button>
+      <label class="button file-scan-button" for="photo-scan-input">
+        Take photo
+        <input id="photo-scan-input" type="file" accept="image/*" capture="environment">
+      </label>
+    </div>
+    <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form" data-can-manual="{{ 'true' if can_manual_scan else 'false' }}">
+      <input id="serial-input" name="serial_number" placeholder="Serial number" autocomplete="off" required {% if not can_manual_scan %}type="hidden"{% endif %}>
+      <input id="scan-source" name="scan_source" type="hidden" value="{{ 'manual' if can_manual_scan else 'camera' }}">
+      {% if can_manual_scan %}
       <button class="button primary" type="submit">Add</button>
-      <button class="button" type="button" id="camera-button">Camera</button>
+      {% endif %}
     </form>
     {% else %}
     <div class="empty">Batch submitted</div>
@@ -208,5 +217,6 @@
   </table>
 </section>
 {% endif %}
+<script src="/static/zxing.min.js"></script>
 <script src="/static/scanner.js" data-batch-id="{{ batch.id }}"></script>
 {% endblock %}

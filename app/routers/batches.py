@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import ADMIN_ROLES, AUDIT_ROLES, PURCHASE_ROLES, SALES_ROLES, require_user
 from app.database import get_db
-from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, Serial, SyncAttempt
+from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, Role, Serial, SyncAttempt
 from app.services.audit import reconcile_audit_batch, summarize_audit_findings
 from app.services.exports import audit_report_pdf
 from app.services.inventory import (
@@ -27,6 +27,14 @@ router = APIRouter(prefix="/batches")
 
 def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
+
+
+def can_use_manual_scan(user) -> bool:
+    return Role(user.role) in ADMIN_ROLES
+
+
+def scan_source_allowed(user, scan_source: str) -> bool:
+    return can_use_manual_scan(user) or scan_source == "camera"
 
 
 def roles_for_batch(batch_type: BatchType):
@@ -105,6 +113,7 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "batch": batch,
             "summary": calculate_voucher_summary(batch),
             "audit_summary": summarize_audit_findings(batch),
+            "can_manual_scan": can_use_manual_scan(user),
             "error": None,
         },
     )
@@ -115,12 +124,15 @@ def scan_into_batch(
     request: Request,
     batch_id: int,
     serial_number: str = Form(...),
+    scan_source: str = Form("manual"),
     db: Session = Depends(get_db),
 ):
     batch = db.get(Batch, batch_id)
     if not batch:
         return JSONResponse({"ok": False, "error": "Batch not found"}, status_code=404)
     user = require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
+    if not scan_source_allowed(user, scan_source):
+        return JSONResponse({"ok": False, "error": "Use camera scan to add serials"}, status_code=403)
     try:
         item = add_serial_to_batch(db, batch, user, serial_number)
     except InventoryError as exc:
@@ -225,6 +237,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
                 "batch": batch,
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
+                "can_manual_scan": can_use_manual_scan(user),
                 "error": str(exc),
             },
             status_code=400,

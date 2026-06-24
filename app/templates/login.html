@@ -19,10 +19,16 @@
       {% endif %}
       <form method="post" action="/login" class="stack">
         <label>Username<input name="username" autocomplete="username" required autofocus></label>
-        <label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+        <label>Password
+          <span class="password-field" data-password-field>
+            <input name="password" type="password" autocomplete="current-password" required>
+            <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+          </span>
+        </label>
         <button class="button primary full" type="submit">Login</button>
       </form>
     </section>
   </main>
+  <script src="/static/password-toggle.js"></script>
 </body>
 </html>

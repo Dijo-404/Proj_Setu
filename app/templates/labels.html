@@ -7,11 +7,40 @@
     <h1>Print labels</h1>
   </div>
   <div class="actions">
-    <a class="button" href="/serials/labels.xlsx?ids={{ request.query_params.get('ids', '') }}">Download Excel</a>
-    <a class="button" href="/serials/labels.pdf?ids={{ request.query_params.get('ids', '') }}">Download PDF</a>
-    <button class="button primary" onclick="window.print()">Print</button>
+    <a class="button" href="/serials/labels.xlsx?ids={{ label_ids }}">Download Excel</a>
+    {% if is_admin %}
+    <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}">Download PDF</a>
+    <button
+      class="button primary"
+      type="button"
+      data-print-once
+      data-print-url="/serials/labels/print"
+      data-print-ids="{{ label_ids }}"
+      {% if not can_print %}disabled{% endif %}
+    >{{ 'Print used' if printed_serials else 'Choose printer & print' }}</button>
+    {% endif %}
   </div>
 </section>
+
+{% if not is_admin %}
+<div class="alert warn print-hide">Only admin users can use the print option.</div>
+{% endif %}
+{% if printed_serials %}
+<div class="alert warn print-hide">Print option already used for {{ printed_serials|length }} selected label{{ '' if printed_serials|length == 1 else 's' }}.</div>
+{% endif %}
+
+{% if is_admin %}
+<section class="panel label-controls print-hide" data-label-dimensions>
+  <h2>Print dimensions</h2>
+  <div class="grid-form compact">
+    <label>Label width mm<input type="number" min="20" max="120" step="0.1" value="58" data-print-var="--print-label-width"></label>
+    <label>Label height mm<input type="number" min="12" max="80" step="0.1" value="34" data-print-var="--print-label-height"></label>
+    <label>Barcode width mm<input type="number" min="20" max="110" step="0.1" value="52" data-print-var="--print-barcode-width"></label>
+    <label>Barcode height mm<input type="number" min="8" max="60" step="0.1" value="22" data-print-var="--print-barcode-height"></label>
+  </div>
+  <p class="muted" data-print-status></p>
+</section>
+{% endif %}
 
 <section class="label-sheet">
   {% for serial in serials %}
@@ -23,4 +52,5 @@
   <div class="empty">No labels selected</div>
   {% endfor %}
 </section>
+<script src="/static/label-print.js"></script>
 {% endblock %}

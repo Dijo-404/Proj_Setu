@@ -1,15 +1,21 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import require_user
+from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import InventoryTransaction, Product, ScanLog, Serial
 from app.services.exports import barcode_labels_pdf, barcode_png, serials_xlsx
+from app.services.label_printing import LabelPrintError, mark_serial_labels_printed_once
 from app.templates import templates
 
 router = APIRouter(prefix="/serials")
+ADMIN_ROLE_VALUES = {role.value for role in ADMIN_ROLES}
+
+
+def _parse_ids(ids: str) -> list[int]:
+    return list(dict.fromkeys(int(value) for value in ids.split(",") if value.strip().isdigit()))
 
 
 @router.get("")
@@ -41,17 +47,56 @@ def serial_barcode(serial_id: int, request: Request, db: Session = Depends(get_d
 @router.get("/labels")
 def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
     user = require_user(request, db)
-    parsed = [int(value) for value in ids.split(",") if value.strip().isdigit()]
+    parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
-    return templates.TemplateResponse(request, "labels.html", {"request": request, "user": user, "serials": rows})
+    printed_serials = [serial for serial in rows if serial.label_printed_at]
+    is_admin = user.role in ADMIN_ROLE_VALUES
+    return templates.TemplateResponse(
+        request,
+        "labels.html",
+        {
+            "request": request,
+            "user": user,
+            "serials": rows,
+            "printed_serials": printed_serials,
+            "is_admin": is_admin,
+            "can_print": bool(rows) and is_admin and not printed_serials,
+            "label_ids": ",".join(str(serial.id) for serial in rows),
+        },
+    )
+
+
+@router.post("/labels/print")
+async def mark_labels_printed(request: Request, db: Session = Depends(get_db)):
+    user = require_user(request, db, ADMIN_ROLES)
+    try:
+        payload = await request.json()
+    except ValueError:
+        payload = {}
+    raw_ids = payload.get("ids", [])
+    if not isinstance(raw_ids, list):
+        raw_ids = []
+    serial_ids = []
+    for value in raw_ids:
+        if isinstance(value, bool):
+            continue
+        if isinstance(value, int):
+            serial_ids.append(value)
+        elif isinstance(value, str) and value.isdigit():
+            serial_ids.append(int(value))
+    try:
+        mark_serial_labels_printed_once(db, user, serial_ids)
+    except LabelPrintError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=409)
+    return JSONResponse({"ok": True})
 
 
 @router.get("/labels.pdf")
 def labels_pdf(request: Request, ids: str = "", db: Session = Depends(get_db)):
-    require_user(request, db)
-    parsed = [int(value) for value in ids.split(",") if value.strip().isdigit()]
+    require_user(request, db, ADMIN_ROLES)
+    parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
@@ -65,7 +110,7 @@ def labels_pdf(request: Request, ids: str = "", db: Session = Depends(get_db)):
 @router.get("/labels.xlsx")
 def labels_xlsx(request: Request, ids: str = "", db: Session = Depends(get_db)):
     require_user(request, db)
-    parsed = [int(value) for value in ids.split(",") if value.strip().isdigit()]
+    parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []

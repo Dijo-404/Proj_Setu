@@ -14,7 +14,12 @@
   <h2>New user</h2>
   <form method="post" action="/users" class="grid-form compact">
     <label>Username<input name="username" required></label>
-    <label>Password<input name="password" type="password" required></label>
+    <label>Password
+      <span class="password-field" data-password-field>
+        <input name="password" type="password" required>
+        <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+      </span>
+    </label>
     <label>Role
       <select name="role">
         {% for role in roles %}
@@ -47,4 +52,5 @@
     </tbody>
   </table>
 </section>
+<script src="/static/password-toggle.js"></script>
 {% endblock %}
