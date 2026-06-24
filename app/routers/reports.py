@@ -11,6 +11,7 @@ from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Batch, InventoryTransaction, Product, ScanLog, TransactionType
 from app.services.exports import scans_xlsx, transactions_xlsx
+from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
 
 router = APIRouter(prefix="/reports")
@@ -62,7 +63,7 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
             selectinload(InventoryTransaction.user),
             selectinload(InventoryTransaction.serial),
             selectinload(InventoryTransaction.product),
-            selectinload(InventoryTransaction.batch),
+            selectinload(InventoryTransaction.batch).selectinload(Batch.user),
         )
     )
     if conditions:
@@ -95,6 +96,9 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "start": start,
             "end": end,
             "transaction_types": [item.value for item in TransactionType],
+            "invoice_created_by": invoice_created_by,
+            "barcode_sold_by": barcode_sold_by,
+            "product_audited_by": product_audited_by,
         },
     )
 
@@ -152,6 +156,9 @@ def transactions_csv(request: Request, action: str = "", q: str = "", start: str
             "Serial",
             "Product Code",
             "Product Name",
+            "Invoice Created By",
+            "Barcode Sold By",
+            "Product Audited By",
             "From Status",
             "To Status",
             "Reason",
@@ -169,6 +176,9 @@ def transactions_csv(request: Request, action: str = "", q: str = "", start: str
                 txn.serial_number or "",
                 txn.product.product_code if txn.product else "",
                 txn.product.product_name if txn.product else "",
+                invoice_created_by(txn),
+                barcode_sold_by(txn),
+                product_audited_by(txn),
                 txn.status_from or "",
                 txn.status_to or "",
                 txn.reason_code or "",

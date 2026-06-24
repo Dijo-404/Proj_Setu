@@ -12,6 +12,7 @@ from barcode.writer import ImageWriter
 from PIL import Image as PILImage
 
 from app.models import Batch, InventoryTransaction, ScanLog, Serial
+from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 
 
 def barcode_png(value: str) -> bytes:
@@ -90,6 +91,9 @@ def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
             "Serial",
             "Product Code",
             "Product Name",
+            "Invoice Created By",
+            "Barcode Sold By",
+            "Product Audited By",
             "From Status",
             "To Status",
             "Reason",
@@ -107,6 +111,9 @@ def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
                 txn.serial_number or "",
                 txn.product.product_code if txn.product else "",
                 txn.product.product_name if txn.product else "",
+                invoice_created_by(txn),
+                barcode_sold_by(txn),
+                product_audited_by(txn),
                 txn.status_from or "",
                 txn.status_to or "",
                 txn.reason_code or "",

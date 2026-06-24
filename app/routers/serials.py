@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
-from app.models import InventoryTransaction, Product, ScanLog, Serial
+from app.models import Batch, InventoryTransaction, Product, ScanLog, Serial
 from app.services.exports import barcode_labels_pdf, barcode_png, serials_xlsx
 from app.services.label_printing import LabelPrintError, mark_serial_labels_printed_once
+from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
 
 router = APIRouter(prefix="/serials")
@@ -133,7 +134,7 @@ def serial_detail(serial_id: int, request: Request, db: Session = Depends(get_db
         .order_by(InventoryTransaction.created_at)
         .options(
             selectinload(InventoryTransaction.user),
-            selectinload(InventoryTransaction.batch),
+            selectinload(InventoryTransaction.batch).selectinload(Batch.user),
             selectinload(InventoryTransaction.product),
         )
     ).all()
@@ -155,5 +156,8 @@ def serial_detail(serial_id: int, request: Request, db: Session = Depends(get_db
             "transactions": transactions,
             "logs": logs,
             "replacement": replacement,
+            "invoice_created_by": invoice_created_by,
+            "barcode_sold_by": barcode_sold_by,
+            "product_audited_by": product_audited_by,
         },
     )

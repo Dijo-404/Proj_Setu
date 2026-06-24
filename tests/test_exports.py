@@ -1,11 +1,13 @@
 from io import BytesIO
 
+from openpyxl import load_workbook
 from PIL import Image
+from sqlalchemy import select
 
-from app.models import BatchType, Product, ScanLog, SerialStatus, User
+from app.models import BatchType, InventoryTransaction, Product, ScanLog, SerialStatus, TransactionType, User
 from app.services.audit import reconcile_audit_batch
-from app.services.exports import audit_report_pdf, barcode_labels_pdf, barcode_png, scans_xlsx
-from app.services.inventory import add_serial_to_batch, create_batch, generate_serials
+from app.services.exports import audit_report_pdf, barcode_labels_pdf, barcode_png, scans_xlsx, transactions_xlsx
+from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 
 
 def test_scans_xlsx_generates_workbook(db_session):
@@ -48,6 +50,31 @@ def test_barcode_labels_pdf_generates_pdf(db_session):
     serial = generate_serials(db_session, product, 1)[0]
     data = barcode_labels_pdf([serial])
     assert data.startswith(b"%PDF")
+
+
+def test_transactions_xlsx_includes_edit_log_actor_columns(db_session):
+    sales_user = User(username="sales", password_hash="x", role="sales")
+    product = _make_product(db_session, "SG052")
+    db_session.add(sales_user)
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, sales_user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, sales_user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, sales_user)
+    txn = db_session.scalar(select(InventoryTransaction).where(InventoryTransaction.transaction_type == TransactionType.SALE.value))
+
+    data = transactions_xlsx([txn])
+    workbook = load_workbook(BytesIO(data))
+    sheet = workbook.active
+    headers = [cell.value for cell in sheet[1]]
+    values = [cell.value for cell in sheet[2]]
+
+    assert "Invoice Created By" in headers
+    assert "Barcode Sold By" in headers
+    assert "Product Audited By" in headers
+    assert values[headers.index("Invoice Created By")] == "sales"
+    assert values[headers.index("Barcode Sold By")] == "sales"
+    assert values[headers.index("Product Audited By")] is None
 
 
 def test_audit_report_pdf_generates_pdf(db_session):

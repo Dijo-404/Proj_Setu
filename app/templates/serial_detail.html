@@ -28,7 +28,7 @@
 <section class="panel">
   <div class="section-title"><h2>Transaction history</h2></div>
   <table>
-    <thead><tr><th>Time</th><th>Type</th><th>Status</th><th>User</th><th>Reference</th><th>Tally</th></tr></thead>
+    <thead><tr><th>Time</th><th>Type</th><th>Status</th><th>User</th><th>Invoice created by</th><th>Barcode sold by</th><th>Product audited by</th><th>Reference</th><th>Tally</th></tr></thead>
     <tbody>
       {% for txn in transactions %}
       <tr>
@@ -36,6 +36,9 @@
         <td>{{ txn.transaction_type }}</td>
         <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
         <td>{{ txn.user.username }}</td>
+        <td>{{ invoice_created_by(txn) or '-' }}</td>
+        <td>{{ barcode_sold_by(txn) or '-' }}</td>
+        <td>{{ product_audited_by(txn) or '-' }}</td>
         <td>
           {% if txn.batch %}<a href="/batches/{{ txn.batch.id }}">{{ txn.reference_number or txn.batch.batch_number }}</a>
           {% else %}{{ txn.reference_number or '-' }}{% endif %}
@@ -43,7 +46,7 @@
         <td>{{ txn.tally_reference or '-' }}</td>
       </tr>
       {% else %}
-      <tr><td colspan="6" class="empty">No transaction history recorded</td></tr>
+      <tr><td colspan="9" class="empty">No transaction history recorded</td></tr>
       {% endfor %}
     </tbody>
   </table>
