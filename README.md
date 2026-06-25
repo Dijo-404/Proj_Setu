@@ -6,19 +6,23 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 
 - Role-based login for admin, purchase, sales, and audit users
 - Product master with HSN, GST, unit, default rate, and exact Tally stock item name
-- Bulk barcode serial generation and printable/PDF labels with barcode plus serial number only
+- Bulk barcode serial generation and printable/PDF Code128 labels with the serial number only
+- Product batch, manufacturing date, expiry date, and warehouse tracking for assigned stock
 - Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit
-- Tally XML generation for purchase and sale batches
+- FEFO picking and expiry control for sale, issue, and purchase-return batches
+- Tally XML generation for purchase/receive and sale batches
 - Tally Check screen for exact-name master readiness
+- Saved Tally company profiles with active-company settings
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation for verified, missing, and extra serials
-- CSV/XLSX reports and PDF audit reports
+- Dashboard counts, charts, recent activity, and live refresh
+- CSV/XLSX reports, transaction history, scan history, and PDF audit reports
 - SQLite-safe backup download and restore procedure
 
 ## Prerequisites
 
-- Python 3.11 or newer
+- Python 3.11 for the current pinned dependency set
 - Tally Prime installed and running on the server machine or reachable on the LAN
 - Chrome or Edge for staff phones
 - For phone camera use over LAN: HTTPS reverse proxy later, usually Caddy plus a local certificate
@@ -31,7 +35,7 @@ On the Windows server, double-click:
 setup.bat
 ```
 
-The setup helper will check/install Python if possible, create `.venv`, install packages, ask for the first admin username/password, create `.env`, run a smoke test, and offer to start the app.
+The setup helper checks for Python 3.11, can install it with `winget` when available, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, and can start the app.
 
 After setup, start the app anytime with:
 
@@ -58,14 +62,14 @@ cd C:\Setu
 Linux/macOS:
 
 ```bash
-python3 -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 ```
 
 Windows PowerShell:
 
 ```powershell
-py -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
@@ -132,7 +136,9 @@ http://127.0.0.1:8000
 
 ## 6. First Login
 
-Default login from `.env.example`:
+If you used `setup.bat`, use the admin username and password shown at the end of setup. Keep that password somewhere safe because generated passwords are only displayed once.
+
+If you used the manual `.env.example` path, the default local-development login is:
 
 ```text
 username: admin
@@ -143,26 +149,32 @@ After logging in:
 
 1. Open `Users`.
 2. Create named users for purchase, sales, auditor, and admin roles.
-3. Disable or change the bootstrap admin password before production.
+3. Disable unused accounts or change the bootstrap admin password before production.
+
+Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setu.db` already exists does not reset an existing user. Create or disable users from the `Users` page.
 
 ## 7. Basic Setup Inside The App
 
 Do this in order:
 
 1. Open `Settings`.
-2. Enter Tally host, port, company name, voucher type names, ledger names, and default party.
-3. Open `Products`.
-4. Create products using the exact Tally stock item names.
-5. Generate barcode serials for products, or use `Barcode Assignment` for existing Tally stock.
-6. Open `Tally Check`.
-7. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
-8. Keep Tally sync disabled until Tally Check has no missing or unchecked items.
+2. Add or activate a company profile.
+3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, round-off ledger, and default party.
+4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
+5. Open `Products`.
+6. Create products using exact Tally stock item names, HSN, GST rate, unit, and default rate.
+7. Generate barcode serials from `Products`, or use `Barcode Assignment` for existing physical stock.
+8. Open `Tally Check`.
+9. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
+10. Enable Tally sync only after Tally Check has no missing or unchecked items and a test XML is validated in Tally.
+
+When switching the active company profile, Setu disables Tally sync again so the new company's masters can be checked before posting.
 
 ## 8. Normal Workflow
 
 Purchase stock:
 
-1. Open `Purchase`.
+1. Open `Batches` -> `Purchase`.
 2. Enter supplier/reference.
 3. Scan serials.
 4. Check the voucher preview.
@@ -170,15 +182,16 @@ Purchase stock:
 
 Sell stock:
 
-1. Open `Sale`.
+1. Open `Batches` -> `Sale`.
 2. Enter customer/reference.
 3. Scan in-stock serials.
-4. Check pricing, GST, round off, and final value.
-5. Submit the batch.
+4. Use `Pick FEFO` when selling by product and quantity, or scan the earliest-expiry serials manually.
+5. Check pricing, GST, round off, and final value.
+6. Submit the batch.
 
 Audit stock:
 
-1. Open `Audit`.
+1. Open `Batches` -> `Audit`.
 2. Enter location/reference.
 3. Scan physical stock.
 4. Submit the audit.
@@ -187,18 +200,19 @@ Audit stock:
 Returns and issue:
 
 - `Sales return`: scan sold items returned by customer.
-- `Purchase return`: scan in-stock items returned to supplier.
-- `Issue`: scan in-stock items issued for sample, office use, damage, marketing, production, or other reasons.
+- `Purchase return`: scan or FEFO-pick in-stock items returned to supplier.
+- `Issue`: scan or FEFO-pick in-stock items issued for sample, office use, damage, marketing, production, or other reasons.
 
 Barcode assignment:
 
-1. Open `Barcode Assignment`.
-2. Select an existing product or upload an Excel file with `Product Code` and `Quantity`.
-3. Download the generated Excel file and labels PDF.
+1. Open `Barcodes` -> `Assignment`.
+2. Select an existing product and quantity, or upload an Excel file.
+3. Optional Excel columns are `Product Code`, `Quantity`, `Batch`, `Mfg Date`, `Expiry Date`, and `Warehouse`.
+4. Download the generated Excel file and labels PDF.
 
 Barcode replacement:
 
-1. Open `Barcode Replace`.
+1. Open `Barcodes` -> `Replacement`.
 2. Enter the damaged/old serial.
 3. Leave new serial blank to auto-generate, or enter a new serial manually.
 4. Print the new label.
@@ -219,7 +233,7 @@ Before enabling sync:
 
 Supported live XML posting:
 
-- Purchase
+- Purchase/receive
 - Sale
 
 Implemented locally but intentionally not live-posted yet:
@@ -239,6 +253,7 @@ Use `Reports` for:
 - Pending sync
 - CSV export
 - XLSX export
+- Expiry summary context
 
 Use batch detail pages for:
 
@@ -250,6 +265,15 @@ Use label pages for:
 
 - Browser print
 - Barcode label PDF download
+- Barcode serial XLSX download
+
+Use `Expiry` for:
+
+- Expiring stock bands
+- Slow-moving expiry risk
+- Sleeping stock
+- Warehouse expiry exposure
+- Shortcuts to product batch entry and FEFO sale
 
 ## 11. Backup And Restore
 
@@ -287,8 +311,10 @@ python -m pytest
 Expected result:
 
 ```text
-24 passed
+46 passed
 ```
+
+The current pinned dependencies are verified with Python 3.11. A Python 3.13 virtual environment may fail before tests start with the current SQLAlchemy pin.
 
 ## 13. LAN Phone Camera Setup
 
@@ -362,3 +388,4 @@ If the app fails to start:
 - Run `pip install -r requirements.txt`.
 - Confirm port `8000` is free.
 - Check that `data/` is writable.
+- If using the current pinned dependencies, confirm the virtual environment is Python 3.11.

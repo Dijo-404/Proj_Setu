@@ -7,20 +7,29 @@ Factory LAN deployment on the SERVER machine with Tally Prime running locally or
 ## Prerequisites
 
 - Windows 11 or Ubuntu 24.04 LTS
-- Python 3.11 or newer
+- Python 3.11 for the current pinned dependency set
 - Tally Prime configured as server on port `9000`
 - Chrome or Edge on staff phones
 - LAN hostname or static IP for the server
 
-## Install
+## Windows Install
 
-For a non-technical Windows install, run this from the project folder instead of typing the manual commands:
+For a non-technical Windows install, double-click `setup.bat` from the project folder or run:
 
 ```powershell
 .\setup.bat
 ```
 
-It prompts for the first admin login, writes `.env`, installs dependencies, and can start the app when finished.
+The helper:
+
+- checks for Python 3.11 and can install it with `winget` when available
+- creates `.venv`, `data/`, and `logs/`
+- installs `requirements.txt`
+- asks for the first admin username and password
+- writes `.env`
+- verifies that the app imports correctly
+- can install the optional NSSM Windows service when run as Administrator
+- can start the app when finished
 
 After setup, start the app anytime with:
 
@@ -28,10 +37,14 @@ After setup, start the app anytime with:
 start_setu.bat
 ```
 
-Manual install:
+Use `start_setu.bat --port 8001` if port `8000` is already in use.
+
+## Manual Install
+
+Linux/macOS:
 
 ```bash
-python -m venv .venv
+python3.11 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
@@ -40,7 +53,7 @@ cp .env.example .env
 On Windows PowerShell:
 
 ```powershell
-py -m venv .venv
+py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 copy .env.example .env
@@ -69,16 +82,37 @@ http://127.0.0.1:8000
 
 ## First Login
 
-Use the bootstrap admin from `.env`, then create named users from `Users`.
+If `setup.bat` created `.env`, use the admin login printed at the end of setup. If you copied `.env.example`, use the bootstrap admin from `.env`, then create named users from `Users`.
+
+Changing bootstrap values after the database exists does not update an existing user. Use the `Users` page for normal user administration.
 
 ## First Configuration
 
 1. Open `Settings`.
-2. Enter Tally host, port, company, voucher type, ledger, and party names.
-3. Create products with exact Tally stock item names.
-4. Open `Tally Check`.
-5. Mark each master checked only after comparing with Tally.
-6. Enable Tally sync only after Tally Check is complete.
+2. Add or activate a company profile.
+3. Enter exact Tally host, port, company, voucher type, ledger, GST, round-off, and party names.
+4. Leave sync disabled until validation is complete.
+5. Create products with exact Tally stock item names.
+6. Open `Tally Check`.
+7. Mark each master checked only after comparing with Tally.
+8. Download a purchase/sale batch XML and validate it in the real Tally company.
+9. Enable Tally sync only after Tally Check is complete.
+
+Switching the active company disables sync until that company's masters are checked.
+
+## Health Check
+
+With the app running, open:
+
+```text
+http://127.0.0.1:8000/health
+```
+
+Expected response:
+
+```json
+{"status":"ok"}
+```
 
 ## Backup Reminder
 
@@ -86,3 +120,16 @@ Configure the server backup software to include the whole project `data/` folder
 and a separate copy of `.env`. The app's Maintenance page also provides a
 SQLite-safe database download for manual backups.
 
+## Test Reminder
+
+Run tests from a Python 3.11 environment:
+
+```bash
+python -m pytest -q
+```
+
+Expected current result:
+
+```text
+46 passed
+```
