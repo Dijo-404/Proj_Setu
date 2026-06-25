@@ -4,6 +4,11 @@ from pathlib import Path
 
 
 DEFAULT_SECRET_KEY = "dev-change-me"
+PLACEHOLDER_SECRET_KEYS = {
+    DEFAULT_SECRET_KEY,
+    "change-this-before-production",
+    "replace-with-a-long-random-secret",
+}
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -53,7 +58,7 @@ class Settings:
 
     @property
     def using_default_secret(self) -> bool:
-        return self.secret_key == DEFAULT_SECRET_KEY
+        return self.secret_key in PLACEHOLDER_SECRET_KEYS or len(self.secret_key.strip()) < 32
 
 
 @lru_cache

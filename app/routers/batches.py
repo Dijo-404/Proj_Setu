@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import ADMIN_ROLES, AUDIT_ROLES, PURCHASE_ROLES, SALES_ROLES, require_user
 from app.database import get_db
-from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, Role, Serial, SyncAttempt
+from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, Product, Role, Serial, SyncAttempt
 from app.services.audit import reconcile_audit_batch, summarize_audit_findings
 from app.services.exports import audit_report_pdf
+from app.services.expiry import add_fefo_serials_to_batch
 from app.services.inventory import (
     InventoryError,
     add_serial_to_batch,
@@ -18,7 +19,7 @@ from app.services.inventory import (
     update_product_rate_in_batch,
 )
 from app.services.settings import get_all_settings
-from app.services.tally import build_voucher_xml, sync_batch
+from app.services.tally import TallySyncError, build_voucher_xml, sync_batch
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 from app.templates import templates
 
@@ -55,6 +56,13 @@ def roles_for_batch(batch_type: BatchType):
     return ADMIN_ROLES
 
 
+def parse_batch_type(value: str) -> BatchType:
+    try:
+        return BatchType(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid batch type") from exc
+
+
 @router.get("")
 def batches(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
@@ -64,7 +72,7 @@ def batches(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/new")
 def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: Session = Depends(get_db)):
-    parsed = BatchType(batch_type)
+    parsed = parse_batch_type(batch_type)
     user = require_user(request, db, roles_for_batch(parsed))
     return templates.TemplateResponse(
         request,
@@ -82,7 +90,7 @@ def create_batch_route(
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    parsed = BatchType(batch_type)
+    parsed = parse_batch_type(batch_type)
     user = require_user(request, db, roles_for_batch(parsed))
     batch = create_batch(db, user, parsed, party_name, notes, reason_code)
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
@@ -111,6 +119,7 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "request": request,
             "user": user,
             "batch": batch,
+            "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
             "summary": calculate_voucher_summary(batch),
             "audit_summary": summarize_audit_findings(batch),
             "can_manual_scan": can_use_manual_scan(user),
@@ -145,6 +154,44 @@ def scan_into_batch(
             "status": item.serial.status,
         }
     )
+
+
+@router.post("/{batch_id}/fefo")
+def fefo_pick_into_batch(
+    request: Request,
+    batch_id: int,
+    product_id: int = Form(...),
+    quantity: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    batch = db.get(Batch, batch_id)
+    if not batch:
+        return RedirectResponse("/batches", status_code=303)
+    user = require_user(request, db, roles_for_batch(BatchType(batch.batch_type)))
+    try:
+        add_fefo_serials_to_batch(db, batch, user, product_id, quantity)
+    except InventoryError as exc:
+        batch = db.scalar(
+            select(Batch)
+            .where(Batch.id == batch_id)
+            .options(selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product))
+        ) or batch
+        return templates.TemplateResponse(
+            request,
+            "batch_detail.html",
+            {
+                "request": request,
+                "user": user,
+                "batch": batch,
+                "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
+                "summary": calculate_voucher_summary(batch),
+                "audit_summary": summarize_audit_findings(batch),
+                "can_manual_scan": can_use_manual_scan(user),
+                "error": str(exc),
+            },
+            status_code=400,
+        )
+    return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 
 
 @router.post("/{batch_id}/items/{item_id}/delete")
@@ -235,6 +282,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
                 "request": request,
                 "user": user,
                 "batch": batch,
+                "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "can_manual_scan": can_use_manual_scan(user),
@@ -295,8 +343,12 @@ def tally_xml_preview(request: Request, batch_id: int, db: Session = Depends(get
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     if batch.batch_type not in {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    try:
+        xml = build_voucher_xml(batch, get_all_settings(db))
+    except TallySyncError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return Response(
-        build_voucher_xml(batch, get_all_settings(db)),
+        xml,
         media_type="application/xml",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-tally.xml"},
     )

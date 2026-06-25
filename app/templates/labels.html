@@ -9,7 +9,9 @@
   <div class="actions">
     <a class="button" href="/serials/labels.xlsx?ids={{ label_ids }}">Download Excel</a>
     {% if is_admin %}
-    <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}">Download PDF</a>
+    {% set label_pdf_action = '/serials/labels.pdf' %}
+    {% set label_pdf_ids = label_ids %}
+    <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}" data-label-pdf-open>Download PDF</a>
     <button
       class="button primary"
       type="button"
@@ -52,5 +54,9 @@
   <div class="empty">No labels selected</div>
   {% endfor %}
 </section>
+{% if is_admin %}
+{% include "partials/label_pdf_dialog.html" %}
+<script src="/static/label-pdf-dialog.js"></script>
+{% endif %}
 <script src="/static/label-print.js"></script>
 {% endblock %}

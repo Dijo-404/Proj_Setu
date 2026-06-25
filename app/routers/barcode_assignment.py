@@ -7,11 +7,13 @@ from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Batch, BatchItem, BatchType, Product, Serial
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
-from app.services.exports import barcode_labels_pdf, serials_xlsx
+from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, label_layout, serials_xlsx
+from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
 from app.templates import templates
 
 router = APIRouter(prefix="/barcode-assignment")
+MAX_BULK_ASSIGNMENT_UPLOAD_BYTES = 5 * 1024 * 1024
 
 
 def _assignment_batch(db: Session, batch_id: int) -> Batch | None:
@@ -48,6 +50,10 @@ def generate_assignment(
     product_id: int = Form(...),
     quantity: int = Form(...),
     prefix: str = Form(""),
+    product_batch_number: str = Form(""),
+    mfg_date: str = Form(""),
+    expiry_date: str = Form(""),
+    warehouse: str = Form(""),
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -56,14 +62,28 @@ def generate_assignment(
     if not product:
         return _assignment_error(request, db, user, "Product not found")
     try:
+        parsed_mfg_date = parse_optional_date(mfg_date)
+        parsed_expiry_date = parse_optional_date(expiry_date)
+        if parsed_mfg_date and parsed_expiry_date and parsed_expiry_date <= parsed_mfg_date:
+            raise InventoryError("Expiry date must be after mfg date")
         batch = assign_barcodes_to_existing_stock(
             db,
             user,
-            [AssignmentLine(product=product, quantity=quantity, prefix=prefix.strip() or None)],
+            [
+                AssignmentLine(
+                    product=product,
+                    quantity=quantity,
+                    prefix=prefix.strip() or None,
+                    product_batch_number=product_batch_number.strip() or None,
+                    mfg_date=parsed_mfg_date,
+                    expiry_date=parsed_expiry_date,
+                    warehouse=warehouse.strip() or None,
+                )
+            ],
             notes=notes,
             source="MANUAL",
         )
-    except InventoryError as exc:
+    except (InventoryError, ValueError) as exc:
         return _assignment_error(request, db, user, str(exc))
     return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)
 
@@ -77,7 +97,10 @@ def bulk_assignment(
 ):
     user = require_user(request, db, ADMIN_ROLES)
     try:
-        lines = parse_bulk_assignment_xlsx(db, upload.file.read())
+        data = upload.file.read(MAX_BULK_ASSIGNMENT_UPLOAD_BYTES + 1)
+        if len(data) > MAX_BULK_ASSIGNMENT_UPLOAD_BYTES:
+            raise InventoryError("Upload an Excel file up to 5 MB")
+        lines = parse_bulk_assignment_xlsx(db, data)
         batch = assign_barcodes_to_existing_stock(db, user, lines, notes=notes, source="BULK_EXCEL")
     except InventoryError as exc:
         return _assignment_error(request, db, user, str(exc))
@@ -93,19 +116,32 @@ def assignment_detail(request: Request, batch_id: int, db: Session = Depends(get
     return templates.TemplateResponse(
         request,
         "barcode_assignment_detail.html",
-        {"request": request, "user": user, "batch": batch},
+        {
+            "request": request,
+            "user": user,
+            "batch": batch,
+            "label_pdf_rows": DEFAULT_LABEL_ROWS,
+            "label_pdf_columns": DEFAULT_LABEL_COLUMNS,
+        },
     )
 
 
 @router.get("/{batch_id}/labels.pdf")
-def assignment_labels_pdf(request: Request, batch_id: int, db: Session = Depends(get_db)):
+def assignment_labels_pdf(
+    request: Request,
+    batch_id: int,
+    rows_per_page: int = DEFAULT_LABEL_ROWS,
+    columns_per_page: int = DEFAULT_LABEL_COLUMNS,
+    db: Session = Depends(get_db),
+):
     require_user(request, db, ADMIN_ROLES)
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
+    rows_per_page, columns_per_page = label_layout(rows_per_page, columns_per_page)
     serials = [item.serial for item in batch.items]
     return Response(
-        barcode_labels_pdf(serials),
+        barcode_labels_pdf(serials, rows_per_page=rows_per_page, columns_per_page=columns_per_page),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-barcode-labels.pdf"},
     )

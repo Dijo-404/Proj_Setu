@@ -16,6 +16,14 @@
         if (el) el.textContent = data.counts[key];
       });
     }
+    if (typeof data.charts_html === "string") {
+      const charts = document.querySelector("[data-live-charts]");
+      if (charts) charts.outerHTML = data.charts_html;
+    }
+    if (typeof data.expiry_html === "string") {
+      const expiry = document.querySelector("[data-live-expiry]");
+      if (expiry) expiry.outerHTML = data.expiry_html;
+    }
     if (typeof data.batches_html === "string") {
       const tbody = document.querySelector("[data-live-batches]");
       if (tbody) tbody.innerHTML = data.batches_html;

@@ -1,5 +1,5 @@
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import re
 
 from sqlalchemy import func, select
@@ -19,6 +19,7 @@ from app.models import (
     TransactionType,
     User,
 )
+from app.services.expiry import validate_fefo_scan
 
 
 class InventoryError(ValueError):
@@ -46,18 +47,26 @@ def next_batch_number(db: Session, batch_type: BatchType) -> str:
 
 
 def create_batch(db: Session, user: User, batch_type: BatchType, party_name: str | None, notes: str | None, reason_code: str | None = None) -> Batch:
-    batch = Batch(
-        batch_number=next_batch_number(db, batch_type),
-        batch_type=batch_type.value,
-        party_name=party_name.strip() if party_name else None,
-        reason_code=reason_code.strip().upper() if reason_code else None,
-        user_id=user.id,
-        notes=notes.strip() if notes else None,
-    )
-    db.add(batch)
-    db.commit()
-    db.refresh(batch)
-    return batch
+    for attempt in range(5):
+        batch = Batch(
+            batch_number=next_batch_number(db, batch_type),
+            batch_type=batch_type.value,
+            party_name=party_name.strip() if party_name else None,
+            reason_code=reason_code.strip().upper() if reason_code else None,
+            user_id=user.id,
+            notes=notes.strip() if notes else None,
+        )
+        db.add(batch)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if attempt == 4:
+                raise InventoryError("Could not allocate a unique batch number; try again") from exc
+            continue
+        db.refresh(batch)
+        return batch
+    raise InventoryError("Could not allocate a unique batch number; try again")
 
 
 def transaction_type_for_batch(batch_type: BatchType) -> TransactionType:
@@ -157,6 +166,9 @@ def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: st
         db.commit()
         raise InventoryError("Serial number not found")
     serial_allowed_for_batch(serial, BatchType(batch.batch_type))
+    fefo_error = validate_fefo_scan(db, batch, serial)
+    if fefo_error:
+        raise InventoryError(fefo_error)
     existing = db.scalar(
         select(BatchItem).where(BatchItem.batch_id == batch.id, BatchItem.serial_id == serial.id)
     )
@@ -309,6 +321,10 @@ def generate_serials(
     quantity: int,
     prefix: str | None = None,
     initial_status: SerialStatus = SerialStatus.GENERATED,
+    product_batch_number: str | None = None,
+    mfg_date: date | None = None,
+    expiry_date: date | None = None,
+    warehouse: str | None = None,
 ) -> list[Serial]:
     if quantity < 1:
         raise InventoryError("Quantity must be at least 1")
@@ -316,25 +332,37 @@ def generate_serials(
         raise InventoryError("Generate 5000 labels or fewer at a time")
     serial_prefix = normalize_serial(prefix or product.product_code)
     pattern = re.compile(rf"^{re.escape(serial_prefix)}-(\d+)$")
-    max_number = 0
-    rows = db.scalars(select(Serial.serial_number).where(Serial.serial_number.like(f"{serial_prefix}-%"))).all()
-    for serial_number in rows:
-        match = pattern.match(serial_number)
-        if match:
-            max_number = max(max_number, int(match.group(1)))
-    created = []
-    for offset in range(1, quantity + 1):
-        serial = Serial(
-            serial_number=f"{serial_prefix}-{max_number + offset:06d}",
-            product_id=product.id,
-            status=initial_status.value,
-        )
-        db.add(serial)
-        created.append(serial)
-    db.commit()
-    for serial in created:
-        db.refresh(serial)
-    return created
+    for attempt in range(5):
+        max_number = 0
+        rows = db.scalars(select(Serial.serial_number).where(Serial.serial_number.like(f"{serial_prefix}-%"))).all()
+        for serial_number in rows:
+            match = pattern.match(serial_number)
+            if match:
+                max_number = max(max_number, int(match.group(1)))
+        created = []
+        for offset in range(1, quantity + 1):
+            serial = Serial(
+                serial_number=f"{serial_prefix}-{max_number + offset:06d}",
+                product_id=product.id,
+                status=initial_status.value,
+                product_batch_number=product_batch_number.strip().upper() if product_batch_number else None,
+                mfg_date=mfg_date,
+                expiry_date=expiry_date,
+                warehouse=warehouse.strip().upper() if warehouse else None,
+            )
+            db.add(serial)
+            created.append(serial)
+        try:
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if attempt == 4:
+                raise InventoryError("Could not allocate unique serial numbers; try again") from exc
+            continue
+        for serial in created:
+            db.refresh(serial)
+        return created
+    raise InventoryError("Could not allocate unique serial numbers; try again")
 
 
 def dashboard_counts(db: Session) -> dict[str, int]:

@@ -4,11 +4,12 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models import Role, User
 from app.security import hash_password
-from app.services.settings import ensure_company_records, ensure_default_settings
+from app.services.settings import clear_legacy_placeholder_settings, ensure_company_records, ensure_default_settings
 
 
 def bootstrap(db: Session) -> None:
     ensure_default_settings(db)
+    clear_legacy_placeholder_settings(db)
     ensure_company_records(db)
     if db.scalar(select(User.id).limit(1)):
         return

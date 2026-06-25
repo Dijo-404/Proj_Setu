@@ -19,20 +19,24 @@
 </section>
 
 <section class="panel">
-  <table>
-    <thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Barcode</th></tr></thead>
-    <tbody>
-      {% for serial in serials %}
-      <tr>
-        <td><a href="/serials/{{ serial.id }}">{{ serial.serial_number }}</a></td>
-        <td>{{ serial.product.product_name }}</td>
-        <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
-        <td><a href="/serials/labels?ids={{ serial.id }}">Label</a></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="empty">No serials found</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>Barcode</th></tr></thead>
+      <tbody>
+        {% for serial in serials %}
+        <tr>
+          <td><a href="/serials/{{ serial.id }}">{{ serial.serial_number }}</a></td>
+          <td>{{ serial.product.product_name }}</td>
+          <td>{{ serial.product_batch_number or '-' }}<small>{{ serial.warehouse or '' }}</small></td>
+          <td>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</td>
+          <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
+          <td><a href="/serials/labels?ids={{ serial.id }}">Label</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No serials found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

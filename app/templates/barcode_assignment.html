@@ -25,6 +25,14 @@
         <label>Quantity<input name="quantity" type="number" min="1" max="5000" required></label>
         <label>Prefix<input name="prefix" placeholder="Uses product code"></label>
       </div>
+      <div class="two-col">
+        <label>Product batch<input name="product_batch_number" placeholder="CP24001"></label>
+        <label>Warehouse<input name="warehouse" placeholder="WH1"></label>
+      </div>
+      <div class="two-col">
+        <label>Mfg date<input name="mfg_date" type="date"></label>
+        <label>Expiry date<input name="expiry_date" type="date"></label>
+      </div>
       <label>Notes<textarea name="notes" rows="3"></textarea></label>
       <button class="button primary full" type="submit">Generate barcodes</button>
     </form>
@@ -34,6 +42,7 @@
     <div class="section-title"><h2>Bulk assignment</h2></div>
     <form method="post" action="/barcode-assignment/bulk" enctype="multipart/form-data" class="stack">
       <label>Excel file<input name="upload" type="file" accept=".xlsx" required></label>
+      <p class="muted">Accepted columns: Product Code, Quantity, Batch, Mfg Date, Expiry Date, Warehouse.</p>
       <label>Notes<textarea name="notes" rows="3"></textarea></label>
       <button class="button primary full" type="submit">Upload and generate</button>
     </form>
@@ -42,21 +51,23 @@
 
 <section class="panel">
   <div class="section-title"><h2>Recent assignments</h2></div>
-  <table>
-    <thead><tr><th>Batch</th><th>Source</th><th>Items</th><th>Created</th><th></th></tr></thead>
-    <tbody>
-      {% for batch in batches %}
-      <tr>
-        <td>{{ batch.batch_number }}</td>
-        <td>{{ batch.reason_code or '-' }}</td>
-        <td>{{ batch.items|length }}</td>
-        <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
-        <td><a href="/barcode-assignment/{{ batch.id }}">Open</a></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="empty">No assignments yet</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Batch</th><th>Source</th><th>Items</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td>{{ batch.batch_number }}</td>
+          <td>{{ batch.reason_code or '-' }}</td>
+          <td>{{ batch.items|length }}</td>
+          <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td><a href="/barcode-assignment/{{ batch.id }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No assignments yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

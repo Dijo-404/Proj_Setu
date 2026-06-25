@@ -22,6 +22,9 @@
   <div class="metric"><span>Total serials</span><strong data-metric="serials">{{ counts.serials }}</strong></div>
 </section>
 
+{% include "partials/dashboard_charts.html" %}
+{% include "partials/expiry_summary.html" %}
+
 <section class="split">
   <div>
     <div class="section-title">
@@ -29,12 +32,14 @@
       <a href="/batches">View all</a>
     </div>
     <div class="panel">
-      <table>
-        <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
-        <tbody data-live-batches>
-          {% include "partials/dashboard_batches.html" %}
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
+          <tbody data-live-batches>
+            {% include "partials/dashboard_batches.html" %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
   <div>
@@ -43,14 +48,16 @@
       <a href="/reports">Reports</a>
     </div>
     <div class="panel">
-      <table>
-        <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
-        <tbody data-live-scans>
-          {% include "partials/dashboard_scans.html" %}
-        </tbody>
-      </table>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
+          <tbody data-live-scans>
+            {% include "partials/dashboard_scans.html" %}
+          </tbody>
+        </table>
+      </div>
     </div>
   </div>
 </section>
-<script src="/static/live.js"></script>
+<script src="/static/live.js?v=20260624-expiry-1"></script>
 {% endblock %}

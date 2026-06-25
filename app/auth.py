@@ -26,7 +26,11 @@ def require_user(request: Request, db: Session, roles: set[Role] | None = None) 
     user = current_user(request, db)
     if not user:
         raise redirect_exception("/login")
-    if roles and Role(user.role) not in roles:
+    try:
+        role = Role(user.role)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed") from exc
+    if roles and role not in roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     return user
 

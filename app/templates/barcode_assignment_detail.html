@@ -8,7 +8,8 @@
   </div>
   <div class="actions">
     <a class="button" href="/barcode-assignment/{{ batch.id }}/serials.xlsx">Download Excel</a>
-    <a class="button" href="/barcode-assignment/{{ batch.id }}/labels.pdf">Download labels PDF</a>
+    {% set label_pdf_action = '/barcode-assignment/' ~ batch.id ~ '/labels.pdf' %}
+    <a class="button" href="{{ label_pdf_action }}" data-label-pdf-open>Download labels PDF</a>
     <a class="button" href="/barcode-assignment">Assignments</a>
   </div>
 </section>
@@ -25,20 +26,26 @@
 
 <section class="panel">
   <div class="section-title"><h2>Generated barcodes</h2></div>
-  <table>
-    <thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Label</th></tr></thead>
-    <tbody>
-      {% for item in batch.items %}
-      <tr>
-        <td><a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a></td>
-        <td>{{ item.serial.product.product_code }} · {{ item.serial.product.product_name }}</td>
-        <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
-        <td><a href="/serials/labels?ids={{ item.serial.id }}">Open</a></td>
-      </tr>
-      {% else %}
-      <tr><td colspan="4" class="empty">No barcodes generated</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>Label</th></tr></thead>
+      <tbody>
+        {% for item in batch.items %}
+        <tr>
+          <td><a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a></td>
+          <td>{{ item.serial.product.product_code }} · {{ item.serial.product.product_name }}</td>
+          <td>{{ item.serial.product_batch_number or '-' }}<small>{{ item.serial.warehouse or '' }}</small></td>
+          <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
+          <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
+          <td><a href="/serials/labels?ids={{ item.serial.id }}">Open</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No barcodes generated</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
+{% include "partials/label_pdf_dialog.html" %}
+<script src="/static/label-pdf-dialog.js"></script>
 {% endblock %}

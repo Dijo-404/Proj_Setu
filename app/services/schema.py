@@ -22,3 +22,16 @@ def ensure_runtime_schema() -> None:
                 connection.execute(text("ALTER TABLE serials ADD COLUMN label_printed_at DATETIME"))
             if "label_printed_by_id" not in serial_columns:
                 connection.execute(text("ALTER TABLE serials ADD COLUMN label_printed_by_id INTEGER"))
+            if "product_batch_number" not in serial_columns:
+                connection.execute(text("ALTER TABLE serials ADD COLUMN product_batch_number VARCHAR(80)"))
+            if "mfg_date" not in serial_columns:
+                connection.execute(text("ALTER TABLE serials ADD COLUMN mfg_date DATE"))
+            if "expiry_date" not in serial_columns:
+                connection.execute(text("ALTER TABLE serials ADD COLUMN expiry_date DATE"))
+            if "warehouse" not in serial_columns:
+                connection.execute(text("ALTER TABLE serials ADD COLUMN warehouse VARCHAR(80)"))
+
+        if "batch_items" in inspector.get_table_names():
+            item_columns = {column["name"] for column in inspector.get_columns("batch_items")}
+            if "fefo_picked" not in item_columns:
+                connection.execute(text("ALTER TABLE batch_items ADD COLUMN fefo_picked BOOLEAN DEFAULT 0"))

@@ -7,9 +7,26 @@ from app.services.tally_masters import (
     live_sync_readiness,
     readiness_counts,
 )
+from app.services.settings import update_settings
+
+
+VALID_SETTINGS = {
+    "company_name": "Setu Test Company",
+    "tally_host": "127.0.0.1",
+    "tally_port": "9000",
+    "sales_voucher_type": "Sales",
+    "purchase_voucher_type": "Purchase",
+    "sales_ledger_name": "Sales Ledger",
+    "purchase_ledger_name": "Purchase Ledger",
+    "cgst_ledger_name": "CGST Ledger",
+    "sgst_ledger_name": "SGST Ledger",
+    "round_off_ledger_name": "Round Off",
+    "default_party_name": "Cash Ledger",
+}
 
 
 def test_collect_master_requirements_includes_products_and_settings(db_session):
+    update_settings(db_session, VALID_SETTINGS)
     product = Product(
         product_code="SG010",
         product_name="Pepper",
@@ -29,6 +46,7 @@ def test_collect_master_requirements_includes_products_and_settings(db_session):
 
 
 def test_confirmation_updates_readiness_counts(db_session):
+    update_settings(db_session, VALID_SETTINGS)
     user = User(username="admin", password_hash="x", role="admin")
     db_session.add(user)
     db_session.commit()
@@ -47,6 +65,7 @@ def test_company_list_xml_is_read_only_export_request():
 
 
 def test_live_sync_readiness_requires_all_confirmations(db_session):
+    update_settings(db_session, VALID_SETTINGS)
     user = User(username="admin2", password_hash="x", role="admin")
     db_session.add(user)
     db_session.commit()

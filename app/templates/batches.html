@@ -17,24 +17,26 @@
 </section>
 
 <section class="panel">
-  <table>
-    <thead><tr><th>Batch</th><th>Type</th><th>Party</th><th>Reason</th><th>Status</th><th>Items</th><th>Retries</th><th>Created</th></tr></thead>
-    <tbody>
-      {% for batch in batches %}
-      <tr>
-        <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
-        <td>{{ batch.batch_type }}</td>
-        <td>{{ batch.party_name or '-' }}</td>
-        <td>{{ batch.reason_code or '-' }}</td>
-        <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
-        <td>{{ batch.items|length }}</td>
-        <td>{{ batch.retry_count or 0 }}</td>
-        <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="8" class="empty">No batches yet</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Batch</th><th>Type</th><th>Party</th><th>Reason</th><th>Status</th><th>Items</th><th>Retries</th><th>Created</th></tr></thead>
+      <tbody>
+        {% for batch in batches %}
+        <tr>
+          <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
+          <td>{{ batch.batch_type }}</td>
+          <td>{{ batch.party_name or '-' }}</td>
+          <td>{{ batch.reason_code or '-' }}</td>
+          <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+          <td>{{ batch.items|length }}</td>
+          <td>{{ batch.retry_count or 0 }}</td>
+          <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">No batches yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}

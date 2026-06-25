@@ -1,7 +1,19 @@
 from app.models import BatchType, Product, SerialStatus, User
 from app.services.inventory import apply_batch_statuses, add_serial_to_batch, create_batch, generate_serials
-from app.services.settings import DEFAULT_SETTINGS
 from app.services.tally import build_voucher_xml
+
+
+VALID_SETTINGS = {
+    "company_name": "Setu Test Company",
+    "sales_voucher_type": "Sales",
+    "purchase_voucher_type": "Purchase",
+    "sales_ledger_name": "Sales Ledger",
+    "purchase_ledger_name": "Purchase Ledger",
+    "cgst_ledger_name": "CGST Ledger",
+    "sgst_ledger_name": "SGST Ledger",
+    "round_off_ledger_name": "Round Off",
+    "default_party_name": "Cash Ledger",
+}
 
 
 def test_sale_batch_xml_groups_serials_by_product(db_session):
@@ -22,7 +34,7 @@ def test_sale_batch_xml_groups_serials_by_product(db_session):
     for serial in serials:
         add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
-    xml = build_voucher_xml(batch, DEFAULT_SETTINGS)
+    xml = build_voucher_xml(batch, VALID_SETTINGS)
     assert xml.count("<ALLINVENTORYENTRIES.LIST>") == 1
     assert "2 Pcs" in xml
     assert "Sg Biriyani Masala 100grm" in xml

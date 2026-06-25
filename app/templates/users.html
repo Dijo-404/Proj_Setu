@@ -32,25 +32,27 @@
 </section>
 
 <section class="panel">
-  <table>
-    <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
-    <tbody>
-      {% for row in users %}
-      <tr>
-        <td>{{ row.username }}</td>
-        <td>{{ row.role }}</td>
-        <td><span class="status {{ 'synced' if row.active else 'failed' }}">{{ 'ACTIVE' if row.active else 'DISABLED' }}</span></td>
-        <td>
-          {% if row.id != user.id %}
-          <form method="post" action="/users/{{ row.id }}/toggle">
-            <button class="button small ghost" type="submit">{{ 'Disable' if row.active else 'Enable' }}</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+        {% for row in users %}
+        <tr>
+          <td>{{ row.username }}</td>
+          <td>{{ row.role }}</td>
+          <td><span class="status {{ 'synced' if row.active else 'failed' }}">{{ 'ACTIVE' if row.active else 'DISABLED' }}</span></td>
+          <td>
+            {% if row.id != user.id %}
+            <form method="post" action="/users/{{ row.id }}/toggle">
+              <button class="button small ghost" type="submit">{{ 'Disable' if row.active else 'Enable' }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 <script src="/static/password-toggle.js"></script>
 {% endblock %}

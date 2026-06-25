@@ -7,6 +7,7 @@ from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Product, SerialStatus
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
+from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
 from app.templates import templates
 
@@ -75,6 +76,10 @@ def generate_product_serials(
     quantity: int = Form(...),
     prefix: str = Form(""),
     initial_status: str = Form(SerialStatus.GENERATED.value),
+    product_batch_number: str = Form(""),
+    mfg_date: str = Form(""),
+    expiry_date: str = Form(""),
+    warehouse: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = require_user(request, db, ADMIN_ROLES)
@@ -83,10 +88,24 @@ def generate_product_serials(
         return RedirectResponse("/products", status_code=303)
     try:
         parsed_status = SerialStatus(initial_status)
+        parsed_mfg_date = parse_optional_date(mfg_date)
+        parsed_expiry_date = parse_optional_date(expiry_date)
+        if parsed_mfg_date and parsed_expiry_date and parsed_expiry_date <= parsed_mfg_date:
+            raise InventoryError("Expiry date must be after mfg date")
         batch = assign_barcodes_to_existing_stock(
             db,
             user,
-            [AssignmentLine(product=product, quantity=quantity, prefix=prefix or None)],
+            [
+                AssignmentLine(
+                    product=product,
+                    quantity=quantity,
+                    prefix=prefix or None,
+                    product_batch_number=product_batch_number.strip() or None,
+                    mfg_date=parsed_mfg_date,
+                    expiry_date=parsed_expiry_date,
+                    warehouse=warehouse.strip() or None,
+                )
+            ],
             source="MANUAL" if parsed_status == SerialStatus.IN_STOCK else "GENERATED",
             initial_status=parsed_status,
         )

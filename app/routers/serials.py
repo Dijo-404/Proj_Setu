@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Batch, InventoryTransaction, Product, ScanLog, Serial
-from app.services.exports import barcode_labels_pdf, barcode_png, serials_xlsx
+from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, barcode_png, label_layout, serials_xlsx
 from app.services.label_printing import LabelPrintError, mark_serial_labels_printed_once
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
@@ -65,6 +65,8 @@ def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
             "is_admin": is_admin,
             "can_print": bool(rows) and is_admin and not printed_serials,
             "label_ids": ",".join(str(serial.id) for serial in rows),
+            "label_pdf_rows": DEFAULT_LABEL_ROWS,
+            "label_pdf_columns": DEFAULT_LABEL_COLUMNS,
         },
     )
 
@@ -95,14 +97,21 @@ async def mark_labels_printed(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/labels.pdf")
-def labels_pdf(request: Request, ids: str = "", db: Session = Depends(get_db)):
+def labels_pdf(
+    request: Request,
+    ids: str = "",
+    rows_per_page: int = DEFAULT_LABEL_ROWS,
+    columns_per_page: int = DEFAULT_LABEL_COLUMNS,
+    db: Session = Depends(get_db),
+):
     require_user(request, db, ADMIN_ROLES)
     parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
+    rows_per_page, columns_per_page = label_layout(rows_per_page, columns_per_page)
     return Response(
-        barcode_labels_pdf(rows),
+        barcode_labels_pdf(rows, rows_per_page=rows_per_page, columns_per_page=columns_per_page),
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=setu-barcode-labels.pdf"},
     )

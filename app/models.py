@@ -1,8 +1,8 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from enum import Enum
 import json
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -113,6 +113,10 @@ class Serial(Base):
     replaced_by_id: Mapped[int | None] = mapped_column(ForeignKey("serials.id"), nullable=True)
     label_printed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     label_printed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    product_batch_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    mfg_date: Mapped[date | None] = mapped_column(Date, nullable=True)
+    expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    warehouse: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
 
     product: Mapped[Product] = relationship(back_populates="serials")
     batch_items: Mapped[list["BatchItem"]] = relationship(back_populates="serial")
@@ -158,6 +162,7 @@ class BatchItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, default=1)
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
+    fefo_picked: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     batch: Mapped[Batch] = relationship(back_populates="items")

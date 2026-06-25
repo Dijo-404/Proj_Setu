@@ -16,6 +16,17 @@ from app.services.voucher import calculate_voucher_summary
 
 
 TALLY_XML_SUPPORTED_BATCH_TYPES = {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}
+REQUIRED_TALLY_SETTING_KEYS = {
+    "company_name": "company name",
+    "sales_voucher_type": "sales voucher type",
+    "purchase_voucher_type": "purchase voucher type",
+    "sales_ledger_name": "sales ledger",
+    "purchase_ledger_name": "purchase ledger",
+    "cgst_ledger_name": "CGST ledger",
+    "sgst_ledger_name": "SGST ledger",
+    "round_off_ledger_name": "round off ledger",
+    "default_party_name": "default party",
+}
 
 
 class TallySyncError(RuntimeError):
@@ -33,6 +44,16 @@ class TallyResult:
     reference: str
 
 
+def missing_tally_settings(settings: dict[str, str]) -> list[str]:
+    return [label for key, label in REQUIRED_TALLY_SETTING_KEYS.items() if not settings.get(key, "").strip()]
+
+
+def require_tally_settings(settings: dict[str, str]) -> None:
+    missing = missing_tally_settings(settings)
+    if missing:
+        raise TallySyncError(f"Complete Tally settings before generating XML: {', '.join(missing)}", retryable=False)
+
+
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
     child = ET.SubElement(parent, tag)
     child.text = "" if value is None else str(value)
@@ -44,6 +65,7 @@ def _money(value: float | int | Decimal) -> str:
 
 
 def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
+    require_tally_settings(settings)
     batch_type = BatchType(batch.batch_type)
     voucher_type = settings["sales_voucher_type"] if batch_type == BatchType.SALE else settings["purchase_voucher_type"]
     party_name = batch.party_name or settings["default_party_name"]
@@ -129,7 +151,14 @@ def sync_batch(db: Session, batch: Batch) -> None:
         db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, error=batch.last_error))
         db.commit()
         return
-    xml = build_voucher_xml(batch, settings)
+    try:
+        xml = build_voucher_xml(batch, settings)
+    except TallySyncError as exc:
+        batch.status = BatchStatus.PENDING_SYNC.value
+        batch.last_error = str(exc)
+        db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, error=batch.last_error))
+        db.commit()
+        return
     if not is_tally_enabled(db):
         batch.status = BatchStatus.PENDING_SYNC.value
         batch.last_error = "Tally sync is disabled in settings"

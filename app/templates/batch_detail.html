@@ -46,6 +46,19 @@
       <button class="button primary" type="submit">Add</button>
       {% endif %}
     </form>
+    {% if batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
+    <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form">
+      <label>FEFO product
+        <select name="product_id" required>
+          {% for product in products %}
+          <option value="{{ product.id }}">{{ product.product_code }} · {{ product.product_name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Qty<input name="quantity" type="number" min="1" max="500" value="1" required></label>
+      <button class="button secondary" type="submit">Pick FEFO</button>
+    </form>
+    {% endif %}
     {% else %}
     <div class="empty">Batch submitted</div>
     {% endif %}
@@ -82,57 +95,59 @@
     <h2>Voucher preview</h2>
     <span>{{ summary.lines|length }} product line{{ 's' if summary.lines|length != 1 else '' }}</span>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Product</th>
-        <th>HSN</th>
-        <th>Qty</th>
-        <th>Rate</th>
-        <th>Taxable</th>
-        <th>CGST</th>
-        <th>SGST</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for line in summary.lines %}
-      <tr>
-        <td>
-          <strong>{{ line.product_name }}</strong>
-          <small>{{ line.tally_stock_item_name }}</small>
-        </td>
-        <td>{{ line.hsn }}</td>
-        <td>{{ line.quantity }} {{ line.unit }}</td>
-        <td>
-          {% if batch.status == 'DRAFT' %}
-          <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate">
-            <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
-            <button class="button small" type="submit">Set</button>
-          </form>
-          {% else %}
-          {{ '%.2f'|format(line.rate) }}
-          {% endif %}
-        </td>
-        <td>{{ '%.2f'|format(line.taxable_value) }}</td>
-        <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
-        <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
-        <td>{{ '%.2f'|format(line.line_total) }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="8" class="empty">Scan serials to build the voucher preview</td></tr>
-      {% endfor %}
-    </tbody>
-    {% if summary.lines %}
-    <tfoot>
-      <tr><th colspan="4">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
-      <tr><th colspan="4">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
-      <tr><th colspan="4">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
-      <tr><th colspan="4">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
-      <tr class="grand-total"><th colspan="4">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
-    </tfoot>
-    {% endif %}
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>HSN</th>
+          <th>Qty</th>
+          <th>Rate</th>
+          <th>Taxable</th>
+          <th>CGST</th>
+          <th>SGST</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in summary.lines %}
+        <tr>
+          <td>
+            <strong>{{ line.product_name }}</strong>
+            <small>{{ line.tally_stock_item_name }}</small>
+          </td>
+          <td>{{ line.hsn }}</td>
+          <td>{{ line.quantity }} {{ line.unit }}</td>
+          <td>
+            {% if batch.status == 'DRAFT' %}
+            <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate">
+              <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
+              <button class="button small" type="submit">Set</button>
+            </form>
+            {% else %}
+            {{ '%.2f'|format(line.rate) }}
+            {% endif %}
+          </td>
+          <td>{{ '%.2f'|format(line.taxable_value) }}</td>
+          <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.line_total) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="empty">Scan serials to build the voucher preview</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if summary.lines %}
+      <tfoot>
+        <tr><th colspan="4">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
+        <tr><th colspan="4">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
+        <tr><th colspan="4">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
+        <tr><th colspan="4">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
+        <tr class="grand-total"><th colspan="4">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
 </section>
 {% elif batch.status != 'DRAFT' %}
 <section class="panel">
@@ -145,76 +160,87 @@
     <div class="metric danger"><span>Missing</span><strong>{{ audit_summary.missing }}</strong></div>
     <div class="metric warn"><span>Extra</span><strong>{{ audit_summary.extra }}</strong></div>
   </section>
-  <table>
-    <thead><tr><th>Finding</th><th>Serial</th><th>Product</th><th>Expected</th><th>Scanned</th></tr></thead>
-    <tbody>
-      {% for finding in batch.audit_findings %}
-      <tr>
-        <td><span class="status {{ finding.finding_type|lower }}">{{ finding.finding_type }}</span></td>
-        <td>{{ finding.serial_number }}</td>
-        <td>{{ finding.product_name or '-' }}</td>
-        <td>{{ finding.expected_status or '-' }}</td>
-        <td>{{ finding.scanned_status or '-' }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="empty">No audit findings</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Finding</th><th>Serial</th><th>Product</th><th>Expected</th><th>Scanned</th></tr></thead>
+      <tbody>
+        {% for finding in batch.audit_findings %}
+        <tr>
+          <td><span class="status {{ finding.finding_type|lower }}">{{ finding.finding_type }}</span></td>
+          <td>{{ finding.serial_number }}</td>
+          <td>{{ finding.product_name or '-' }}</td>
+          <td>{{ finding.expected_status or '-' }}</td>
+          <td>{{ finding.scanned_status or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="empty">No audit findings</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endif %}
 
 <section class="panel">
   <div class="section-title"><h2>Scanned serials</h2></div>
-  <table>
-    <thead><tr><th>Serial</th><th>Product</th><th>Status</th><th>Rate</th><th></th></tr></thead>
-    <tbody>
-      {% for item in batch.items %}
-      <tr>
-        <td>{{ item.serial.serial_number }}</td>
-        <td>{{ item.serial.product.product_name }}</td>
-        <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
-        <td>
-          {% if batch.status == 'DRAFT' and batch.batch_type != 'AUDIT' %}
-          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">
-            <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
-            <button class="button small" type="submit">Set</button>
-          </form>
-          {% else %}
-          {{ item.rate if item.rate is not none else item.serial.product.default_rate }}
-          {% endif %}
-        </td>
-        <td>
-          {% if batch.status == 'DRAFT' %}
-          <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/delete">
-            <button class="button small ghost" type="submit">Remove</button>
-          </form>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="5" class="empty">No scans yet</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Serial</th><th>Product</th><th>Product batch</th><th>Expiry</th><th>Status</th><th>Rate</th><th></th></tr></thead>
+      <tbody>
+        {% for item in batch.items %}
+        <tr>
+          <td>{{ item.serial.serial_number }}</td>
+          <td>{{ item.serial.product.product_name }}</td>
+          <td>
+            {{ item.serial.product_batch_number or '-' }}
+            {% if item.fefo_picked %}<small>FEFO picked</small>{% endif %}
+          </td>
+          <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
+          <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
+          <td>
+            {% if batch.status == 'DRAFT' and batch.batch_type != 'AUDIT' %}
+            <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">
+              <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
+              <button class="button small" type="submit">Set</button>
+            </form>
+            {% else %}
+            {{ item.rate if item.rate is not none else item.serial.product.default_rate }}
+            {% endif %}
+          </td>
+          <td>
+            {% if batch.status == 'DRAFT' %}
+            <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/delete">
+              <button class="button small ghost" type="submit">Remove</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No scans yet</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 {% if batch.sync_attempts %}
 <section class="panel">
   <div class="section-title"><h2>Sync attempts</h2></div>
-  <table>
-    <thead><tr><th>Time</th><th>Status</th><th>Error</th><th></th></tr></thead>
-    <tbody>
-      {% for attempt in batch.sync_attempts %}
-      <tr>
-        <td>{{ attempt.created_at.strftime('%d %b %Y %H:%M') }}</td>
-        <td><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></td>
-        <td>{{ attempt.error or '-' }}</td>
-        <td><a href="/batches/{{ batch.id }}/sync-attempts/{{ attempt.id }}">Details</a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Status</th><th>Error</th><th></th></tr></thead>
+      <tbody>
+        {% for attempt in batch.sync_attempts %}
+        <tr>
+          <td>{{ attempt.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></td>
+          <td>{{ attempt.error or '-' }}</td>
+          <td><a href="/batches/{{ batch.id }}/sync-attempts/{{ attempt.id }}">Details</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endif %}
 <script src="/static/zxing.min.js"></script>

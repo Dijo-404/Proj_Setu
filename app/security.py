@@ -59,6 +59,11 @@ def read_session_token(token: str | None) -> int | None:
         payload = json.loads(_unb64(body))
     except (ValueError, TypeError):
         return None
-    if int(payload.get("exp", 0)) < int(datetime.now(timezone.utc).timestamp()):
+    try:
+        expires_at = int(payload.get("exp", 0))
+        user_id = int(payload["sub"])
+    except (KeyError, TypeError, ValueError):
         return None
-    return int(payload["sub"])
+    if expires_at < int(datetime.now(timezone.utc).timestamp()):
+        return None
+    return user_id

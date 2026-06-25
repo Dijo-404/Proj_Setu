@@ -1,8 +1,9 @@
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 import csv
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -10,24 +11,47 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import ADMIN_ROLES, require_user
 from app.database import get_db
 from app.models import Batch, InventoryTransaction, Product, ScanLog, TransactionType
-from app.services.exports import scans_xlsx, transactions_xlsx
+from app.services.charts import bar_chart, donut_chart
+from app.services.expiry import expiry_summary
+from app.services.exports import safe_row, scans_xlsx, transactions_xlsx
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
 
 router = APIRouter(prefix="/reports")
 
 
+def parse_filter_date(value: str, field_name: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} date",
+        ) from exc
+
+
 def scan_query(action: str = "", start: str = "", end: str = ""):
     conditions = []
     if action:
         conditions.append(ScanLog.action == action)
-    if start:
-        start_dt = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
+    start_dt = parse_filter_date(start, "start")
+    if start_dt:
         conditions.append(ScanLog.created_at >= start_dt)
-    if end:
-        end_dt = datetime.fromisoformat(end).replace(tzinfo=timezone.utc) + timedelta(days=1)
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)
         conditions.append(ScanLog.created_at < end_dt)
-    query = select(ScanLog).order_by(desc(ScanLog.created_at)).limit(500)
+    query = (
+        select(ScanLog)
+        .order_by(desc(ScanLog.created_at))
+        .limit(500)
+        .options(
+            selectinload(ScanLog.user),
+            selectinload(ScanLog.batch),
+        )
+    )
     if conditions:
         query = query.where(and_(*conditions))
     return query
@@ -48,11 +72,12 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
                 Product.product_name.ilike(like),
             )
         )
-    if start:
-        start_dt = datetime.fromisoformat(start).replace(tzinfo=timezone.utc)
+    start_dt = parse_filter_date(start, "start")
+    if start_dt:
         conditions.append(InventoryTransaction.created_at >= start_dt)
-    if end:
-        end_dt = datetime.fromisoformat(end).replace(tzinfo=timezone.utc) + timedelta(days=1)
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)
         conditions.append(InventoryTransaction.created_at < end_dt)
     query = (
         select(InventoryTransaction)
@@ -76,6 +101,8 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
     user = require_user(request, db, ADMIN_ROLES)
     scans = db.scalars(scan_query(action, start, end)).all()
     transactions = db.scalars(transaction_query(action, q, start, end)).all()
+    transaction_counts = Counter(txn.transaction_type for txn in transactions)
+    scan_status_counts = Counter(scan.status for scan in scans)
     pending = db.scalars(
         select(Batch)
         .where(Batch.status.in_(["PENDING_SYNC", "FAILED"]))
@@ -91,6 +118,9 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "scans": scans,
             "transactions": transactions,
             "pending": pending,
+            "transaction_chart": bar_chart(transaction_counts.items()),
+            "scan_status_chart": donut_chart(scan_status_counts.items()),
+            "expiry": expiry_summary(db),
             "action": action,
             "q": q,
             "start": start,
@@ -112,16 +142,18 @@ def scans_csv(request: Request, action: str = "", start: str = "", end: str = ""
     writer.writerow(["Date", "User", "Action", "Serial", "Status", "Batch", "Message", "Tally Reference"])
     for scan in scans:
         writer.writerow(
-            [
-                scan.created_at.isoformat(),
-                scan.user.username,
-                scan.action,
-                scan.serial_number_raw,
-                scan.status,
-                scan.batch.batch_number if scan.batch else "",
-                scan.message or "",
-                scan.tally_reference or "",
-            ]
+            safe_row(
+                [
+                    scan.created_at.isoformat(),
+                    scan.user.username,
+                    scan.action,
+                    scan.serial_number_raw,
+                    scan.status,
+                    scan.batch.batch_number if scan.batch else "",
+                    scan.message or "",
+                    scan.tally_reference or "",
+                ]
+            )
         )
     stream.seek(0)
     return StreamingResponse(
@@ -169,23 +201,25 @@ def transactions_csv(request: Request, action: str = "", q: str = "", start: str
     )
     for txn in transactions:
         writer.writerow(
-            [
-                txn.created_at.isoformat(),
-                txn.user.username,
-                txn.transaction_type,
-                txn.serial_number or "",
-                txn.product.product_code if txn.product else "",
-                txn.product.product_name if txn.product else "",
-                invoice_created_by(txn),
-                barcode_sold_by(txn),
-                product_audited_by(txn),
-                txn.status_from or "",
-                txn.status_to or "",
-                txn.reason_code or "",
-                txn.reference_number or "",
-                txn.tally_reference or "",
-                txn.notes or "",
-            ]
+            safe_row(
+                [
+                    txn.created_at.isoformat(),
+                    txn.user.username,
+                    txn.transaction_type,
+                    txn.serial_number or "",
+                    txn.product.product_code if txn.product else "",
+                    txn.product.product_name if txn.product else "",
+                    invoice_created_by(txn),
+                    barcode_sold_by(txn),
+                    product_audited_by(txn),
+                    txn.status_from or "",
+                    txn.status_to or "",
+                    txn.reason_code or "",
+                    txn.reference_number or "",
+                    txn.tally_reference or "",
+                    txn.notes or "",
+                ]
+            )
         )
     stream.seek(0)
     return StreamingResponse(

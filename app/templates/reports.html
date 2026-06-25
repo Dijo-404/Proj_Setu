@@ -31,69 +31,124 @@
   </form>
 </section>
 
+<section class="chart-grid">
+  <div class="chart-card">
+    <div class="chart-head">
+      <div>
+        <h2>Transaction mix</h2>
+        <p>Current filters</p>
+      </div>
+      <strong>{{ transaction_chart.total }}</strong>
+    </div>
+    <div class="bar-list">
+      {% for item in transaction_chart.bars %}
+      <div class="bar-row">
+        <span>{{ item.label }}</span>
+        <div class="bar-track"><span class="bar-fill" style="--bar: {{ item.percent }}%; --bar-color: {{ item.color }};"></span></div>
+        <strong>{{ item.value }}</strong>
+      </div>
+      {% else %}
+      <p class="chart-empty">No transactions found</p>
+      {% endfor %}
+    </div>
+  </div>
+  <div class="chart-card chart-card--donut">
+    <div class="chart-head">
+      <div>
+        <h2>Scan outcomes</h2>
+        <p>Current filters</p>
+      </div>
+    </div>
+    <div class="chart-body">
+      <div class="donut" style="--chart-bg: {{ scan_status_chart.gradient }};" aria-label="Scan outcomes chart">
+        <span>{{ scan_status_chart.total }}</span>
+      </div>
+      <div class="chart-legend">
+        {% for item in scan_status_chart.slices %}
+        <div class="legend-row">
+          <span class="swatch" style="--swatch: {{ item.color }};"></span>
+          <span>{{ item.label }}</span>
+          <strong>{{ item.value }}</strong>
+        </div>
+        {% else %}
+        <p class="chart-empty">No scan records</p>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+{% include "partials/expiry_summary.html" %}
+
 <section class="panel">
   <div class="section-title"><h2>Transactions</h2></div>
-  <table>
-    <thead><tr><th>Time</th><th>User</th><th>Type</th><th>Serial</th><th>Product</th><th>Invoice created by</th><th>Barcode sold by</th><th>Product audited by</th><th>Status</th><th>Tally</th></tr></thead>
-    <tbody>
-      {% for txn in transactions %}
-      <tr>
-        <td>{{ txn.created_at.strftime('%d %b %H:%M') }}</td>
-        <td>{{ txn.user.username }}</td>
-        <td>{{ txn.transaction_type }}</td>
-        <td>{% if txn.serial %}<a href="/serials/{{ txn.serial.id }}">{{ txn.serial_number }}</a>{% else %}{{ txn.serial_number or '-' }}{% endif %}</td>
-        <td>{{ txn.product.product_code if txn.product else '-' }}</td>
-        <td>{{ invoice_created_by(txn) or '-' }}</td>
-        <td>{{ barcode_sold_by(txn) or '-' }}</td>
-        <td>{{ product_audited_by(txn) or '-' }}</td>
-        <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
-        <td>{{ txn.tally_reference or '-' }}</td>
-      </tr>
-      {% else %}
-      <tr><td colspan="10" class="empty">No transactions found</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>User</th><th>Type</th><th>Serial</th><th>Product</th><th>Invoice created by</th><th>Barcode sold by</th><th>Product audited by</th><th>Status</th><th>Tally</th></tr></thead>
+      <tbody>
+        {% for txn in transactions %}
+        <tr>
+          <td>{{ txn.created_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ txn.user.username }}</td>
+          <td>{{ txn.transaction_type }}</td>
+          <td>{% if txn.serial %}<a href="/serials/{{ txn.serial.id }}">{{ txn.serial_number }}</a>{% else %}{{ txn.serial_number or '-' }}{% endif %}</td>
+          <td>{{ txn.product.product_code if txn.product else '-' }}</td>
+          <td>{{ invoice_created_by(txn) or '-' }}</td>
+          <td>{{ barcode_sold_by(txn) or '-' }}</td>
+          <td>{{ product_audited_by(txn) or '-' }}</td>
+          <td>{{ txn.status_from or '-' }} &rarr; {{ txn.status_to or '-' }}</td>
+          <td>{{ txn.tally_reference or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="empty">No transactions found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="split">
   <div>
     <div class="section-title"><h2>Scans</h2></div>
-    <table>
-      <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Serial</th><th>Status</th></tr></thead>
-      <tbody>
-        {% for scan in scans %}
-        <tr>
-          <td>{{ scan.created_at.strftime('%d %b %H:%M') }}</td>
-          <td>{{ scan.user.username }}</td>
-          <td>{{ scan.action }}</td>
-          <td>{{ scan.serial_number_raw }}</td>
-          <td><span class="status {{ scan.status|lower }}">{{ scan.status }}</span></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="empty">No scan records</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Serial</th><th>Status</th></tr></thead>
+        <tbody>
+          {% for scan in scans %}
+          <tr>
+            <td>{{ scan.created_at.strftime('%d %b %H:%M') }}</td>
+            <td>{{ scan.user.username }}</td>
+            <td>{{ scan.action }}</td>
+            <td>{{ scan.serial_number_raw }}</td>
+            <td><span class="status {{ scan.status|lower }}">{{ scan.status }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No scan records</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
   <div>
     <div class="section-title"><h2>Pending sync</h2></div>
-    <table>
-      <thead><tr><th>Batch</th><th>Status</th><th>Retries</th><th>Last retry</th><th>Error</th></tr></thead>
-      <tbody>
-        {% for batch in pending %}
-        <tr>
-          <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
-          <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
-          <td>{{ batch.retry_count or 0 }}</td>
-          <td>{{ batch.last_retry_at.strftime('%d %b %H:%M') if batch.last_retry_at else '-' }}</td>
-          <td>{{ batch.last_error or '-' }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="5" class="empty">No pending sync</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Batch</th><th>Status</th><th>Retries</th><th>Last retry</th><th>Error</th></tr></thead>
+        <tbody>
+          {% for batch in pending %}
+          <tr>
+            <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
+            <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
+            <td>{{ batch.retry_count or 0 }}</td>
+            <td>{{ batch.last_retry_at.strftime('%d %b %H:%M') if batch.last_retry_at else '-' }}</td>
+            <td>{{ batch.last_error or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No pending sync</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
   </div>
 </section>
 {% endblock %}

@@ -4,6 +4,8 @@ import json
 from app.routers.settings import autosave_settings, validate_settings
 from app.services.settings import (
     COMPANY_SETTING_KEYS,
+    LEGACY_PLACEHOLDER_SETTINGS,
+    clear_legacy_placeholder_settings,
     ensure_company_records,
     ensure_default_settings,
     get_active_company,
@@ -11,10 +13,28 @@ from app.services.settings import (
     save_active_company_config,
     update_settings,
 )
+from app.models import Company
+
+
+VALID_SETTINGS = {
+    "company_name": "Setu Test Company",
+    "tally_host": "127.0.0.1",
+    "tally_port": "9000",
+    "sales_voucher_type": "Sales",
+    "purchase_voucher_type": "Purchase",
+    "sales_ledger_name": "Sales Ledger",
+    "purchase_ledger_name": "Purchase Ledger",
+    "cgst_ledger_name": "CGST Ledger",
+    "sgst_ledger_name": "SGST Ledger",
+    "round_off_ledger_name": "Round Off",
+    "default_party_name": "Cash Ledger",
+    "retry_interval_seconds": "180",
+}
 
 
 def _seed(db):
     ensure_default_settings(db)
+    update_settings(db, VALID_SETTINGS)
     ensure_company_records(db)
 
 
@@ -63,3 +83,23 @@ def test_autosave_validation_rejects_bad_port_and_interval(db_session):
     bad_interval = _valid_request(db_session)
     bad_interval["retry_interval_seconds"] = "5"
     assert validate_settings(bad_interval) is not None
+
+
+def test_legacy_placeholder_settings_are_cleared_when_sync_is_disabled(db_session):
+    ensure_default_settings(db_session)
+    update_settings(db_session, {**LEGACY_PLACEHOLDER_SETTINGS, "tally_enabled": "false"})
+    db_session.add(
+        Company(
+            name=LEGACY_PLACEHOLDER_SETTINGS["company_name"],
+            config=json.dumps({key: LEGACY_PLACEHOLDER_SETTINGS[key] for key in COMPANY_SETTING_KEYS}),
+            is_active=True,
+        )
+    )
+    db_session.commit()
+
+    clear_legacy_placeholder_settings(db_session)
+
+    settings = get_all_settings(db_session)
+    assert settings["company_name"] == ""
+    assert settings["sales_ledger_name"] == ""
+    assert get_active_company(db_session) is None

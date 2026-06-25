@@ -34,65 +34,67 @@
     <h2>Required Tally masters</h2>
     <span>Exact names must match Tally</span>
   </div>
-  <table>
-    <thead>
-      <tr>
-        <th>Type</th>
-        <th>Name</th>
-        <th>Source</th>
-        <th>Local</th>
-        <th>Confirmation</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for item in requirements %}
-      {% set confirmation = confirmations.get(item.key) %}
-      <tr>
-        <td>{{ item.master_type }}</td>
-        <td>
-          {% if item.master_name %}
-          <strong>{{ item.master_name }}</strong>
-          <small>{{ item.detail }}</small>
-          {% else %}
-          <span class="muted">Missing value</span>
-          {% endif %}
-        </td>
-        <td>{{ item.source }}</td>
-        <td><span class="status {{ 'synced' if item.local_status == 'READY' else 'failed' }}">{{ item.local_status }}</span></td>
-        <td>
-          {% if confirmation %}
-          <span class="status synced">CONFIRMED</span>
-          <small>{{ confirmation.confirmed_by.username }} · {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
-          {% else %}
-          <span class="status pending_sync">UNCHECKED</span>
-          {% endif %}
-        </td>
-        <td>
-          {% if item.local_status == 'READY' and confirmation %}
-          <form method="post" action="/tally-check/unconfirm">
-            <input type="hidden" name="master_type" value="{{ item.master_type }}">
-            <input type="hidden" name="master_name" value="{{ item.master_name }}">
-            <button class="button small ghost" type="submit">Unmark</button>
-          </form>
-          {% elif item.local_status == 'READY' %}
-          <form method="post" action="/tally-check/confirm" class="inline-form">
-            <input type="hidden" name="master_type" value="{{ item.master_type }}">
-            <input type="hidden" name="master_name" value="{{ item.master_name }}">
-            <input type="hidden" name="source" value="{{ item.source }}">
-            <input name="notes" placeholder="Optional note">
-            <button class="button small" type="submit">Mark checked</button>
-          </form>
-          {% else %}
-          <a href="/settings">Fix settings</a>
-          {% endif %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="empty">No products or Tally settings found</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th>Name</th>
+          <th>Source</th>
+          <th>Local</th>
+          <th>Confirmation</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in requirements %}
+        {% set confirmation = confirmations.get(item.key) %}
+        <tr>
+          <td>{{ item.master_type }}</td>
+          <td>
+            {% if item.master_name %}
+            <strong>{{ item.master_name }}</strong>
+            <small>{{ item.detail }}</small>
+            {% else %}
+            <span class="muted">Missing value</span>
+            {% endif %}
+          </td>
+          <td>{{ item.source }}</td>
+          <td><span class="status {{ 'synced' if item.local_status == 'READY' else 'failed' }}">{{ item.local_status }}</span></td>
+          <td>
+            {% if confirmation %}
+            <span class="status synced">CONFIRMED</span>
+            <small>{{ confirmation.confirmed_by.username }} · {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
+            {% else %}
+            <span class="status pending_sync">UNCHECKED</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if item.local_status == 'READY' and confirmation %}
+            <form method="post" action="/tally-check/unconfirm">
+              <input type="hidden" name="master_type" value="{{ item.master_type }}">
+              <input type="hidden" name="master_name" value="{{ item.master_name }}">
+              <button class="button small ghost" type="submit">Unmark</button>
+            </form>
+            {% elif item.local_status == 'READY' %}
+            <form method="post" action="/tally-check/confirm" class="inline-form">
+              <input type="hidden" name="master_type" value="{{ item.master_type }}">
+              <input type="hidden" name="master_name" value="{{ item.master_name }}">
+              <input type="hidden" name="source" value="{{ item.source }}">
+              <input name="notes" placeholder="Optional note">
+              <button class="button small" type="submit">Mark checked</button>
+            </form>
+            {% else %}
+            <a href="/settings">Fix settings</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No products or Tally settings found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="panel">

@@ -24,8 +24,23 @@ COMPANY_SETTING_KEYS = [
 
 
 DEFAULT_SETTINGS = {
-    "company_name": "SWARNAGOWRI",
+    "company_name": "",
     "tally_enabled": "false",
+    "tally_host": "127.0.0.1",
+    "tally_port": "9000",
+    "sales_voucher_type": "",
+    "purchase_voucher_type": "",
+    "sales_ledger_name": "",
+    "purchase_ledger_name": "",
+    "cgst_ledger_name": "",
+    "sgst_ledger_name": "",
+    "round_off_ledger_name": "",
+    "default_party_name": "",
+    "retry_interval_seconds": "180",
+}
+
+LEGACY_PLACEHOLDER_SETTINGS = {
+    "company_name": "SWARNAGOWRI",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
     "sales_voucher_type": "Sales",
@@ -36,7 +51,6 @@ DEFAULT_SETTINGS = {
     "sgst_ledger_name": "Input SGST@2.5%",
     "round_off_ledger_name": "ROUND OFF",
     "default_party_name": "Cash",
-    "retry_interval_seconds": "180",
 }
 
 
@@ -71,6 +85,28 @@ def update_settings(db: Session, values: dict[str, str]) -> None:
     db.commit()
 
 
+def clear_legacy_placeholder_settings(db: Session) -> None:
+    if get_setting(db, "tally_enabled", "false").lower() == "true":
+        return
+    if any(get_setting(db, key, "") != value for key, value in LEGACY_PLACEHOLDER_SETTINGS.items()):
+        return
+
+    for key in COMPANY_SETTING_KEYS:
+        row = db.get(Setting, key)
+        if row:
+            row.value = DEFAULT_SETTINGS[key]
+
+    legacy_companies = db.scalars(select(Company).where(Company.name == LEGACY_PLACEHOLDER_SETTINGS["company_name"])).all()
+    for company in legacy_companies:
+        try:
+            config = json.loads(company.config)
+        except (TypeError, ValueError):
+            config = {}
+        if all(config.get(key) == LEGACY_PLACEHOLDER_SETTINGS[key] for key in COMPANY_SETTING_KEYS):
+            db.delete(company)
+    db.commit()
+
+
 def is_tally_enabled(db: Session) -> bool:
     return get_setting(db, "tally_enabled", "false").lower() == "true"
 
@@ -90,7 +126,7 @@ def get_active_company(db: Session) -> Company | None:
 
 
 def ensure_company_records(db: Session) -> None:
-    """Seed a company from the live settings on first run, and guarantee one is active."""
+    """Seed a company from live settings only after real company data exists."""
     if db.scalar(select(Company.id).limit(1)):
         if not get_active_company(db):
             first = db.scalar(select(Company).order_by(Company.id))
@@ -98,7 +134,9 @@ def ensure_company_records(db: Session) -> None:
             db.commit()
         return
     config = current_company_config(db)
-    name = config.get("company_name") or "Company 1"
+    name = (config.get("company_name") or "").strip()
+    if not name:
+        return
     db.add(Company(name=name, config=json.dumps(config), is_active=True))
     db.commit()
 

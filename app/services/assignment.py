@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from io import BytesIO
 
 from openpyxl import load_workbook
@@ -8,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Batch, BatchItem, BatchStatus, BatchType, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError, create_batch, generate_serials, log_inventory_transaction, normalize_serial
 
 
@@ -19,6 +21,10 @@ class AssignmentLine:
     product: Product
     quantity: int
     prefix: str | None = None
+    product_batch_number: str | None = None
+    mfg_date: date | None = None
+    expiry_date: date | None = None
+    warehouse: str | None = None
 
 
 def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]:
@@ -35,6 +41,10 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]
     header = [str(value or "").strip().lower().replace("_", " ") for value in rows[0]]
     product_col = _find_column(header, {"product code", "code", "product"})
     qty_col = _find_column(header, {"quantity", "qty"})
+    batch_col = _find_column(header, {"batch", "batch no", "batch number", "product batch"})
+    mfg_col = _find_column(header, {"mfg date", "manufacturing date", "manufacture date"})
+    expiry_col = _find_column(header, {"expiry date", "expiry", "exp date"})
+    warehouse_col = _find_column(header, {"warehouse", "wh", "location"})
     if product_col is None or qty_col is None:
         product_col, qty_col = 0, 1
 
@@ -58,7 +68,25 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]
         if not product:
             raise InventoryError(f"Row {index}: product {code} was not found")
         total += quantity
-        lines.append(AssignmentLine(product=product, quantity=quantity))
+        try:
+            mfg_date = parse_optional_date(row[mfg_col]) if mfg_col is not None and mfg_col < len(row) else None
+            expiry_date = parse_optional_date(row[expiry_col]) if expiry_col is not None and expiry_col < len(row) else None
+        except (TypeError, ValueError) as exc:
+            raise InventoryError(f"Row {index}: use a valid date for mfg/expiry") from exc
+        if mfg_date and expiry_date and expiry_date <= mfg_date:
+            raise InventoryError(f"Row {index}: expiry date must be after mfg date")
+        product_batch_number = str(row[batch_col] or "").strip() if batch_col is not None and batch_col < len(row) else None
+        warehouse = str(row[warehouse_col] or "").strip() if warehouse_col is not None and warehouse_col < len(row) else None
+        lines.append(
+            AssignmentLine(
+                product=product,
+                quantity=quantity,
+                product_batch_number=product_batch_number or None,
+                mfg_date=mfg_date,
+                expiry_date=expiry_date,
+                warehouse=warehouse or None,
+            )
+        )
 
     if not lines:
         raise InventoryError("Excel file has no assignment rows")
@@ -98,6 +126,10 @@ def assign_barcodes_to_existing_stock(
                 line.quantity,
                 prefix=line.prefix or line.product.product_code,
                 initial_status=initial_status,
+                product_batch_number=line.product_batch_number,
+                mfg_date=line.mfg_date,
+                expiry_date=line.expiry_date,
+                warehouse=line.warehouse,
             )
         )
 

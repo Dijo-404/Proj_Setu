@@ -21,6 +21,20 @@ def test_scans_xlsx_generates_workbook(db_session):
     assert data.startswith(b"PK")
 
 
+def test_scans_xlsx_escapes_formula_like_values(db_session):
+    user = User(username="admin", password_hash="x", role="admin")
+    db_session.add(user)
+    db_session.commit()
+    scan = ScanLog(serial_number_raw="=HYPERLINK(\"http://bad\")", user_id=user.id, action="AUDIT", status="SCANNED")
+    db_session.add(scan)
+    db_session.commit()
+
+    workbook = load_workbook(BytesIO(scans_xlsx([scan])))
+    sheet = workbook.active
+
+    assert sheet["D2"].value == "'=HYPERLINK(\"http://bad\")"
+
+
 def test_barcode_png_is_a_wide_1d_barcode():
     data = barcode_png("RCV-20260623-0001")
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
@@ -49,6 +63,13 @@ def test_barcode_labels_pdf_generates_pdf(db_session):
     product = _make_product(db_session, "SG050")
     serial = generate_serials(db_session, product, 1)[0]
     data = barcode_labels_pdf([serial])
+    assert data.startswith(b"%PDF")
+
+
+def test_barcode_labels_pdf_accepts_custom_page_grid(db_session):
+    product = _make_product(db_session, "SG053")
+    serials = generate_serials(db_session, product, 5)
+    data = barcode_labels_pdf(serials, rows_per_page=2, columns_per_page=2)
     assert data.startswith(b"%PDF")
 
 

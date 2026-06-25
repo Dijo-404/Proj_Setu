@@ -32,34 +32,38 @@
 
 <section class="panel">
   <div class="section-title"><h2>Product list</h2></div>
-  <table>
-    <thead>
-      <tr><th>Code</th><th>Name</th><th>HSN</th><th>GST</th><th>Rate</th><th>Generate Barcode</th></tr>
-    </thead>
-    <tbody>
-      {% for product in products %}
-      <tr>
-        <td>{{ product.product_code }}</td>
-        <td>{{ product.product_name }}</td>
-        <td>{{ product.hsn }}</td>
-        <td>{{ product.gst_rate }}%</td>
-        <td>{{ product.default_rate }}</td>
-        <td>
-          <form method="post" action="/products/{{ product.id }}/generate" class="inline-form">
-            <input name="quantity" type="number" min="1" max="5000" placeholder="Qty" required>
-            <input name="prefix" placeholder="Prefix" value="{{ product.product_code }}">
-            <select name="initial_status">
-              <option value="GENERATED">Generated</option>
-              <option value="IN_STOCK">Existing stock</option>
-            </select>
-            <button class="button small" type="submit">Generate</button>
-          </form>
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="6" class="empty">No products found</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr><th>Code</th><th>Name</th><th>HSN</th><th>GST</th><th>Rate</th><th>Generate Barcode</th></tr>
+      </thead>
+      <tbody>
+        {% for product in products %}
+        <tr>
+          <td>{{ product.product_code }}</td>
+          <td>{{ product.product_name }}</td>
+          <td>{{ product.hsn }}</td>
+          <td>{{ product.gst_rate }}%</td>
+          <td>{{ product.default_rate }}</td>
+          <td>
+            <form method="post" action="/products/{{ product.id }}/generate" class="inline-form">
+              <input name="quantity" type="number" min="1" max="5000" placeholder="Qty" required>
+              <input name="product_batch_number" placeholder="Batch">
+              <input name="expiry_date" type="date" aria-label="Expiry date">
+              <input name="prefix" placeholder="Prefix" value="{{ product.product_code }}">
+              <select name="initial_status">
+                <option value="GENERATED">Generated</option>
+                <option value="IN_STOCK">Existing stock</option>
+              </select>
+              <button class="button small" type="submit">Generate</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No products found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 {% endblock %}
