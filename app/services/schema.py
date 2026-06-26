@@ -45,3 +45,5 @@ def ensure_runtime_schema() -> None:
             user_columns = {column["name"] for column in inspector.get_columns("users")}
             if "deleted_at" not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN deleted_at DATETIME"))
+            if "must_change_password" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))

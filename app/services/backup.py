@@ -26,8 +26,7 @@ def create_sqlite_backup() -> BackupInfo:
     if not source_path.exists():
         raise RuntimeError("SQLite database file does not exist yet")
 
-    # Use a temp directory rather than NamedTemporaryFile: on Windows the latter
-    # holds an open handle, so sqlite3 cannot open the same path by name.
+    # NamedTemporaryFile keeps an open Windows handle that sqlite3 cannot reuse.
     with TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir) / "setu-backup.db"
         source = sqlite3.connect(source_path)

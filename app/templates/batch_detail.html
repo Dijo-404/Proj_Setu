@@ -52,7 +52,8 @@
       {% endif %}
     </form>
     {% if batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
-    <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form">
+    <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form" id="fefo-form">
+      {% if fefo_error %}<div class="alert error">{{ fefo_error }}</div>{% endif %}
       <label>FEFO product
         <select name="product_id" required>
           {% for product in products %}
@@ -252,6 +253,11 @@
     </table>
   </div>
 </section>
+{% endif %}
+{% if fefo_error %}
+<script>
+  document.getElementById('fefo-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+</script>
 {% endif %}
 <script src="/static/zxing.min.js"></script>
 <script src="/static/scanner.js?v=20260626-v16" data-batch-id="{{ batch.id }}"></script>

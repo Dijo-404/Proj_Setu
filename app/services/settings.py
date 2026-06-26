@@ -6,8 +6,6 @@ from sqlalchemy.orm import Session
 from app.models import Company, Setting
 
 
-# The settings that belong to a single Tally company profile. Everything else
-# in DEFAULT_SETTINGS (tally_enabled, retry_interval_seconds) is global.
 COMPANY_SETTING_KEYS = [
     "company_name",
     "tally_host",
@@ -111,8 +109,6 @@ def is_tally_enabled(db: Session) -> bool:
     return get_setting(db, "tally_enabled", "false").lower() == "true"
 
 
-# ---------- Company profiles ----------
-
 def current_company_config(db: Session) -> dict[str, str]:
     return {key: get_setting(db, key) for key in COMPANY_SETTING_KEYS}
 
@@ -126,7 +122,6 @@ def get_active_company(db: Session) -> Company | None:
 
 
 def ensure_company_records(db: Session) -> None:
-    """Seed a company from live settings only after real company data exists."""
     if db.scalar(select(Company.id).limit(1)):
         if not get_active_company(db):
             first = db.scalar(select(Company).order_by(Company.id))
@@ -178,8 +173,6 @@ def activate_company(db: Session, company_id: int) -> None:
     for other in list_companies(db):
         other.is_active = other.id == company.id
     db.commit()
-    # Load the profile into the live settings. Disable sync until Tally Check
-    # is re-verified against the newly active company's masters.
     update_settings(db, {**json.loads(company.config), "tally_enabled": "false"})
 
 
@@ -196,7 +189,6 @@ def delete_company(db: Session, company_id: int) -> None:
 
 
 def save_active_company_config(db: Session, config: dict[str, str]) -> None:
-    """Mirror live company settings back into the active company's saved profile."""
     company = get_active_company(db)
     if not company:
         return

@@ -75,6 +75,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(40), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -237,17 +238,11 @@ class Setting(Base):
 
 
 class Company(Base):
-    """A saved Tally company profile (connection + voucher/ledger names).
-
-    The active company's config is mirrored into the `settings` table, which
-    remains the single source the sync layer reads from.
-    """
-
     __tablename__ = "companies"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
-    config: Mapped[str] = mapped_column(Text)  # JSON of the per-company setting keys
+    config: Mapped[str] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 

@@ -63,8 +63,6 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/dashboard/data")
 def dashboard_data(request: Request, db: Session = Depends(get_db)):
-    """Live data for the dashboard poller (live.js). Renders the same row
-    partials the page uses, so markup stays single-sourced."""
     require_permission(request, db, "dashboard_data")
     batches_html = templates.env.get_template("partials/dashboard_batches.html").render(
         recent_batches=_recent_batches(db)

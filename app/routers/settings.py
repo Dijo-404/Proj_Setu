@@ -163,8 +163,6 @@ def autosave_settings(
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Field-level auto-save for the active company. Never changes tally_enabled
-    (enabling sync must go through the explicit Save button + readiness gate)."""
     require_permission(request, db, "settings_edit")
     requested = {
         "company_name": company_name.strip(),

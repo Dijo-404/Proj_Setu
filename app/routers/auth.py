@@ -9,10 +9,13 @@ from app.auth import SESSION_COOKIE, current_user, get_user_by_username
 from app.config import get_settings
 from app.database import get_db
 from app.models import LoginAudit
-from app.security import create_session_token, verify_password
+from app.security import create_session_token, hash_password, verify_password
 from app.templates import templates
 
 router = APIRouter()
+
+# Keeps missing/inactive usernames on the normal password-verify path.
+_DUMMY_PASSWORD_HASH = hash_password("setu-dummy-password-never-matches")
 
 
 def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int:
@@ -56,7 +59,11 @@ def login(
         )
 
     user = get_user_by_username(db, normalized)
-    ok = bool(user and user.active and verify_password(password, user.password_hash))
+    if user and user.active:
+        ok = verify_password(password, user.password_hash)
+    else:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
+        ok = False
     db.add(
         LoginAudit(
             username=normalized,
@@ -89,6 +96,13 @@ def login(
 
 @router.post("/logout")
 def logout():
+    settings = get_settings()
     response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
     return response

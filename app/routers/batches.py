@@ -197,7 +197,7 @@ def fefo_pick_into_batch(
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
-                "error": str(exc),
+                "fefo_error": str(exc),
             },
             status_code=400,
         )
@@ -285,6 +285,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
         if batch.batch_type == BatchType.AUDIT.value:
             reconcile_audit_batch(db, batch)
     except (InventoryError, ValueError) as exc:
+        db.rollback()
         return templates.TemplateResponse(
             request,
             "batch_detail.html",

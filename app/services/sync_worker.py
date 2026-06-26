@@ -24,7 +24,6 @@ def retry_pending_batches(limit: int = 10) -> int:
             select(Batch)
             .where(
                 Batch.status == BatchStatus.PENDING_SYNC.value,
-                # Skip types held at PENDING_SYNC by design; retrying them only churns retry_count/SyncAttempt.
                 Batch.batch_type.in_(TALLY_XML_SUPPORTED_BATCH_TYPES),
             )
             .order_by(Batch.last_retry_at.is_not(None), Batch.last_retry_at, Batch.created_at)

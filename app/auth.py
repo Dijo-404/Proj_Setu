@@ -23,10 +23,16 @@ def current_user(request: Request, db: Session) -> User | None:
     return user
 
 
+PASSWORD_CHANGE_PATH = "/account/password"
+_PASSWORD_GATE_EXEMPT = {PASSWORD_CHANGE_PATH, "/logout"}
+
+
 def require_user(request: Request, db: Session, roles: set[Role] | None = None) -> User:
     user = current_user(request, db)
     if not user:
         raise redirect_exception("/login")
+    if user.must_change_password and request.url.path not in _PASSWORD_GATE_EXEMPT:
+        raise redirect_exception(PASSWORD_CHANGE_PATH)
     try:
         role = Role(user.role)
     except ValueError as exc:
