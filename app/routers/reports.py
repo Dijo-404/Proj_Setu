@@ -8,7 +8,7 @@ from fastapi.responses import Response, StreamingResponse
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Batch, InventoryTransaction, Product, ScanLog, TransactionType
 from app.services.charts import bar_chart, donut_chart
@@ -98,7 +98,7 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
 
 @router.get("")
 def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "reports_data")
     scans = db.scalars(scan_query(action, start, end)).all()
     transactions = db.scalars(transaction_query(action, q, start, end)).all()
     transaction_counts = Counter(txn.transaction_type for txn in transactions)
@@ -135,7 +135,7 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
 
 @router.get("/scans.csv")
 def scans_csv(request: Request, action: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "reports_export")
     scans = db.scalars(scan_query(action, start, end)).all()
     stream = StringIO()
     writer = csv.writer(stream)
@@ -165,7 +165,7 @@ def scans_csv(request: Request, action: str = "", start: str = "", end: str = ""
 
 @router.get("/scans.xlsx")
 def scans_excel(request: Request, action: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "reports_export")
     scans = db.scalars(scan_query(action, start, end)).all()
     return Response(
         scans_xlsx(scans),
@@ -176,7 +176,7 @@ def scans_excel(request: Request, action: str = "", start: str = "", end: str = 
 
 @router.get("/transactions.csv")
 def transactions_csv(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "reports_export")
     transactions = db.scalars(transaction_query(action, q, start, end)).all()
     stream = StringIO()
     writer = csv.writer(stream)
@@ -231,7 +231,7 @@ def transactions_csv(request: Request, action: str = "", q: str = "", start: str
 
 @router.get("/transactions.xlsx")
 def transactions_excel(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "reports_export")
     transactions = db.scalars(transaction_query(action, q, start, end)).all()
     return Response(
         transactions_xlsx(transactions),

@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Role, User
 from app.security import hash_password
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/users")
 
 @router.get("")
 def users_page(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "users_manage")
     users = db.scalars(select(User).order_by(User.username)).all()
     return templates.TemplateResponse(
         request,
@@ -31,7 +31,7 @@ def create_user(
     role: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "users_manage")
     db.add(User(username=username.strip().lower(), password_hash=hash_password(password), role=Role(role).value, active=True))
     try:
         db.commit()
@@ -49,7 +49,7 @@ def create_user(
 
 @router.post("/{user_id}/toggle")
 def toggle_user(request: Request, user_id: int, db: Session = Depends(get_db)):
-    current = require_user(request, db, ADMIN_ROLES)
+    current = require_permission(request, db, "users_manage")
     target = db.get(User, user_id)
     if target and target.id != current.id:
         target.active = not target.active

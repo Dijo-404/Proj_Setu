@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Product, SerialStatus
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/products")
 
 @router.get("")
 def products(request: Request, q: str = "", error: str = "", db: Session = Depends(get_db)):
-    user = require_user(request, db)
+    user = require_permission(request, db, "product_master")
     error_message = {"serial_generation_failed": "Barcode generation failed"}.get(error, error)
     query = select(Product).order_by(Product.product_code)
     if q:
@@ -43,7 +43,7 @@ def create_product(
     tally_stock_item_name: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "product_create")
     product = Product(
         product_code=product_code.strip().upper(),
         product_name=product_name.strip(),
@@ -82,7 +82,7 @@ def generate_product_serials(
     warehouse: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "product_create")
     product = db.get(Product, product_id)
     if not product:
         return RedirectResponse("/products", status_code=303)

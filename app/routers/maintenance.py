@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.services.backup import create_sqlite_backup, sqlite_database_path
 from app.templates import templates
@@ -12,7 +12,7 @@ router = APIRouter(prefix="/maintenance")
 
 @router.get("")
 def maintenance_page(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "backup_data")
     return templates.TemplateResponse(
         request,
         "maintenance.html",
@@ -22,7 +22,7 @@ def maintenance_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/backup.db")
 def download_backup(request: Request, db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "backup_download")
     backup = create_sqlite_backup()
     return Response(
         backup.data,

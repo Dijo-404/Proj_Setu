@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import ScanLog, TransactionType
 from app.services.inventory import InventoryError
@@ -15,7 +15,7 @@ router = APIRouter()
 @router.get("/qr-replacement")
 @router.get("/barcode-replacement")
 def replacement_page(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_replacement")
     logs = db.scalars(
         select(ScanLog).where(ScanLog.action == TransactionType.QR_REPLACEMENT.value).order_by(desc(ScanLog.created_at)).limit(40)
     ).all()
@@ -35,7 +35,7 @@ def replace_qr(
     reason: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_replacement")
     logs = db.scalars(
         select(ScanLog).where(ScanLog.action == TransactionType.QR_REPLACEMENT.value).order_by(desc(ScanLog.created_at)).limit(40)
     ).all()

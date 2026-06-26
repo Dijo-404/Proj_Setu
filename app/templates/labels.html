@@ -8,7 +8,7 @@
   </div>
   <div class="actions">
     <a class="button" href="/serials/labels.xlsx?ids={{ label_ids }}">Download Excel</a>
-    {% if is_admin %}
+    {% if can_manage_labels %}
     {% set label_pdf_action = '/serials/labels.pdf' %}
     {% set label_pdf_ids = label_ids %}
     <a class="button" href="/serials/labels.pdf?ids={{ label_ids }}" data-label-pdf-open>Download PDF</a>
@@ -24,14 +24,14 @@
   </div>
 </section>
 
-{% if not is_admin %}
-<div class="alert warn print-hide">Only admin users can use the print option.</div>
+{% if not can_manage_labels %}
+<div class="alert warn print-hide">This role can download label Excel, but cannot print labels or download label PDF.</div>
 {% endif %}
 {% if printed_serials %}
 <div class="alert warn print-hide">Print option already used for {{ printed_serials|length }} selected label{{ '' if printed_serials|length == 1 else 's' }}.</div>
 {% endif %}
 
-{% if is_admin %}
+{% if can_manage_labels %}
 <section class="panel label-controls print-hide" data-label-dimensions>
   <h2>Print dimensions</h2>
   <div class="grid-form compact">
@@ -54,7 +54,7 @@
   <div class="empty">No labels selected</div>
   {% endfor %}
 </section>
-{% if is_admin %}
+{% if can_manage_labels %}
 {% include "partials/label_pdf_dialog.html" %}
 <script src="/static/label-pdf-dialog.js"></script>
 {% endif %}

@@ -3,16 +3,16 @@ from fastapi.responses import JSONResponse, Response
 from sqlalchemy import desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Batch, InventoryTransaction, Product, ScanLog, Serial
+from app.services.access_control import role_has_access
 from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, barcode_png, label_layout, serials_xlsx
 from app.services.label_printing import LabelPrintError, mark_serial_labels_printed_once
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
 
 router = APIRouter(prefix="/serials")
-ADMIN_ROLE_VALUES = {role.value for role in ADMIN_ROLES}
 
 
 def _parse_ids(ids: str) -> list[int]:
@@ -21,7 +21,7 @@ def _parse_ids(ids: str) -> list[int]:
 
 @router.get("")
 def serials(request: Request, q: str = "", status: str = "", db: Session = Depends(get_db)):
-    user = require_user(request, db)
+    user = require_permission(request, db, "serial_data")
     query = select(Serial).join(Product).order_by(Serial.created_at.desc()).limit(250)
     if q:
         like = f"%{q.strip()}%"
@@ -38,7 +38,7 @@ def serials(request: Request, q: str = "", status: str = "", db: Session = Depen
 
 @router.get("/{serial_id}/barcode.png")
 def serial_barcode(serial_id: int, request: Request, db: Session = Depends(get_db)):
-    require_user(request, db)
+    require_permission(request, db, "serial_data")
     serial = db.get(Serial, serial_id)
     if not serial:
         raise HTTPException(status_code=404)
@@ -47,13 +47,13 @@ def serial_barcode(serial_id: int, request: Request, db: Session = Depends(get_d
 
 @router.get("/labels")
 def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
-    user = require_user(request, db)
+    user = require_permission(request, db, "label_files")
     parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
     printed_serials = [serial for serial in rows if serial.label_printed_at]
-    is_admin = user.role in ADMIN_ROLE_VALUES
+    can_manage_labels = role_has_access(db, user.role, "label_files", {"edit"})
     return templates.TemplateResponse(
         request,
         "labels.html",
@@ -62,8 +62,8 @@ def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
             "user": user,
             "serials": rows,
             "printed_serials": printed_serials,
-            "is_admin": is_admin,
-            "can_print": bool(rows) and is_admin and not printed_serials,
+            "can_manage_labels": can_manage_labels,
+            "can_print": bool(rows) and can_manage_labels and not printed_serials,
             "label_ids": ",".join(str(serial.id) for serial in rows),
             "label_pdf_rows": DEFAULT_LABEL_ROWS,
             "label_pdf_columns": DEFAULT_LABEL_COLUMNS,
@@ -73,7 +73,7 @@ def labels(request: Request, ids: str = "", db: Session = Depends(get_db)):
 
 @router.post("/labels/print")
 async def mark_labels_printed(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "label_files", {"edit"})
     try:
         payload = await request.json()
     except ValueError:
@@ -104,7 +104,7 @@ def labels_pdf(
     columns_per_page: int = DEFAULT_LABEL_COLUMNS,
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "label_files", {"edit"})
     parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
@@ -119,7 +119,7 @@ def labels_pdf(
 
 @router.get("/labels.xlsx")
 def labels_xlsx(request: Request, ids: str = "", db: Session = Depends(get_db)):
-    require_user(request, db)
+    require_permission(request, db, "label_files")
     parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
@@ -133,7 +133,7 @@ def labels_xlsx(request: Request, ids: str = "", db: Session = Depends(get_db)):
 
 @router.get("/{serial_id}")
 def serial_detail(serial_id: int, request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db)
+    user = require_permission(request, db, "serial_data")
     serial = db.scalar(select(Serial).where(Serial.id == serial_id).options(selectinload(Serial.product)))
     if not serial:
         raise HTTPException(status_code=404)

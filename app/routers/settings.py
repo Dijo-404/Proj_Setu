@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
+from app.services.access_control import ROLE_COLUMNS, config_from_form, role_access_sections, save_role_access_config
 from app.services.settings import (
     DEFAULT_SETTINGS,
     activate_company,
@@ -41,7 +42,7 @@ def render_settings(request: Request, db: Session, *, settings: dict | None = No
         "settings.html",
         {
             "request": request,
-            "user": require_user(request, db, ADMIN_ROLES),
+            "user": require_permission(request, db, "settings_edit"),
             "settings": settings if settings is not None else get_all_settings(db),
             "keys": DEFAULT_SETTINGS.keys(),
             "companies": list_companies(db),
@@ -55,8 +56,31 @@ def render_settings(request: Request, db: Session, *, settings: dict | None = No
 
 @router.get("")
 def settings_page(request: Request, db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     return render_settings(request, db)
+
+
+@router.get("/access")
+def access_overview(request: Request, db: Session = Depends(get_db)):
+    user = require_permission(request, db, "role_access_edit")
+    return templates.TemplateResponse(
+        request,
+        "role_access.html",
+        {
+            "request": request,
+            "user": user,
+            "roles": ROLE_COLUMNS,
+            "sections": role_access_sections(db),
+        },
+    )
+
+
+@router.post("/access")
+async def save_access_overview(request: Request, db: Session = Depends(get_db)):
+    require_permission(request, db, "role_access_edit")
+    form = await request.form()
+    save_role_access_config(db, config_from_form(form.multi_items()))
+    return RedirectResponse("/settings/access", status_code=303)
 
 
 @router.post("")
@@ -77,7 +101,7 @@ def save_settings(
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     current_settings = get_all_settings(db)
     requested = {
         "company_name": company_name.strip(),
@@ -141,7 +165,7 @@ def autosave_settings(
 ):
     """Field-level auto-save for the active company. Never changes tally_enabled
     (enabling sync must go through the explicit Save button + readiness gate)."""
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     requested = {
         "company_name": company_name.strip(),
         "tally_host": tally_host.strip(),
@@ -181,7 +205,7 @@ def create_company(
     default_party_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     config = {
         "company_name": company_name,
         "tally_host": tally_host,
@@ -204,7 +228,7 @@ def create_company(
 
 @router.post("/companies/{company_id}/activate")
 def activate(request: Request, company_id: int, db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     try:
         activate_company(db, company_id)
     except ValueError as exc:
@@ -214,7 +238,7 @@ def activate(request: Request, company_id: int, db: Session = Depends(get_db)):
 
 @router.post("/companies/{company_id}/delete")
 def remove_company(request: Request, company_id: int, db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "settings_edit")
     try:
         delete_company(db, company_id)
     except ValueError as exc:

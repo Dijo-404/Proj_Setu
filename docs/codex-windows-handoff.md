@@ -20,6 +20,7 @@ Implemented:
 - Batch pricing and voucher preview with GST split, round off, and final value
 - Tally XML generation for purchase/receive and sale batches
 - Tally Check master-readiness page
+- Editable admin role access controls for pages, actions, and data areas
 - Live sync gate: Tally sync cannot be enabled until Tally Check is complete
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation: verified, missing, extra
@@ -31,7 +32,7 @@ Implemented:
 Latest verified test result in Linux workspace using Python 3.11.14 (`.venv311`):
 
 ```text
-46 passed
+52 passed
 ```
 
 ## Windows Setup Commands

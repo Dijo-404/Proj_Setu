@@ -20,6 +20,8 @@ Setu is used from a browser on the factory LAN. Staff sign in, scan barcode seri
 
 Manual serial entry is admin-only. Non-admin users should use the camera or photo scan controls.
 
+Admins can open `Settings` -> `Role access` to review and change which pages are shown, which actions each role can perform, and what data each role can view or modify.
+
 ## Admin Setup
 
 1. Open `Settings`.

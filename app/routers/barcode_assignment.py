@@ -3,7 +3,7 @@ from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import ADMIN_ROLES, require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Batch, BatchItem, BatchType, Product, Serial
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
@@ -29,7 +29,7 @@ def _assignment_batch(db: Session, batch_id: int) -> Batch | None:
 
 @router.get("")
 def assignment_page(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_assignment")
     products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
     batches = db.scalars(
         select(Batch)
@@ -57,7 +57,7 @@ def generate_assignment(
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_assignment")
     product = db.get(Product, product_id)
     if not product:
         return _assignment_error(request, db, user, "Product not found")
@@ -95,7 +95,7 @@ def bulk_assignment(
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_assignment")
     try:
         data = upload.file.read(MAX_BULK_ASSIGNMENT_UPLOAD_BYTES + 1)
         if len(data) > MAX_BULK_ASSIGNMENT_UPLOAD_BYTES:
@@ -109,7 +109,7 @@ def bulk_assignment(
 
 @router.get("/{batch_id}")
 def assignment_detail(request: Request, batch_id: int, db: Session = Depends(get_db)):
-    user = require_user(request, db, ADMIN_ROLES)
+    user = require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
@@ -134,7 +134,7 @@ def assignment_labels_pdf(
     columns_per_page: int = DEFAULT_LABEL_COLUMNS,
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
@@ -149,7 +149,7 @@ def assignment_labels_pdf(
 
 @router.get("/{batch_id}/serials.xlsx")
 def assignment_serials_xlsx(request: Request, batch_id: int, db: Session = Depends(get_db)):
-    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)

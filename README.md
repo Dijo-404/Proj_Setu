@@ -14,6 +14,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Tally XML generation for purchase/receive and sale batches
 - Tally Check screen for exact-name master readiness
 - Saved Tally company profiles with active-company settings
+- Editable admin role access controls for pages, actions, and data areas
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation for verified, missing, and extra serials
 - Dashboard counts, charts, recent activity, and live refresh
@@ -311,7 +312,7 @@ python -m pytest
 Expected result:
 
 ```text
-46 passed
+52 passed
 ```
 
 The current pinned dependencies are verified with Python 3.11. A Python 3.13 virtual environment may fail before tests start with the current SQLAlchemy pin.

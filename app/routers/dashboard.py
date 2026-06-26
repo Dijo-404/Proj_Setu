@@ -6,7 +6,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session
 
-from app.auth import require_user
+from app.auth import require_permission
 from app.database import get_db
 from app.models import Batch, ScanLog
 from app.services.charts import bar_chart, donut_chart
@@ -45,7 +45,7 @@ def _chart_context(db: Session):
 
 @router.get("/")
 def dashboard(request: Request, db: Session = Depends(get_db)):
-    user = require_user(request, db)
+    user = require_permission(request, db, "dashboard_data")
     return templates.TemplateResponse(
         request,
         "dashboard.html",
@@ -65,7 +65,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 def dashboard_data(request: Request, db: Session = Depends(get_db)):
     """Live data for the dashboard poller (live.js). Renders the same row
     partials the page uses, so markup stays single-sourced."""
-    require_user(request, db)
+    require_permission(request, db, "dashboard_data")
     batches_html = templates.env.get_template("partials/dashboard_batches.html").render(
         recent_batches=_recent_batches(db)
     )

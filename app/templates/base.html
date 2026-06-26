@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#000000">
   <title>{% block title %}Setu Barcode Tally Bridge{% endblock %}</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260624-expiry-1">
+  <link rel="stylesheet" href="/static/styles.css?v=20260626-access-6">
 </head>
 <body>
   {% if user %}
@@ -22,38 +22,51 @@
   </header>
   <nav class="subnav" aria-label="Sections">
     <div class="subnav__inner">
+      {% if role_can(user.role, 'page_dashboard') %}
       <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
+      {% endif %}
+      {% if role_can(user.role, 'page_batches') %}
       <details class="nav-menu">
         <summary class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</summary>
         <div class="nav-menu__panel">
-          <a href="/batches/new?batch_type=PURCHASE">Purchase</a>
-          <a href="/batches/new?batch_type=SALE">Sale</a>
-          <a href="/batches/new?batch_type=AUDIT">Audit</a>
-          <a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
-          <a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>
-          <a href="/batches/new?batch_type=ISSUE">Issue</a>
-          <a href="/batches">All batches</a>
+          {% if role_can(user.role, 'batch_purchase') %}<a href="/batches/new?batch_type=PURCHASE">Purchase</a>{% endif %}
+          {% if role_can(user.role, 'batch_sale') %}<a href="/batches/new?batch_type=SALE">Sale</a>{% endif %}
+          {% if role_can(user.role, 'batch_audit') %}<a href="/batches/new?batch_type=AUDIT">Audit</a>{% endif %}
+          {% if role_can(user.role, 'batch_sales_return') %}<a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>{% endif %}
+          {% if role_can(user.role, 'batch_purchase_return') %}<a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>{% endif %}
+          {% if role_can(user.role, 'batch_issue') %}<a href="/batches/new?batch_type=ISSUE">Issue</a>{% endif %}
+          {% if role_can(user.role, 'batch_list') %}<a href="/batches">All batches</a>{% endif %}
         </div>
       </details>
+      {% endif %}
+      {% if role_can(user.role, 'page_serials') %}
       <a href="/serials" class="{{ 'active' if request.url.path.startswith('/serials') else '' }}">Serials</a>
-      {% if user.role in ['admin', 'super_admin'] %}
+      {% endif %}
+      {% if role_can(user.role, 'page_reports') %}
       <a href="/reports" class="{{ 'active' if request.url.path.startswith('/reports') else '' }}">Reports</a>
+      {% endif %}
+      {% if role_can(user.role, 'page_tally_check') %}
       <a href="/tally-check" class="{{ 'active' if request.url.path.startswith('/tally-check') else '' }}">Tally Check</a>
+      {% endif %}
+      {% if role_can(user.role, 'page_barcodes') %}
       <details class="nav-menu">
         <summary class="{{ 'active' if request.url.path.startswith('/barcode-assignment') or request.url.path.startswith('/barcode-replacement') or request.url.path.startswith('/qr-replacement') else '' }}">Barcodes</summary>
         <div class="nav-menu__panel">
-          <a href="/barcode-assignment">Assignment</a>
-          <a href="/barcode-replacement">Replacement</a>
+          {% if role_can(user.role, 'barcode_assignment') %}<a href="/barcode-assignment">Assignment</a>{% endif %}
+          {% if role_can(user.role, 'barcode_replacement') %}<a href="/barcode-replacement">Replacement</a>{% endif %}
         </div>
       </details>
+      {% endif %}
+      {% if role_can(user.role, 'page_admin_menu') %}
       <details class="nav-menu">
         <summary class="{{ 'active' if request.url.path.startswith('/products') or request.url.path.startswith('/expiry') or request.url.path.startswith('/settings') or request.url.path.startswith('/maintenance') or request.url.path.startswith('/users') else '' }}">Admin</summary>
         <div class="nav-menu__panel">
-          <a href="/products">Products</a>
-          <a href="/expiry">Expiry</a>
-          <a href="/settings">Settings</a>
-          <a href="/maintenance">Maintenance</a>
-          <a href="/users">Users</a>
+          {% if role_can(user.role, 'page_products') %}<a href="/products">Products</a>{% endif %}
+          {% if role_can(user.role, 'page_expiry') %}<a href="/expiry">Expiry</a>{% endif %}
+          {% if role_can(user.role, 'page_settings') %}<a href="/settings">Settings</a>{% endif %}
+          {% if role_can(user.role, 'page_role_access') %}<a href="/settings/access">Role access</a>{% endif %}
+          {% if role_can(user.role, 'page_maintenance') %}<a href="/maintenance">Maintenance</a>{% endif %}
+          {% if role_can(user.role, 'page_users') %}<a href="/users">Users</a>{% endif %}
         </div>
       </details>
       {% endif %}
@@ -119,6 +132,6 @@
   <main class="page">
     {% block content %}{% endblock %}
   </main>
-  <script src="/static/autosave.js?v=20260624-expiry-1"></script>
+  <script src="/static/autosave.js?v=20260626-access-6"></script>
 </body>
 </html>

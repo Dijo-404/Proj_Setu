@@ -194,6 +194,247 @@ tfoot th, tfoot td {
   min-width: 100%;
 }
 
+.access-table {
+  min-width: 980px;
+}
+
+.access-matrix-scroll {
+  display: grid;
+  gap: 15px;
+  overflow: visible;
+}
+
+.access-matrix-scroll--limited {
+  max-height: min(760px, calc(100vh - 235px));
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 10px;
+  scrollbar-gutter: stable;
+}
+
+.access-section.panel {
+  margin-bottom: 0;
+  overflow: visible;
+}
+
+.access-table-scroll {
+  overflow: visible;
+  border-radius: var(--r-md);
+}
+
+.access-table-scroll table {
+  min-width: 100%;
+}
+
+.access-table-scroll th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: rgba(250, 250, 252, 0.96);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: inset 0 -1px var(--hairline);
+}
+
+.access-table td,
+.access-table th {
+  vertical-align: top;
+}
+
+.access-table td:nth-child(n+3):nth-child(-n+7),
+.access-table th:nth-child(n+3):nth-child(-n+7) {
+  text-align: center;
+  white-space: nowrap;
+}
+
+.access-select {
+  width: 124px;
+  min-width: 124px;
+  height: 38px;
+  min-height: 38px;
+  padding: 5px 30px 5px 16px;
+  border-radius: var(--r-pill);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  text-align-last: center;
+}
+
+.access-picker-ready .access-native-select {
+  position: absolute;
+  width: 1px;
+  min-width: 1px;
+  height: 1px;
+  min-height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.access-picker {
+  position: relative;
+  display: inline-flex;
+  justify-content: center;
+  width: 124px;
+  min-width: 124px;
+}
+
+.access-picker__button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 124px;
+  min-width: 124px;
+  height: 38px;
+  min-height: 38px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: var(--r-pill);
+  padding: 5px 34px 5px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38);
+  transition: border-color var(--dur) var(--ease), box-shadow var(--dur) var(--ease),
+    filter var(--dur) var(--ease);
+}
+
+.access-picker__button::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-2px) rotate(45deg);
+  opacity: 0.88;
+}
+
+.access-picker__button:hover {
+  filter: saturate(1.08);
+  border-color: rgba(0, 0, 0, 0.18);
+}
+
+.access-picker__button:focus-visible,
+.access-picker.is-open .access-picker__button {
+  outline: none;
+  border-color: rgba(0, 102, 204, 0.72);
+  box-shadow: 0 0 0 3px rgba(0, 102, 204, 0.18),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.44);
+}
+
+.access-picker__menu {
+  position: absolute;
+  top: calc(100% + 7px);
+  left: 50%;
+  z-index: 12;
+  display: none;
+  width: 124px;
+  padding: 5px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--e2);
+  transform: translateX(-50%);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  backdrop-filter: saturate(180%) blur(18px);
+}
+
+.access-picker.is-open .access-picker__menu {
+  display: grid;
+  gap: 3px;
+}
+
+.access-picker__option {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 34px;
+  border: 0;
+  border-radius: var(--r-pill);
+  padding: 6px 10px;
+  background: transparent;
+  color: var(--ink-80);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.access-picker__option:hover,
+.access-picker__option:focus-visible {
+  outline: none;
+  background: var(--parchment);
+}
+
+.access-picker__option.is-selected {
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.07);
+}
+
+.access-table .status {
+  justify-content: center;
+  width: 124px;
+  min-width: 124px;
+  height: 38px;
+  min-height: 38px;
+  padding: 5px 16px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.access-select--synced {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+.access-select--failed {
+  background: var(--bad-bg);
+  color: var(--bad-fg);
+}
+
+.access-select--generated,
+.access-select--pending_sync {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.access-picker__button--synced,
+.access-picker__option--synced.is-selected {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+.access-picker__button--failed,
+.access-picker__option--failed.is-selected {
+  background: var(--bad-bg);
+  color: var(--bad-fg);
+}
+
+.access-picker__button--generated,
+.access-picker__button--pending_sync,
+.access-picker__option--generated.is-selected,
+.access-picker__option--pending_sync.is-selected {
+  background: var(--warn-bg);
+  color: var(--warn-fg);
+}
+
+.access-save {
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+
+@media (max-width: 1100px) {
+  .access-table-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+}
+
 .table-scroll th {
   position: sticky;
   top: 0;
