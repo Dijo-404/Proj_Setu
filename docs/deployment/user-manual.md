@@ -1,6 +1,6 @@
 # User Manual
 
-Setu is used from a browser on the factory LAN. Staff sign in, scan barcode serials, and submit stock movements. Tally remains the accounting and inventory master; Setu keeps serial-level traceability and posts only the supported voucher types after admin validation.
+Setu is used from a browser on the factory LAN. Staff sign in, scan serial QR labels, and submit stock movements. Tally remains the accounting and inventory master; Setu keeps serial-level traceability and posts only the supported voucher types after admin validation.
 
 ## Common Navigation
 
@@ -22,6 +22,8 @@ Manual serial entry is admin-only. Non-admin users should use the camera or phot
 
 Admins can open `Settings` -> `Role access` to review and change which pages are shown, which actions each role can perform, and what data each role can view or modify.
 
+Only super admins can delete users. Deleted users with old batches, scans, or reports are removed from the Users list and cannot log in, but their historical records are kept.
+
 ## Admin Setup
 
 1. Open `Settings`.
@@ -39,13 +41,13 @@ Settings fields auto-save while editing. The sync checkbox is saved only by the 
 1. Open `Products`.
 2. Create or search product masters.
 3. Set default rate and sales discount % when the product uses a standard sale discount.
-4. Use `Generate Barcode` to create serials.
+4. Generate QR labels to create serials.
 5. Choose `Generated` for labels that are not yet in stock.
 6. Choose `Existing stock` for physical stock already present in the factory.
 7. Add product batch and expiry details when they are known.
 8. Open the generated assignment batch to download labels PDF or serial XLSX.
 
-Labels contain only the barcode and serial text. They do not include price, GST, customer, or product data.
+Labels contain only a QR code and serial text. They do not include price, GST, customer, or product data. The default print/PDF layout is for 48.5 mm x 25.4 mm labels, 4 columns by 11 rows on A4.
 
 ## Barcode Assignment
 
@@ -56,7 +58,7 @@ Single-product assignment:
 1. Select the product.
 2. Enter quantity.
 3. Optional: prefix, product batch, warehouse, manufacturing date, expiry date, and notes.
-4. Generate barcodes.
+4. Generate QR labels.
 
 Bulk assignment accepts `.xlsx` files up to 5 MB with these columns:
 

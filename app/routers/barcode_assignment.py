@@ -143,7 +143,7 @@ def assignment_labels_pdf(
     return Response(
         barcode_labels_pdf(serials, rows_per_page=rows_per_page, columns_per_page=columns_per_page),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-barcode-labels.pdf"},
+        headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-qr-labels.pdf"},
     )
 
 

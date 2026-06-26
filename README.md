@@ -6,7 +6,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 
 - Role-based login for admin, purchase, sales, and audit users
 - Product master with HSN, GST, unit, default rate, sales discount, and exact Tally stock item name
-- Bulk barcode serial generation and printable/PDF Code128 labels with the serial number only
+- Bulk serial generation and printable/PDF QR labels with the serial number only
 - Product batch, manufacturing date, expiry date, and warehouse tracking for assigned stock
 - Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit
@@ -150,9 +150,10 @@ After logging in:
 
 1. Open `Users`.
 2. Create named users for purchase, sales, auditor, and admin roles.
-3. Disable unused accounts or change the bootstrap admin password before production.
+3. Disable unused accounts or, as super admin, delete accounts that should no longer appear in the user list.
+4. Change the bootstrap admin password before production.
 
-Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setu.db` already exists does not reset an existing user. Create or disable users from the `Users` page.
+Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setu.db` already exists does not reset an existing user. Create, disable, or delete users from the `Users` page. Deleted users with old activity are hidden from the list but kept internally for historical records.
 
 ## 7. Basic Setup Inside The App
 
@@ -164,7 +165,7 @@ Do this in order:
 4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
 5. Open `Products`.
 6. Create products using exact Tally stock item names, HSN, GST rate, unit, default rate, and sales discount if applicable.
-7. Generate barcode serials from `Products`, or use `Barcode Assignment` for existing physical stock.
+7. Generate serial QR labels from `Products`, or use `Barcode Assignment` for existing physical stock.
 8. Open `Tally Check`.
 9. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
 10. Enable Tally sync only after Tally Check has no missing or unchecked items and a test XML is validated in Tally.
@@ -204,7 +205,7 @@ Returns and issue:
 - `Purchase return`: scan or FEFO-pick in-stock items returned to supplier.
 - `Issue`: scan or FEFO-pick in-stock items issued for sample, office use, damage, marketing, production, or other reasons.
 
-Barcode assignment:
+QR label assignment:
 
 1. Open `Barcodes` -> `Assignment`.
 2. Select an existing product and quantity, or upload an Excel file.
@@ -265,8 +266,8 @@ Use batch detail pages for:
 Use label pages for:
 
 - Browser print
-- Barcode label PDF download
-- Barcode serial XLSX download
+- QR label PDF download
+- Serial XLSX download
 
 Use `Expiry` for:
 
@@ -312,7 +313,7 @@ python -m pytest
 Expected result:
 
 ```text
-56 passed
+66 passed
 ```
 
 The current pinned dependencies are verified with Python 3.11. A Python 3.13 virtual environment may fail before tests start with the current SQLAlchemy pin.

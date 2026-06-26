@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Users · Setu{% endblock %}
+{% block title %}Users - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -34,7 +34,7 @@
 <section class="panel">
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Username</th><th>Role</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Username</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
         {% for row in users %}
         <tr>
@@ -42,11 +42,18 @@
           <td>{{ row.role }}</td>
           <td><span class="status {{ 'synced' if row.active else 'failed' }}">{{ 'ACTIVE' if row.active else 'DISABLED' }}</span></td>
           <td>
+            <div class="user-actions">
             {% if row.id != user.id %}
             <form method="post" action="/users/{{ row.id }}/toggle">
               <button class="button small ghost" type="submit">{{ 'Disable' if row.active else 'Enable' }}</button>
             </form>
             {% endif %}
+            {% if user.role == 'super_admin' and row.id != user.id %}
+            <form method="post" action="/users/{{ row.id }}/delete" onsubmit="return confirm('Delete this user? Accounts with activity history will be removed from this list but kept for old records.');">
+              <button class="button small danger" type="submit">Delete user</button>
+            </form>
+            {% endif %}
+            </div>
           </td>
         </tr>
         {% endfor %}

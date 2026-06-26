@@ -1,25 +1,28 @@
 from __future__ import annotations
 
 from io import BytesIO
+from xml.sax.saxutils import escape
 
+import qrcode
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.platypus import Image, PageBreak, SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-from reportlab.lib.styles import getSampleStyleSheet
-import barcode
-from barcode.writer import ImageWriter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from PIL import Image as PILImage
 
 from app.models import Batch, InventoryTransaction, ScanLog, Serial
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 
-DEFAULT_LABEL_ROWS = 7
-DEFAULT_LABEL_COLUMNS = 3
+LABEL_WIDTH_MM = 48.5
+LABEL_HEIGHT_MM = 25.4
+QR_SIZE_MM = 19.5
+DEFAULT_LABEL_ROWS = 11
+DEFAULT_LABEL_COLUMNS = 4
 MIN_LABEL_ROWS = 1
-MAX_LABEL_ROWS = 20
+MAX_LABEL_ROWS = 11
 MIN_LABEL_COLUMNS = 1
-MAX_LABEL_COLUMNS = 8
+MAX_LABEL_COLUMNS = 4
 DANGEROUS_SPREADSHEET_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
@@ -39,11 +42,17 @@ def safe_row(values):
 
 
 def barcode_png(value: str) -> bytes:
-    """Render a Code128 barcode (with the value as human-readable text) as PNG bytes."""
-    writer = ImageWriter()
-    code = barcode.get("code128", value, writer=writer)
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_Q,
+        box_size=12,
+        border=4,
+    )
+    qr.add_data(value)
+    qr.make(fit=True)
+    image = qr.make_image(fill_color="black", back_color="white").convert("RGB")
     stream = BytesIO()
-    code.write(stream, options={"module_height": 12.0, "font_size": 10, "text_distance": 3.0, "quiet_zone": 2.0})
+    image.save(stream, format="PNG")
     return stream.getvalue()
 
 
@@ -197,6 +206,38 @@ def _label_image(value: str, target_width: float, target_height: float | None = 
     return Image(BytesIO(png), width=width, height=height)
 
 
+def _label_cell(value: str, target_width: float, target_height: float) -> Table:
+    qr_size = min(QR_SIZE_MM * mm, target_height, target_width * 0.48)
+    text_width = max(10 * mm, target_width - qr_size - 2 * mm)
+    qr_image = _label_image(value, qr_size, qr_size)
+    serial_style = ParagraphStyle(
+        "LabelSerial",
+        fontName="Helvetica-Bold",
+        fontSize=7.2,
+        leading=8.2,
+        textColor=colors.black,
+        alignment=0,
+    )
+    label = Table(
+        [[qr_image, Paragraph(escape(value), serial_style)]],
+        colWidths=[qr_size, text_width],
+        rowHeights=[target_height],
+    )
+    label.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 0),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    return label
+
+
 def barcode_labels_pdf(
     serials: list[Serial],
     rows_per_page: int = DEFAULT_LABEL_ROWS,
@@ -204,13 +245,13 @@ def barcode_labels_pdf(
 ) -> bytes:
     rows_per_page, columns_per_page = label_layout(rows_per_page, columns_per_page)
     stream = BytesIO()
-    doc = SimpleDocTemplate(stream, pagesize=A4, rightMargin=12 * mm, leftMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm)
+    doc = SimpleDocTemplate(stream, pagesize=A4, rightMargin=8 * mm, leftMargin=8 * mm, topMargin=8 * mm, bottomMargin=8 * mm)
     story = []
     labels_per_page = rows_per_page * columns_per_page
-    col_width = doc.width / columns_per_page
-    row_height = doc.height / rows_per_page
-    image_width = max(col_width - 4 * mm, col_width * 0.7)
-    image_height = max(row_height - 4 * mm, row_height * 0.7)
+    col_width = LABEL_WIDTH_MM * mm
+    row_height = LABEL_HEIGHT_MM * mm
+    cell_width = col_width - 2 * mm
+    cell_height = row_height - 2 * mm
 
     for page_start in range(0, len(serials), labels_per_page):
         page_serials = serials[page_start:page_start + labels_per_page]
@@ -220,7 +261,7 @@ def barcode_labels_pdf(
             for column_index in range(columns_per_page):
                 serial_index = row_index * columns_per_page + column_index
                 if serial_index < len(page_serials):
-                    row.append(_label_image(page_serials[serial_index].serial_number, image_width, image_height))
+                    row.append(_label_cell(page_serials[serial_index].serial_number, cell_width, cell_height))
                 else:
                     row.append("")
             table_rows.append(row)
@@ -235,10 +276,10 @@ def barcode_labels_pdf(
                     ("GRID", (0, 0), (-1, -1), 0.5, colors.lightgrey),
                     ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                     ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-                    ("LEFTPADDING", (0, 0), (-1, -1), 2 * mm),
-                    ("RIGHTPADDING", (0, 0), (-1, -1), 2 * mm),
-                    ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
-                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 1 * mm),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 1 * mm),
+                    ("TOPPADDING", (0, 0), (-1, -1), 1 * mm),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 1 * mm),
                 ]
             )
         )

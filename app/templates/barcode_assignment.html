@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Barcode Assignment · Setu{% endblock %}
+{% block title %}Barcode Assignment - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -17,7 +17,7 @@
       <label>Existing product
         <select name="product_id" required>
           {% for product in products %}
-          <option value="{{ product.id }}">{{ product.product_code }} · {{ product.product_name }}</option>
+          <option value="{{ product.id }}">{{ product.product_code }} - {{ product.product_name }}</option>
           {% endfor %}
         </select>
       </label>
@@ -34,7 +34,7 @@
         <label>Expiry date<input name="expiry_date" type="date"></label>
       </div>
       <label>Notes<textarea name="notes" rows="3"></textarea></label>
-      <button class="button primary full" type="submit">Generate barcodes</button>
+      <button class="button primary full" type="submit">Generate QR labels</button>
     </form>
   </div>
 

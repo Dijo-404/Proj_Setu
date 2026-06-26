@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ batch.batch_number }} · Setu{% endblock %}
+{% block title %}{{ batch.batch_number }} - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
-    <p class="eyebrow">Barcode assignment</p>
+    <p class="eyebrow">QR assignment</p>
     <h1>{{ batch.batch_number }}</h1>
   </div>
   <div class="actions">
@@ -19,13 +19,13 @@
     <dt>Source</dt><dd>{{ batch.reason_code or '-' }}</dd>
     <dt>Created by</dt><dd>{{ batch.user.username }}</dd>
     <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
-    <dt>Total barcodes</dt><dd>{{ batch.items|length }}</dd>
+    <dt>Total QR labels</dt><dd>{{ batch.items|length }}</dd>
     <dt>Notes</dt><dd>{{ batch.notes or '-' }}</dd>
   </dl>
 </section>
 
 <section class="panel">
-  <div class="section-title"><h2>Generated barcodes</h2></div>
+  <div class="section-title"><h2>Generated QR labels</h2></div>
   <div class="table-scroll">
     <table>
       <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>Label</th></tr></thead>
@@ -33,14 +33,14 @@
         {% for item in batch.items %}
         <tr>
           <td><a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a></td>
-          <td>{{ item.serial.product.product_code }} · {{ item.serial.product.product_name }}</td>
+          <td>{{ item.serial.product.product_code }} - {{ item.serial.product.product_name }}</td>
           <td>{{ item.serial.product_batch_number or '-' }}<small>{{ item.serial.warehouse or '' }}</small></td>
           <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
           <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
           <td><a href="/serials/labels?ids={{ item.serial.id }}">Open</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="empty">No barcodes generated</td></tr>
+        <tr><td colspan="6" class="empty">No QR labels generated</td></tr>
         {% endfor %}
       </tbody>
     </table>

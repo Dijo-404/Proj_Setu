@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Tally Check · Setu{% endblock %}
+{% block title %}Tally Check - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -64,7 +64,7 @@
           <td>
             {% if confirmation %}
             <span class="status synced">CONFIRMED</span>
-            <small>{{ confirmation.confirmed_by.username }} · {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
+            <small>{{ confirmation.confirmed_by.username }} - {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
             {% else %}
             <span class="status pending_sync">UNCHECKED</span>
             {% endif %}

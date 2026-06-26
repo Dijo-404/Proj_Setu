@@ -1,46 +1,34 @@
-/* Setu — design language adapted from an Apple-style system:
-   white / parchment / near-black surfaces, one Action Blue accent,
-   tight-tracked display type, pill primary CTAs, hairline borders,
-   and a single soft shadow used only on genuinely floating surfaces. */
-
 :root {
   color-scheme: light;
 
-  /* Accent — the only brand colour. */
   --primary: #0066cc;
   --primary-focus: #0071e3;
   --primary-on-dark: #2997ff;
 
-  /* Surfaces */
   --canvas: #ffffff;
   --parchment: #f5f5f7;
   --pearl: #fafafc;
   --nav-black: #000000;
 
-  /* Ink */
   --ink: #1d1d1f;
   --ink-80: #333333;
   --ink-48: #7a7a7a;
   --on-dark: #ffffff;
   --on-dark-muted: #c7c7cc;
 
-  /* Hairlines */
   --hairline: #e0e0e0;
   --hairline-soft: rgba(0, 0, 0, 0.08);
 
-  /* Quiet, information-bearing status tones (kept secondary to the accent). */
   --ok-bg: #e7f6ec;     --ok-fg: #1d7a3e;
   --warn-bg: #fbf0d9;   --warn-fg: #8a5a00;
   --bad-bg: #fde8e8;    --bad-fg: #a3262c;
   --neutral-bg: #ececed;--neutral-fg: #45454d;
 
-  /* Shape */
   --r-sm: 8px;
   --r-md: 11px;
   --r-lg: 16px;
   --r-pill: 9999px;
 
-  /* Layered elevation — soft, stacked depth so surfaces lift off the canvas. */
   --e1: 0 1px 2px rgba(17, 24, 39, 0.05), 0 1px 3px rgba(17, 24, 39, 0.07);
   --e2: 0 2px 5px rgba(17, 24, 39, 0.06), 0 6px 14px rgba(17, 24, 39, 0.08);
   --e3: 0 10px 20px rgba(17, 24, 39, 0.09), 0 16px 34px rgba(17, 24, 39, 0.10);
@@ -48,18 +36,15 @@
   --e-success: 0 4px 12px rgba(12, 138, 90, 0.30);
   --shadow: var(--e3);
 
-  /* Motion */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
   --dur: 0.18s;
 
-  /* Commit / go green (refined emerald, used only for confirm actions). */
   --go: #0c8a5a;
   --go-dark: #0a7049;
 
-  --print-label-width: 58mm;
-  --print-label-height: 34mm;
-  --print-barcode-width: 52mm;
-  --print-barcode-height: 22mm;
+  --print-label-width: 48.5mm;
+  --print-label-height: 25.4mm;
+  --print-qr-size: 19.5mm;
 
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
     system-ui, Roboto, Helvetica, Arial, sans-serif;
@@ -101,8 +86,6 @@ h2 {
 }
 
 h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; }
-
-/* ---------- Forms ---------- */
 
 input, select, textarea, button { font: inherit; }
 
@@ -146,8 +129,6 @@ label {
 }
 
 .password-field .button { min-height: 44px; }
-
-/* ---------- Tables ---------- */
 
 table {
   width: 100%;
@@ -445,8 +426,6 @@ tfoot th, tfoot td {
   box-shadow: inset 0 -1px var(--hairline);
 }
 
-/* ---------- Global nav (slim true-black bar) ---------- */
-
 .global-nav {
   position: sticky;
   top: 0;
@@ -495,8 +474,6 @@ tfoot th, tfoot td {
   color: var(--on-dark-muted);
 }
 
-/* ---------- Sub-nav (frosted parchment strip) ---------- */
-
 .subnav {
   position: sticky;
   top: 48px;
@@ -542,7 +519,6 @@ tfoot th, tfoot td {
   color: var(--on-dark);
 }
 
-/* Batches dropdown (native <details>) */
 .nav-menu {
   position: static;
   flex: none;
@@ -602,8 +578,6 @@ tfoot th, tfoot td {
   color: var(--primary);
   text-decoration: none;
 }
-
-/* ---------- Page shell ---------- */
 
 .page {
   width: min(1280px, calc(100vw - 44px));
@@ -701,8 +675,6 @@ tfoot th, tfoot td {
   flex: 0 0 auto;
 }
 
-/* ---------- Buttons ---------- */
-
 .button {
   display: inline-flex;
   align-items: center;
@@ -732,7 +704,6 @@ tfoot th, tfoot td {
   outline-offset: 2px;
 }
 
-/* The signature: the primary action is a full-pill Action Blue capsule. */
 .button.primary {
   background: linear-gradient(180deg, #0a78e0 0%, var(--primary) 100%);
   border-color: #0560bf;
@@ -744,7 +715,6 @@ tfoot th, tfoot td {
 }
 .button.primary:hover { background: linear-gradient(180deg, #1683ee 0%, #0a6ad1 100%); border-color: #0560bf; }
 
-/* Secondary action on theme: an Action-Blue outline pill (the "ghost pill"). */
 .button.secondary {
   background: var(--canvas);
   border: 1px solid rgba(0, 102, 204, 0.45);
@@ -756,7 +726,6 @@ tfoot th, tfoot td {
 }
 .button.secondary:hover { background: rgba(0, 102, 204, 0.06); border-color: var(--primary); }
 
-/* Commit / confirm action — refined emerald, reserved for "go" steps like Submit. */
 .button.success {
   background: linear-gradient(180deg, #14a06c 0%, var(--go) 100%);
   border-color: var(--go-dark);
@@ -771,7 +740,18 @@ tfoot th, tfoot td {
 .button.ghost { background: transparent; box-shadow: none; }
 .button.ghost:hover { box-shadow: none; }
 
-/* Dark utility button used on the black global nav. */
+.button.danger {
+  border-color: rgba(163, 38, 44, 0.22);
+  background: rgba(253, 232, 232, 0.45);
+  color: var(--bad-fg);
+  box-shadow: none;
+}
+.button.danger:hover {
+  border-color: rgba(163, 38, 44, 0.36);
+  background: rgba(253, 232, 232, 0.72);
+  box-shadow: var(--e1);
+}
+
 .button.on-dark {
   background: rgba(255, 255, 255, 0.16);
   border-color: transparent;
@@ -793,8 +773,6 @@ tfoot th, tfoot td {
   cursor: not-allowed;
   transform: none;
 }
-
-/* ---------- Panels & metrics ---------- */
 
 .panel {
   margin-bottom: 18px;
@@ -878,8 +856,6 @@ tfoot th, tfoot td {
   font-size: 24px;
   letter-spacing: -0.4px;
 }
-
-/* ---------- Charts ---------- */
 
 .chart-grid {
   display: grid;
@@ -1050,8 +1026,6 @@ tfoot th, tfoot td {
   font-size: 14px;
 }
 
-/* ---------- Layout helpers ---------- */
-
 .split,
 .batch-layout {
   display: grid;
@@ -1081,8 +1055,6 @@ tfoot th, tfoot td {
 
 tr.company-row.is-active { cursor: pointer; }
 tr.company-row.is-active:hover { background: rgba(0, 102, 204, 0.045); }
-
-/* ---------- Modal dialog ---------- */
 
 dialog.modal {
   width: min(680px, calc(100vw - 32px));
@@ -1180,6 +1152,131 @@ details.add-company[open] > summary { margin-bottom: 16px; }
 .compact-inline { justify-content: flex-start; }
 .compact-inline input { width: 96px; }
 
+.product-table-scroll {
+  max-height: min(680px, calc(100vh - 220px));
+}
+
+.product-table {
+  min-width: 1260px;
+}
+
+.product-table th,
+.product-table td {
+  vertical-align: middle;
+}
+
+.product-table td {
+  padding-top: 16px;
+  padding-bottom: 16px;
+}
+
+.product-col-main { width: 280px; }
+.product-col-pricing { width: 330px; }
+.product-col-labels { width: 520px; }
+.product-col-manage { width: 150px; }
+
+.product-cell {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.product-code {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+}
+
+.product-name {
+  color: var(--ink-80);
+}
+
+.product-pricing-form,
+.product-label-form {
+  display: grid;
+  gap: 8px;
+  align-items: end;
+}
+
+.product-pricing-form {
+  grid-template-columns: 112px 136px auto;
+}
+
+.product-label-form {
+  grid-template-columns: repeat(3, minmax(130px, 1fr));
+}
+
+.product-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  color: var(--ink-48);
+}
+
+.product-field span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-field input,
+.product-field select {
+  font-weight: 500;
+}
+
+.product-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.product-meta span {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  border-radius: var(--r-pill);
+  padding: 3px 9px;
+  background: rgba(0, 0, 0, 0.045);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-48);
+}
+
+.product-table input,
+.product-table select {
+  min-height: 38px;
+  padding: 7px 11px;
+}
+
+.product-table .button.small {
+  min-height: 38px;
+  padding-inline: 14px;
+}
+
+.product-manage-cell {
+  text-align: right;
+}
+
+.product-manage-form {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.product-delete,
+.user-actions .button {
+  min-width: 96px;
+}
+
+.user-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .fefo-form {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 92px auto;
@@ -1206,8 +1303,6 @@ details.add-company[open] > summary { margin-bottom: 16px; }
   border-radius: inherit;
   background: linear-gradient(90deg, var(--warn-fg), var(--bad-fg));
 }
-
-/* ---------- Status chips ---------- */
 
 .status {
   display: inline-flex;
@@ -1250,8 +1345,6 @@ details.add-company[open] > summary { margin-bottom: 16px; }
   color: var(--bad-fg);
 }
 
-/* ---------- Alerts ---------- */
-
 .alert {
   margin-bottom: 16px;
   border-radius: var(--r-md);
@@ -1264,8 +1357,6 @@ details.add-company[open] > summary { margin-bottom: 16px; }
 
 .alert.error { background: var(--bad-bg); color: var(--bad-fg); }
 .alert.warn { background: var(--warn-bg); color: var(--warn-fg); }
-
-/* ---------- Misc ---------- */
 
 .hidden { display: none; }
 
@@ -1326,9 +1417,8 @@ small {
 .details dt { color: var(--ink-48); font-weight: 600; }
 .details dd { margin: 0; min-width: 0; }
 
-/* ---------- Scanner ---------- */
-
 .scanner-box {
+  position: relative;
   width: 100%;
   aspect-ratio: 4 / 3;
   overflow: hidden;
@@ -1339,6 +1429,78 @@ small {
 
 #scanner-video { width: 100%; height: 100%; object-fit: cover; }
 
+.scan-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-line {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 12px 2px rgba(255, 255, 255, 0.38);
+  top: 50%;
+  transform: translateY(-50%);
+  transition: background 0.2s, box-shadow 0.2s;
+  border-radius: 2px;
+}
+
+.scan-line.detected {
+  background: #00ff00;
+  box-shadow: 0 0 20px 5px rgba(0, 255, 0, 0.8);
+  animation: none;
+}
+
+.scan-corners {
+  position: absolute;
+  inset: 12%;
+  pointer-events: none;
+}
+
+.scan-corners .corner {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  border-color: rgba(255, 255, 255, 0.7);
+  border-style: solid;
+  border-width: 0;
+}
+.corner.tl { top: 0; left: 0;   border-top-width: 3px; border-left-width: 3px; border-radius: 4px 0 0 0; }
+.corner.tr { top: 0; right: 0;  border-top-width: 3px; border-right-width: 3px; border-radius: 0 4px 0 0; }
+.corner.bl { bottom: 0; left: 0;  border-bottom-width: 3px; border-left-width: 3px; border-radius: 0 0 0 4px; }
+.corner.br { bottom: 0; right: 0; border-bottom-width: 3px; border-right-width: 3px; border-radius: 0 0 4px 0; }
+
+.scan-label {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 500;
+  padding: 5px 16px;
+  border-radius: var(--r-pill, 999px);
+  white-space: nowrap;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  margin: 0;
+  animation: label-pulse 2s ease-in-out infinite;
+}
+
+@keyframes label-pulse {
+  0%, 100% { opacity: 0.85; }
+  50%      { opacity: 1; }
+}
+
+.scan-overlay.hidden { display: none; }
+
 .scanner-tools {
   display: flex;
   align-items: center;
@@ -1346,23 +1508,15 @@ small {
   margin-top: 14px;
 }
 
-.file-scan-button {
-  position: relative;
-  overflow: hidden;
-}
-
-.file-scan-button input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  pointer-events: none;
+.scanner-tools #camera-button {
+  width: 100%;
+  min-height: 54px;
+  border-radius: var(--r-pill);
 }
 
 .scan-form { margin-top: 14px; }
 .scan-form input { flex: 1; border-radius: var(--r-pill); padding-left: 18px; }
 .scan-form input[type="hidden"] { display: none; }
-
-/* ---------- Barcode labels ---------- */
 
 .label-sheet {
   display: grid;
@@ -1375,9 +1529,7 @@ small {
   gap: 14px;
 }
 
-.label-controls .grid-form.compact {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
+.label-controls .grid-form.compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 
 .label-controls .muted {
   min-height: 18px;
@@ -1399,8 +1551,6 @@ small {
 
 .barcode-label img { width: 100%; max-width: 180px; height: auto; }
 .barcode-label strong { color: var(--ink-48); font-size: 12px; }
-
-/* ---------- Auth ---------- */
 
 .auth-body {
   min-height: 100vh;
@@ -1424,8 +1574,6 @@ small {
 
 .auth-panel h1 { font-size: 28px; }
 
-/* ---------- Motion: gentle entrance on load ---------- */
-
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1440,15 +1588,12 @@ small {
   animation: rise 0.42s var(--ease) both;
 }
 
-/* Stagger the dashboard metric row so the numbers settle in sequence. */
 .metric-grid .metric:nth-child(1) { animation-delay: 0.02s; }
 .metric-grid .metric:nth-child(2) { animation-delay: 0.06s; }
 .metric-grid .metric:nth-child(3) { animation-delay: 0.10s; }
 .metric-grid .metric:nth-child(4) { animation-delay: 0.14s; }
 .metric-grid .metric:nth-child(5) { animation-delay: 0.18s; }
 .metric-grid .metric:nth-child(6) { animation-delay: 0.22s; }
-
-/* ---------- Responsive ---------- */
 
 @media (max-width: 980px) {
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1557,11 +1702,13 @@ small {
   }
 
   .barcode-label {
+    grid-template-columns: var(--print-qr-size) minmax(0, 1fr);
+    align-items: center;
     width: var(--print-label-width);
     height: var(--print-label-height);
     min-height: 0;
-    gap: 1.5mm;
-    padding: 2mm 3mm;
+    gap: 2mm;
+    padding: 1.5mm;
     border: 1px solid #000;
     border-radius: 0;
     background: #fff;
@@ -1570,14 +1717,14 @@ small {
   }
 
   .barcode-label img {
-    width: var(--print-barcode-width);
-    height: var(--print-barcode-height);
-    max-width: calc(var(--print-label-width) - 6mm);
+    width: var(--print-qr-size);
+    height: var(--print-qr-size);
+    max-width: var(--print-qr-size);
     object-fit: contain;
   }
 
   .barcode-label strong {
-    max-width: calc(var(--print-label-width) - 6mm);
+    max-width: calc(var(--print-label-width) - var(--print-qr-size) - 5mm);
     color: #000;
     font-size: 8pt;
     line-height: 1.15;
@@ -1595,4 +1742,43 @@ small {
   .button:hover,
   .button:active,
   .metric:hover { transform: none; }
+}
+
+#scan-toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 10000;
+  pointer-events: none;
+}
+
+.scan-toast {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--canvas);
+  color: var(--ink);
+  padding: 12px 16px;
+  border-radius: var(--r-pill);
+  box-shadow: var(--e3);
+  font-size: 14px;
+  font-weight: 500;
+  opacity: 0;
+  transform: translateY(20px) scale(0.95);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.scan-toast.visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+
+.scan-toast.exit {
+  opacity: 0;
+  transform: translateY(-10px) scale(0.95);
+  transition: all 0.2s ease-in;
 }

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ batch.batch_number }} · Setu{% endblock %}
+{% block title %}{{ batch.batch_number }} - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -28,16 +28,21 @@
       <span>{{ batch.items|length }} scanned</span>
     </div>
     {% if batch.status == 'DRAFT' %}
-    <div id="scan-alert" class="alert hidden"></div>
-    <div class="scanner-box">
+    <div class="scanner-box" id="scanner-box">
       <video id="scanner-video" playsinline muted></video>
+      <div class="scan-overlay" id="scan-overlay">
+        <div class="scan-line"></div>
+        <div class="scan-corners">
+          <span class="corner tl"></span>
+          <span class="corner tr"></span>
+          <span class="corner bl"></span>
+          <span class="corner br"></span>
+        </div>
+        <p class="scan-label" id="scan-status-label">Initializing camera...</p>
+      </div>
     </div>
-    <div class="scanner-tools">
-      <button class="button primary" type="button" id="camera-button">Camera</button>
-      <label class="button file-scan-button" for="photo-scan-input">
-        Take photo
-        <input id="photo-scan-input" type="file" accept="image/*" capture="environment">
-      </label>
+    <div class="scanner-tools" id="scanner-tools">
+      <button class="button primary" type="button" id="camera-button" aria-pressed="false">Start scanning</button>
     </div>
     <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form" data-can-manual="{{ 'true' if can_manual_scan else 'false' }}">
       <input id="serial-input" name="serial_number" placeholder="Serial number" autocomplete="off" required {% if not can_manual_scan %}type="hidden"{% endif %}>
@@ -51,7 +56,7 @@
       <label>FEFO product
         <select name="product_id" required>
           {% for product in products %}
-          <option value="{{ product.id }}">{{ product.product_code }} · {{ product.product_name }}</option>
+          <option value="{{ product.id }}">{{ product.product_code }} - {{ product.product_name }}</option>
           {% endfor %}
         </select>
       </label>
@@ -249,5 +254,5 @@
 </section>
 {% endif %}
 <script src="/static/zxing.min.js"></script>
-<script src="/static/scanner.js" data-batch-id="{{ batch.id }}"></script>
+<script src="/static/scanner.js?v=20260626-v16" data-batch-id="{{ batch.id }}"></script>
 {% endblock %}

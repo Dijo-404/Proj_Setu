@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Expiry · Setu{% endblock %}
+{% block title %}Expiry - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -37,7 +37,7 @@
       <tbody>
         {% for row in expiry.risk_rows %}
         <tr>
-          <td>{{ row.product_name }}<small>{{ row.product_code }} · {{ row.warehouse }}</small></td>
+          <td>{{ row.product_name }}<small>{{ row.product_code }} - {{ row.warehouse }}</small></td>
           <td>{{ row.batch }}</td>
           <td>{{ row.stock }}</td>
           <td>{{ row.sales_per_month }}</td>

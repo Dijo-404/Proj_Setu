@@ -77,6 +77,7 @@ class User(Base):
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     batches: Mapped[list["Batch"]] = relationship(back_populates="user")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="user")

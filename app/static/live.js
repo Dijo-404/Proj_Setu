@@ -1,8 +1,3 @@
-// Live dashboard refresh. Polls the JSON endpoint named by [data-live-url] and
-// updates metric numbers + the recent tables in place, so concurrent mobile and
-// desktop users see fresh data without a manual reload. Pauses while the tab is
-// hidden. Read-only — there are no editable fields on the dashboard to clobber.
-
 (function () {
   const root = document.querySelector("[data-live-url]");
   if (!root) return;
@@ -39,7 +34,7 @@
     fetch(url, { headers: { Accept: "application/json" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) apply(d); })
-      .catch(function () { /* transient network error; try again next tick */ });
+      .catch(function () {});
   }
 
   setInterval(tick, INTERVAL);

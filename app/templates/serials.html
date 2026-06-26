@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Serials · Setu{% endblock %}
+{% block title %}Serials - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -21,7 +21,7 @@
 <section class="panel">
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>Barcode</th></tr></thead>
+      <thead><tr><th>Serial</th><th>Product</th><th>Batch</th><th>Expiry</th><th>Status</th><th>QR label</th></tr></thead>
       <tbody>
         {% for serial in serials %}
         <tr>

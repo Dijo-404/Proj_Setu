@@ -14,8 +14,8 @@ Implemented:
 
 - Login and role-based access
 - Product master
-- Barcode serial generation
-- Printable/PDF Code128 barcode labels
+- Serial QR label generation
+- Printable/PDF QR labels
 - Purchase/receive, sale, audit, sales return, purchase return, stock issue, and barcode replacement workflows
 - Batch pricing and voucher preview with GST split, round off, and final value
 - Tally XML generation for purchase/receive and sale batches
@@ -25,14 +25,14 @@ Implemented:
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation: verified, missing, extra
 - CSV/XLSX report export
-- PDF barcode labels and PDF audit reports
+- PDF QR labels and PDF audit reports
 - SQLite-safe backup download
 - Deployment docs and Windows service helper
 
 Latest verified test result in Linux workspace using Python 3.11.14 (`.venv311`):
 
 ```text
-56 passed
+66 passed
 ```
 
 ## Windows Setup Commands
@@ -135,10 +135,10 @@ Captured from latest discussion:
 - Existing/current stock should be inwarded into the software.
 - Reference date for existing-stock inwarding: 2026-06-22.
 - Barcode replacement is admin-only.
-- Labels should show barcode plus serial number only.
+- Labels should show QR code plus serial number only.
 - No price on labels.
 - No branding on labels.
-- Barcode content should remain serial number only.
+- QR payload should remain serial number only.
 - App should stay purely local network.
 - Phones should use factory Wi-Fi/LAN, not mobile data.
 - Outside-factory access is not required.
@@ -218,7 +218,7 @@ Still needed:
 Current behavior:
 
 - Product creation: admin/super admin
-- Barcode serial generation: admin/super admin
+- Serial QR label generation: admin/super admin
 - Barcode replacement: admin/super admin
 - Purchase/receive: purchase/admin/super admin
 - Sale: sales/admin/super admin
@@ -238,7 +238,7 @@ Existing stock should be brought into the app as an inward/setup operation.
 Current app-supported approach:
 
 1. Admin creates product masters.
-2. Admin generates barcode serials for existing stock.
+2. Admin generates serial QR labels for existing stock.
 3. During generation, use `Existing stock` status so serials start as `IN_STOCK`.
 4. Physical labels are applied to current stock.
 
@@ -248,14 +248,15 @@ Before doing this, get final product-wise quantities confirmed against Tally.
 
 Current implemented label format:
 
-- Code128 barcode
+- QR code
 - Serial number text
 - No product name
 - No product code
 - No price
 - No branding
+- 48.5 mm x 25.4 mm labels, 4 columns by 11 rows on A4
 
-Barcode payload:
+QR payload:
 
 ```text
 SERIAL_NUMBER_ONLY
@@ -320,6 +321,6 @@ PY
 - Do not post return/issue XML to Tally until real voucher XML is validated.
 - Do not infer exact Tally master names from screenshots or memory.
 - Do not expose the app publicly unless the client explicitly asks.
-- Do not put price, GST, customer data, or product data inside the barcode payload.
+- Do not put price, GST, customer data, or product data inside the QR payload.
 - Do not reset or delete `data/setu.db` without backing it up.
 - Do not revert existing uncommitted work unless the user explicitly asks.
