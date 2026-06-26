@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import SessionLocal
 from app.models import Batch, BatchItem, BatchStatus, Serial
 from app.services.settings import get_all_settings, is_tally_enabled
-from app.services.tally import sync_batch
+from app.services.tally import TALLY_XML_SUPPORTED_BATCH_TYPES, sync_batch
 
 
 WORKER_STATE_KEY = "setu_retry_worker_task"
@@ -22,7 +22,11 @@ def retry_pending_batches(limit: int = 10) -> int:
             return 0
         batches = db.scalars(
             select(Batch)
-            .where(Batch.status == BatchStatus.PENDING_SYNC.value)
+            .where(
+                Batch.status == BatchStatus.PENDING_SYNC.value,
+                # Skip types held at PENDING_SYNC by design; retrying them only churns retry_count/SyncAttempt.
+                Batch.batch_type.in_(TALLY_XML_SUPPORTED_BATCH_TYPES),
+            )
             .order_by(Batch.last_retry_at.is_not(None), Batch.last_retry_at, Batch.created_at)
             .limit(limit)
             .options(selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product))

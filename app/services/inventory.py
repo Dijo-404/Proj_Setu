@@ -2,7 +2,7 @@ from collections import defaultdict
 from datetime import date, datetime, timezone
 import re
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -213,27 +213,40 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
         serial_allowed_for_batch(item.serial, batch_type)
     for item in batch.items:
         previous_status = item.serial.status
+        target_status = previous_status
         scan_status = "SUBMITTED"
-        if batch_type == BatchType.RECEIVE:
-            item.serial.status = SerialStatus.IN_STOCK.value
-            scan_status = SerialStatus.PURCHASED.value
-        elif batch_type == BatchType.PURCHASE:
-            item.serial.status = SerialStatus.IN_STOCK.value
+        if batch_type in {BatchType.RECEIVE, BatchType.PURCHASE}:
+            target_status = SerialStatus.IN_STOCK.value
             scan_status = SerialStatus.PURCHASED.value
         elif batch_type == BatchType.SALE:
-            item.serial.status = SerialStatus.SOLD.value
+            target_status = SerialStatus.SOLD.value
             scan_status = SerialStatus.SOLD.value
         elif batch_type == BatchType.SALES_RETURN:
-            item.serial.status = SerialStatus.DAMAGED.value if batch.reason_code in {"DAMAGED", "EXPIRED"} else SerialStatus.IN_STOCK.value
-            scan_status = SerialStatus.DAMAGED.value if batch.reason_code in {"DAMAGED", "EXPIRED"} else SerialStatus.RETURNED.value
+            damaged = batch.reason_code in {"DAMAGED", "EXPIRED"}
+            target_status = SerialStatus.DAMAGED.value if damaged else SerialStatus.IN_STOCK.value
+            scan_status = SerialStatus.DAMAGED.value if damaged else SerialStatus.RETURNED.value
         elif batch_type == BatchType.PURCHASE_RETURN:
-            item.serial.status = SerialStatus.PURCHASE_RETURN.value
+            target_status = SerialStatus.PURCHASE_RETURN.value
             scan_status = SerialStatus.PURCHASE_RETURN.value
         elif batch_type == BatchType.ISSUE:
-            item.serial.status = SerialStatus.ISSUED.value
+            target_status = SerialStatus.ISSUED.value
             scan_status = SerialStatus.ISSUED.value
         elif batch_type == BatchType.AUDIT:
             scan_status = SerialStatus.AUDITED.value
+
+        if batch_type != BatchType.AUDIT:
+            # Atomic claim: aborts if another batch already moved this serial.
+            claimed = db.execute(
+                update(Serial)
+                .where(Serial.id == item.serial.id, Serial.status == previous_status, Serial.active == True)
+                .values(status=target_status)
+                .execution_options(synchronize_session=False)
+            ).rowcount
+            if claimed != 1:
+                db.rollback()
+                raise InventoryError(f"{item.serial.serial_number} is no longer available; re-scan the batch")
+            item.serial.status = target_status
+
         db.add(
             ScanLog(
                 serial_id=item.serial.id,
@@ -252,7 +265,7 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
             serial=item.serial,
             batch=batch,
             status_from=previous_status,
-            status_to=item.serial.status,
+            status_to=target_status,
             reason_code=batch.reason_code,
             tally_reference=batch.tally_reference,
             notes=batch.notes,

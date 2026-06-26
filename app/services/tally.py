@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, ROUND_HALF_UP
@@ -7,6 +8,7 @@ from urllib.error import URLError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Batch, BatchStatus, BatchType, SyncAttempt, utc_now
@@ -116,7 +118,8 @@ def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
     try:
         with urlopen(request, timeout=5) as response:
             response_xml = response.read().decode("utf-8", errors="replace")
-    except URLError as exc:
+    except (URLError, OSError) as exc:
+        # OSError also covers socket timeouts, which urllib does not wrap in URLError.
         raise TallySyncError("Tally connection failed", retryable=True, request_xml=xml) from exc
 
     try:
@@ -134,7 +137,20 @@ def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
     return TallyResult(request_xml=xml, response_xml=response_xml, reference=reference)
 
 
+# Serializes POST + commit across the request thread and retry worker so a racing
+# retry can't post the same voucher to Tally twice.
+_SYNC_LOCK = threading.Lock()
+
+
 def sync_batch(db: Session, batch: Batch) -> None:
+    with _SYNC_LOCK:
+        current_status = db.scalar(select(Batch.status).where(Batch.id == batch.id))
+        if current_status in {BatchStatus.SYNCED.value, BatchStatus.CLOSED.value}:
+            return
+        _sync_batch_locked(db, batch)
+
+
+def _sync_batch_locked(db: Session, batch: Batch) -> None:
     is_retry = batch.status in {BatchStatus.PENDING_SYNC.value, BatchStatus.FAILED.value}
     if is_retry:
         batch.retry_count = (batch.retry_count or 0) + 1
