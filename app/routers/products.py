@@ -17,7 +17,11 @@ router = APIRouter(prefix="/products")
 @router.get("")
 def products(request: Request, q: str = "", error: str = "", db: Session = Depends(get_db)):
     user = require_permission(request, db, "product_master")
-    error_message = {"serial_generation_failed": "Barcode generation failed"}.get(error, error)
+    error_message = {
+        "serial_generation_failed": "Barcode generation failed",
+        "default_rate_invalid": "Default rate cannot be negative",
+        "sales_discount_invalid": "Sales discount must be between 0 and 100%",
+    }.get(error, error)
     query = select(Product).order_by(Product.product_code)
     if q:
         like = f"%{q.strip()}%"
@@ -40,10 +44,19 @@ def create_product(
     gst_rate: float = Form(...),
     unit: str = Form("Pcs"),
     default_rate: float = Form(0),
+    sales_discount_rate: float = Form(0),
     tally_stock_item_name: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "product_create")
+    if sales_discount_rate < 0 or sales_discount_rate > 100:
+        rows = db.scalars(select(Product).order_by(Product.product_code)).all()
+        return templates.TemplateResponse(
+            request,
+            "products.html",
+            {"request": request, "user": user, "products": rows, "q": "", "error": "Sales discount must be between 0 and 100%"},
+            status_code=400,
+        )
     product = Product(
         product_code=product_code.strip().upper(),
         product_name=product_name.strip(),
@@ -52,6 +65,7 @@ def create_product(
         gst_rate=gst_rate,
         unit=unit.strip() or "Pcs",
         default_rate=default_rate,
+        sales_discount_rate=sales_discount_rate,
         tally_stock_item_name=tally_stock_item_name.strip() or product_name.strip(),
     )
     db.add(product)
@@ -66,6 +80,28 @@ def create_product(
             {"request": request, "user": user, "products": rows, "q": "", "error": "Product code already exists"},
             status_code=400,
         )
+    return RedirectResponse("/products", status_code=303)
+
+
+@router.post("/{product_id}/pricing")
+def update_product_pricing(
+    request: Request,
+    product_id: int,
+    default_rate: float = Form(0),
+    sales_discount_rate: float = Form(0),
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "product_create")
+    product = db.get(Product, product_id)
+    if not product:
+        return RedirectResponse("/products", status_code=303)
+    if default_rate < 0:
+        return RedirectResponse("/products?error=default_rate_invalid", status_code=303)
+    if sales_discount_rate < 0 or sales_discount_rate > 100:
+        return RedirectResponse("/products?error=sales_discount_invalid", status_code=303)
+    product.default_rate = default_rate
+    product.sales_discount_rate = sales_discount_rate
+    db.commit()
     return RedirectResponse("/products", status_code=303)
 
 

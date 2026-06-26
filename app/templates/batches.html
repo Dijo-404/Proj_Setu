@@ -7,12 +7,24 @@
     <h1>Batches</h1>
   </div>
   <div class="actions">
+    {% if role_can(user.role, 'batch_purchase') %}
     <a class="button primary" href="/batches/new?batch_type=PURCHASE">Purchase</a>
-    <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
-    <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
-    <a class="button" href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
+    {% endif %}
+    {% if role_can(user.role, 'batch_purchase_return') %}
     <a class="button" href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>
+    {% endif %}
+    {% if role_can(user.role, 'batch_sale') %}
+    <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
+    {% endif %}
+    {% if role_can(user.role, 'batch_sales_return') %}
+    <a class="button" href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
+    {% endif %}
+    {% if role_can(user.role, 'batch_issue') %}
     <a class="button" href="/batches/new?batch_type=ISSUE">Issue</a>
+    {% endif %}
+    {% if role_can(user.role, 'batch_audit') %}
+    <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
+    {% endif %}
   </div>
 </section>
 

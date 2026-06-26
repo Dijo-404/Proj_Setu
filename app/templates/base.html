@@ -30,11 +30,11 @@
         <summary class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</summary>
         <div class="nav-menu__panel">
           {% if role_can(user.role, 'batch_purchase') %}<a href="/batches/new?batch_type=PURCHASE">Purchase</a>{% endif %}
-          {% if role_can(user.role, 'batch_sale') %}<a href="/batches/new?batch_type=SALE">Sale</a>{% endif %}
-          {% if role_can(user.role, 'batch_audit') %}<a href="/batches/new?batch_type=AUDIT">Audit</a>{% endif %}
-          {% if role_can(user.role, 'batch_sales_return') %}<a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>{% endif %}
           {% if role_can(user.role, 'batch_purchase_return') %}<a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>{% endif %}
+          {% if role_can(user.role, 'batch_sale') %}<a href="/batches/new?batch_type=SALE">Sale</a>{% endif %}
+          {% if role_can(user.role, 'batch_sales_return') %}<a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>{% endif %}
           {% if role_can(user.role, 'batch_issue') %}<a href="/batches/new?batch_type=ISSUE">Issue</a>{% endif %}
+          {% if role_can(user.role, 'batch_audit') %}<a href="/batches/new?batch_type=AUDIT">Audit</a>{% endif %}
           {% if role_can(user.role, 'batch_list') %}<a href="/batches">All batches</a>{% endif %}
         </div>
       </details>

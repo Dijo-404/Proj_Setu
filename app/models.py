@@ -93,6 +93,7 @@ class Product(Base):
     gst_rate: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(40), default="Pcs")
     default_rate: Mapped[float] = mapped_column(Float, default=0)
+    sales_discount_rate: Mapped[float] = mapped_column(Float, default=0)
     tally_stock_item_name: Mapped[str] = mapped_column(String(180))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)

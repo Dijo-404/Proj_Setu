@@ -5,7 +5,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 ## Current Features
 
 - Role-based login for admin, purchase, sales, and audit users
-- Product master with HSN, GST, unit, default rate, and exact Tally stock item name
+- Product master with HSN, GST, unit, default rate, sales discount, and exact Tally stock item name
 - Bulk barcode serial generation and printable/PDF Code128 labels with the serial number only
 - Product batch, manufacturing date, expiry date, and warehouse tracking for assigned stock
 - Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
@@ -163,7 +163,7 @@ Do this in order:
 3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, round-off ledger, and default party.
 4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
 5. Open `Products`.
-6. Create products using exact Tally stock item names, HSN, GST rate, unit, and default rate.
+6. Create products using exact Tally stock item names, HSN, GST rate, unit, default rate, and sales discount if applicable.
 7. Generate barcode serials from `Products`, or use `Barcode Assignment` for existing physical stock.
 8. Open `Tally Check`.
 9. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
@@ -312,7 +312,7 @@ python -m pytest
 Expected result:
 
 ```text
-52 passed
+56 passed
 ```
 
 The current pinned dependencies are verified with Python 3.11. A Python 3.13 virtual environment may fail before tests start with the current SQLAlchemy pin.

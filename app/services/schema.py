@@ -35,3 +35,8 @@ def ensure_runtime_schema() -> None:
             item_columns = {column["name"] for column in inspector.get_columns("batch_items")}
             if "fefo_picked" not in item_columns:
                 connection.execute(text("ALTER TABLE batch_items ADD COLUMN fefo_picked BOOLEAN DEFAULT 0"))
+
+        if "products" in inspector.get_table_names():
+            product_columns = {column["name"] for column in inspector.get_columns("products")}
+            if "sales_discount_rate" not in product_columns:
+                connection.execute(text("ALTER TABLE products ADD COLUMN sales_discount_rate FLOAT DEFAULT 0"))

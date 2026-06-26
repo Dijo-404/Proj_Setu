@@ -38,11 +38,12 @@ Settings fields auto-save while editing. The sync checkbox is saved only by the 
 
 1. Open `Products`.
 2. Create or search product masters.
-3. Use `Generate Barcode` to create serials.
-4. Choose `Generated` for labels that are not yet in stock.
-5. Choose `Existing stock` for physical stock already present in the factory.
-6. Add product batch and expiry details when they are known.
-7. Open the generated assignment batch to download labels PDF or serial XLSX.
+3. Set default rate and sales discount % when the product uses a standard sale discount.
+4. Use `Generate Barcode` to create serials.
+5. Choose `Generated` for labels that are not yet in stock.
+6. Choose `Existing stock` for physical stock already present in the factory.
+7. Add product batch and expiry details when they are known.
+8. Open the generated assignment batch to download labels PDF or serial XLSX.
 
 Labels contain only the barcode and serial text. They do not include price, GST, customer, or product data.
 
@@ -90,7 +91,7 @@ Submitted purchase serials become `IN_STOCK`.
 1. Open `Batches` -> `Sale`.
 2. Enter customer/reference details.
 3. Scan in-stock serials, or use `Pick FEFO` for product and quantity.
-4. Confirm rates, GST split, round off, and final invoice value.
+4. Confirm rates, sales discount, GST split, round off, and final invoice value.
 5. Submit the batch.
 
 Submitted sale serials become `SOLD`.

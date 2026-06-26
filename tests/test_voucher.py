@@ -11,6 +11,7 @@ def make_product(code="SG020", rate=500):
         gst_rate=5,
         unit="Pcs",
         default_rate=rate,
+        sales_discount_rate=0,
         tally_stock_item_name="Sg Biriyani Masala 100grm",
     )
 
@@ -31,6 +32,44 @@ def test_voucher_summary_calculates_gst_and_round_off(db_session):
     assert str(summary.cgst_amount) == "25.00"
     assert str(summary.sgst_amount) == "25.00"
     assert str(summary.final_value) == "1050.00"
+
+
+def test_sales_discount_rate_reduces_sales_taxable_value(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    product = make_product("SGD01", 500)
+    product.sales_discount_rate = 10
+    db_session.add_all([user, product])
+    db_session.commit()
+    serials = generate_serials(db_session, product, 2, initial_status=SerialStatus.IN_STOCK)
+    batch = create_batch(db_session, user, BatchType.SALE, "SANGEETHA", "")
+    for serial in serials:
+        add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.lines[0].gross_value) == "1000.00"
+    assert str(summary.lines[0].discount_rate) == "10.00"
+    assert str(summary.lines[0].discount_amount) == "100.00"
+    assert str(summary.taxable_value) == "900.00"
+    assert str(summary.gst_amount) == "45.00"
+    assert str(summary.final_value) == "945.00"
+
+
+def test_sales_discount_rate_does_not_change_purchase_value(db_session):
+    user = User(username="purchase", password_hash="x", role="purchase")
+    product = make_product("SGD02", 500)
+    product.sales_discount_rate = 10
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1)[0]
+    batch = create_batch(db_session, user, BatchType.RECEIVE, "Supplier", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.lines[0].discount_rate) == "0.00"
+    assert str(summary.lines[0].discount_amount) == "0.00"
+    assert str(summary.taxable_value) == "500.00"
 
 
 def test_mixed_rates_split_product_lines(db_session):

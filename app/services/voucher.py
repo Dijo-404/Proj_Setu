@@ -25,6 +25,9 @@ class VoucherLine:
     unit: str
     quantity: int
     rate: Decimal
+    discount_rate: Decimal
+    gross_value: Decimal
+    discount_amount: Decimal
     taxable_value: Decimal
     cgst_amount: Decimal
     sgst_amount: Decimal
@@ -56,7 +59,10 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         product = group["product"]
         quantity = int(group["quantity"])
         rate = money(group.get("rate") or product.default_rate)
-        taxable_value = money(rate * quantity)
+        gross_value = money(rate * quantity)
+        discount_rate = money(product.sales_discount_rate if batch.batch_type == "SALE" else 0)
+        discount_amount = money(gross_value * discount_rate / Decimal("100"))
+        taxable_value = money(gross_value - discount_amount)
         gst_rate = money(product.gst_rate)
         gst_amount = money(taxable_value * gst_rate / Decimal("100"))
         cgst_amount = money(gst_amount / Decimal("2"))
@@ -78,6 +84,9 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
                 unit=product.unit,
                 quantity=quantity,
                 rate=rate,
+                discount_rate=discount_rate,
+                gross_value=gross_value,
+                discount_amount=discount_amount,
                 taxable_value=taxable_value,
                 cgst_amount=cgst_amount,
                 sgst_amount=sgst_amount,

@@ -38,3 +38,28 @@ def test_sale_batch_xml_groups_serials_by_product(db_session):
     assert xml.count("<ALLINVENTORYENTRIES.LIST>") == 1
     assert "2 Pcs" in xml
     assert "Sg Biriyani Masala 100grm" in xml
+
+
+def test_sale_batch_xml_includes_sales_discount(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    product = Product(
+        product_code="SG004",
+        product_name="Biryani Masala",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=500,
+        sales_discount_rate=10,
+        tally_stock_item_name="Sg Biriyani Masala 100grm",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "SANGEETHA", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    xml = build_voucher_xml(batch, VALID_SETTINGS)
+
+    assert "<DISCOUNT>10.00</DISCOUNT>" in xml
+    assert "<AMOUNT>-450.00</AMOUNT>" in xml

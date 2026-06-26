@@ -32,7 +32,7 @@ Implemented:
 Latest verified test result in Linux workspace using Python 3.11.14 (`.venv311`):
 
 ```text
-52 passed
+56 passed
 ```
 
 ## Windows Setup Commands

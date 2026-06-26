@@ -103,6 +103,7 @@
           <th>HSN</th>
           <th>Qty</th>
           <th>Rate</th>
+          <th>Discount</th>
           <th>Taxable</th>
           <th>CGST</th>
           <th>SGST</th>
@@ -128,22 +129,26 @@
             {{ '%.2f'|format(line.rate) }}
             {% endif %}
           </td>
+          <td>
+            {{ '%.2f'|format(line.discount_rate) }}%
+            {% if line.discount_amount > 0 %}<small>-{{ '%.2f'|format(line.discount_amount) }}</small>{% endif %}
+          </td>
           <td>{{ '%.2f'|format(line.taxable_value) }}</td>
           <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
           <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
           <td>{{ '%.2f'|format(line.line_total) }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="empty">Scan serials to build the voucher preview</td></tr>
+        <tr><td colspan="9" class="empty">Scan serials to build the voucher preview</td></tr>
         {% endfor %}
       </tbody>
       {% if summary.lines %}
       <tfoot>
-        <tr><th colspan="4">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
-        <tr><th colspan="4">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
-        <tr><th colspan="4">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
-        <tr><th colspan="4">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
-        <tr class="grand-total"><th colspan="4">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
+        <tr><th colspan="5">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
+        <tr><th colspan="5">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
+        <tr><th colspan="5">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
+        <tr><th colspan="5">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
+        <tr class="grand-total"><th colspan="5">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
       </tfoot>
       {% endif %}
     </table>

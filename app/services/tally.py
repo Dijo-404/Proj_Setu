@@ -96,6 +96,8 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
         _text(inventory, "STOCKITEMNAME", line.tally_stock_item_name)
         _text(inventory, "ISDEEMEDPOSITIVE", "Yes" if batch_type == BatchType.SALE else "No")
         _text(inventory, "RATE", f"{_money(line.rate)}/{line.unit}")
+        if batch_type == BatchType.SALE and line.discount_rate > 0:
+            _text(inventory, "DISCOUNT", _money(line.discount_rate))
         _text(inventory, "AMOUNT", _money(-line.taxable_value if batch_type == BatchType.SALE else line.taxable_value))
         _text(inventory, "ACTUALQTY", f"{line.quantity} {line.unit}")
         _text(inventory, "BILLEDQTY", f"{line.quantity} {line.unit}")
