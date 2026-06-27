@@ -476,13 +476,26 @@ function Install-CaddyService {
 
     $serviceCommand = "`"$serviceCaddyExe`" run --config `"$Caddyfile`" --adapter caddyfile"
     if ($existingService) {
-        & sc.exe config $CaddyServiceName start= auto binPath= $serviceCommand | Out-Host
+        $cimService = Get-CimInstance -ClassName Win32_Service -Filter "Name='$CaddyServiceName'"
+        $changeResult = Invoke-CimMethod `
+            -InputObject $cimService `
+            -MethodName Change `
+            -Arguments @{
+                PathName = $serviceCommand
+                DisplayName = "Setu Caddy HTTPS Proxy"
+                StartMode = "Automatic"
+            }
+        if ($changeResult.ReturnValue -ne 0) {
+            throw "Could not update the Caddy Windows service (Win32_Service.Change returned $($changeResult.ReturnValue))."
+        }
     }
     else {
-        & sc.exe create $CaddyServiceName start= auto binPath= $serviceCommand DisplayName= "Setu Caddy HTTPS Proxy" | Out-Host
-    }
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not create or update the Caddy Windows service."
+        New-Service `
+            -Name $CaddyServiceName `
+            -BinaryPathName $serviceCommand `
+            -DisplayName "Setu Caddy HTTPS Proxy" `
+            -StartupType Automatic `
+            -ErrorAction Stop | Out-Null
     }
 
     & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setu QR Tally Bridge" | Out-Null
