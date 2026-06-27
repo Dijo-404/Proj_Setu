@@ -26,7 +26,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Python 3.11 for the current pinned dependency set
 - Tally Prime installed and running on the server machine or reachable on the LAN
 - Chrome or Edge for staff phones
-- For phone camera use over LAN: HTTPS reverse proxy later, usually Caddy plus a local certificate
+- Administrator access during Windows setup to install Caddy, its service, and the LAN firewall rule
 
 ## Quick Windows Setup For Non-Technical Users
 
@@ -36,7 +36,9 @@ On the Windows server, double-click:
 setup.bat
 ```
 
-The setup helper checks for Python 3.11, can install it with `winget` when available, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, and can start the app.
+The setup helper checks for Python 3.11, can install it with `winget` when available, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app.
+
+For the complete Caddy setup, right-click `setup.bat` and choose **Run as administrator**. Caddy setup is offered by default; pass `-SkipCaddy` if HTTPS will be handled separately.
 
 After setup, start the app anytime with:
 
@@ -320,7 +322,14 @@ The current pinned dependencies are verified with Python 3.11. A Python 3.13 vir
 
 ## 13. LAN Phone Camera Setup
 
-Phone camera access usually requires HTTPS when accessed from another device on the LAN.
+Phone camera access usually requires HTTPS when accessed from another device on the LAN. The Windows `setup.bat` helper can configure this automatically:
+
+1. Right-click `setup.bat` and choose **Run as administrator**.
+2. Accept the Caddy setup prompt.
+3. Confirm the detected LAN IP address, or enter a local DNS name that resolves to this server.
+4. Install `deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every phone that will use Setu.
+
+The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the auto-start `SetuCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
 
 Recommended production shape:
 
@@ -328,12 +337,12 @@ Recommended production shape:
 Phone browser -> https://setu.local -> Caddy -> http://127.0.0.1:8000
 ```
 
-Use:
+For manual setup or troubleshooting, use:
 
 - `docs/deployment/https-lan-guide.md`
 - `deployment/caddy/Caddyfile.example`
 
-Install the local certificate authority on staff phones if using `mkcert`.
+Back up `deployment\caddy\state` with the app data, but do not share it because it contains Caddy's private keys. Only distribute `setu-caddy-root.crt`, which is the public root certificate.
 
 ## 14. Windows Service Setup
 
