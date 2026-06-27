@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.database import get_db
 from app.models import LoginAudit
 from app.security import create_session_token, hash_password, verify_password
+from app.services.access_control import get_role_access_config, landing_path_for
 from app.templates import templates
 
 router = APIRouter()
@@ -31,8 +32,10 @@ def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int
 
 @router.get("/login")
 def login_page(request: Request, db: Session = Depends(get_db)):
-    if current_user(request, db):
-        return RedirectResponse("/", status_code=303)
+    user = current_user(request, db)
+    if user:
+        destination = "/account/password" if user.must_change_password else landing_path_for(get_role_access_config(db), user.role)
+        return RedirectResponse(destination, status_code=303)
     return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
 
 
@@ -82,7 +85,8 @@ def login(
         )
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    redirect = RedirectResponse("/", status_code=303)
+    destination = "/account/password" if user.must_change_password else landing_path_for(get_role_access_config(db), user.role)
+    redirect = RedirectResponse(destination, status_code=303)
     redirect.set_cookie(
         SESSION_COOKIE,
         create_session_token(user.id),

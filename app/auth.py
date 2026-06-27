@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Role, User
 from app.security import read_session_token
-from app.services.access_control import role_has_access
+from app.services.access_control import configured_role_has_access, get_role_access_config
 
 SESSION_COOKIE = "setu_session"
 
@@ -39,12 +39,13 @@ def require_user(request: Request, db: Session, roles: set[Role] | None = None) 
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed") from exc
     if roles and role not in roles:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    user._access_config = get_role_access_config(db)
     return user
 
 
 def require_permission(request: Request, db: Session, access_key: str, allowed_values: set[str] | None = None) -> User:
     user = require_user(request, db)
-    if not role_has_access(db, user.role, access_key, allowed_values):
+    if not configured_role_has_access(user._access_config, user.role, access_key, allowed_values):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     return user
 

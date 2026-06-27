@@ -7,9 +7,15 @@
     <h1>Operations</h1>
   </div>
   <div class="actions quick-actions">
+    {% if role_can(user, 'batch_purchase') %}
     <a class="button primary" href="/batches/new?batch_type=PURCHASE">Purchase</a>
+    {% endif %}
+    {% if role_can(user, 'batch_sale') %}
     <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
+    {% endif %}
+    {% if role_can(user, 'batch_audit') %}
     <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
+    {% endif %}
   </div>
 </section>
 
@@ -29,7 +35,9 @@
   <div>
     <div class="section-title">
       <h2>Recent batches</h2>
+      {% if role_can(user, 'batch_list') %}
       <a href="/batches">View all</a>
+      {% endif %}
     </div>
     <div class="panel">
       <div class="table-scroll">
@@ -45,7 +53,9 @@
   <div>
     <div class="section-title">
       <h2>Recent scans</h2>
+      {% if role_can(user, 'page_reports') and role_can(user, 'reports_data') %}
       <a href="/reports">Reports</a>
+      {% endif %}
     </div>
     <div class="panel">
       <div class="table-scroll">

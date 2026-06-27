@@ -11,10 +11,12 @@
     {% if batch.batch_type == 'AUDIT' and batch.status != 'DRAFT' %}
     <a class="button" href="/batches/{{ batch.id }}/audit.pdf">Audit PDF</a>
     {% endif %}
-    {% if user.role in ['admin', 'super_admin'] and batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.items|length > 0 %}
+    {% if can_tally_xml and batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.items|length > 0 %}
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}
+    {% if can_view_batch_list %}
     <a class="button" href="/batches">Batches</a>
+    {% endif %}
   </div>
 </section>
 
@@ -27,7 +29,7 @@
       <h2>Scanner</h2>
       <span>{{ batch.items|length }} scanned</span>
     </div>
-    {% if batch.status == 'DRAFT' %}
+    {% if batch.status == 'DRAFT' and can_edit_batch %}
     <div class="scanner-box" id="scanner-box">
       <video id="scanner-video" playsinline muted></video>
       <div class="scan-overlay" id="scan-overlay">
@@ -51,7 +53,7 @@
       <button class="button primary" type="submit">Add</button>
       {% endif %}
     </form>
-    {% if batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
+    {% if can_fefo and batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
     <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form" id="fefo-form">
       {% if fefo_error %}<div class="alert error">{{ fefo_error }}</div>{% endif %}
       <label>FEFO product
@@ -65,6 +67,8 @@
       <button class="button secondary" type="submit">Pick FEFO</button>
     </form>
     {% endif %}
+    {% elif batch.status == 'DRAFT' %}
+    <div class="empty">You have view-only access to this batch.</div>
     {% else %}
     <div class="empty">Batch submitted</div>
     {% endif %}
@@ -83,11 +87,11 @@
       <dt>Retry count</dt><dd>{{ batch.retry_count or 0 }}</dd>
       <dt>Last retry</dt><dd>{{ batch.last_retry_at.strftime('%d %b %Y %H:%M') if batch.last_retry_at else '-' }}</dd>
     </dl>
-    {% if batch.status == 'DRAFT' %}
+    {% if batch.status == 'DRAFT' and can_edit_batch %}
     <form method="post" action="/batches/{{ batch.id }}/submit">
       <button class="button success full" type="submit" {{ 'disabled' if batch.items|length == 0 else '' }}>Submit batch</button>
     </form>
-    {% elif user.role in ['admin', 'super_admin'] and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] %}
+    {% elif can_retry_sync and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] %}
     <form method="post" action="/batches/{{ batch.id }}/retry">
       <button class="button primary full" type="submit">Retry Tally sync</button>
     </form>
@@ -126,7 +130,7 @@
           <td>{{ line.hsn }}</td>
           <td>{{ line.quantity }} {{ line.unit }}</td>
           <td>
-            {% if batch.status == 'DRAFT' %}
+            {% if batch.status == 'DRAFT' and can_edit_batch %}
             <form method="post" action="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/products/{{ line.product_id }}/rate">
               <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(line.rate) }}">
               <button class="button small" type="submit">Set</button>
@@ -209,7 +213,7 @@
           <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
           <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
           <td>
-            {% if batch.status == 'DRAFT' and batch.batch_type != 'AUDIT' %}
+            {% if batch.status == 'DRAFT' and can_edit_batch and batch.batch_type != 'AUDIT' %}
             <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">
               <input name="rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(item.rate if item.rate is not none else item.serial.product.default_rate) }}">
               <button class="button small" type="submit">Set</button>
@@ -219,7 +223,7 @@
             {% endif %}
           </td>
           <td>
-            {% if batch.status == 'DRAFT' %}
+            {% if batch.status == 'DRAFT' and can_edit_batch %}
             <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/delete">
               <button class="button small ghost" type="submit">Remove</button>
             </form>
@@ -234,7 +238,7 @@
   </div>
 </section>
 
-{% if batch.sync_attempts %}
+{% if can_view_attempts and batch.sync_attempts %}
 <section class="panel">
   <div class="section-title"><h2>Sync attempts</h2></div>
   <div class="table-scroll">

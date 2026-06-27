@@ -65,6 +65,19 @@ def scan_source_allowed(db: Session, user, scan_source: str) -> bool:
     return can_use_manual_scan(db, user) or scan_source == "camera"
 
 
+def batch_permission_context(db: Session, user, batch: Batch) -> dict[str, bool]:
+    action_key = action_key_for_batch(BatchType(batch.batch_type))
+    can_edit = role_has_access(db, user.role, action_key)
+    return {
+        "can_edit_batch": can_edit,
+        "can_fefo": can_edit and role_has_access(db, user.role, "fefo_pick", {"edit", "yes"}),
+        "can_tally_xml": role_has_access(db, user.role, "tally_xml", {"edit", "yes"}),
+        "can_retry_sync": role_has_access(db, user.role, "tally_sync_retry", {"edit", "yes"}),
+        "can_view_attempts": role_has_access(db, user.role, "tally_attempts"),
+        "can_view_batch_list": role_has_access(db, user.role, "batch_list"),
+    }
+
+
 def parse_batch_type(value: str) -> BatchType:
     try:
         return BatchType(value)
@@ -132,6 +145,7 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "summary": calculate_voucher_summary(batch),
             "audit_summary": summarize_audit_findings(batch),
             "can_manual_scan": can_use_manual_scan(db, user),
+            **batch_permission_context(db, user, batch),
             "error": None,
         },
     )
@@ -197,6 +211,7 @@ def fefo_pick_into_batch(
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
+                **batch_permission_context(db, user, batch),
                 "fefo_error": str(exc),
             },
             status_code=400,
@@ -297,6 +312,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
+                **batch_permission_context(db, user, batch),
                 "error": str(exc),
             },
             status_code=400,

@@ -14,6 +14,8 @@
 
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 
+{% set can_edit_products = role_can(user, 'product_create') %}
+{% if can_edit_products %}
 <section class="panel">
   <h2>New product</h2>
   <form method="post" action="/products" class="grid-form" data-draft="setu:newproduct">
@@ -30,6 +32,7 @@
     <span data-autosave-status class="autosave-status"></span>
   </form>
 </section>
+{% endif %}
 
 <section class="panel">
   <div class="section-title"><h2>Product list</h2></div>
@@ -38,8 +41,10 @@
       <thead>
         <tr>
           <th class="product-col-main">Product</th>
+          {% if can_edit_products %}
           <th class="product-col-pricing">Sales pricing</th>
           <th class="product-col-labels">Label batch</th>
+          {% endif %}
           {% if user.role == 'super_admin' %}<th class="product-col-manage">Manage</th>{% endif %}
         </tr>
       </thead>
@@ -56,6 +61,7 @@
               </div>
             </div>
           </td>
+          {% if can_edit_products %}
           <td>
             <form method="post" action="/products/{{ product.id }}/pricing" class="product-pricing-form">
               <label class="product-field">
@@ -97,6 +103,7 @@
               <button class="button small" type="submit">Generate labels</button>
             </form>
           </td>
+          {% endif %}
           {% if user.role == 'super_admin' %}
           <td class="product-manage-cell">
             <form method="post" action="/products/{{ product.id }}/delete" class="product-manage-form" onsubmit="return confirm('Delete this product? Products with serials or transaction history cannot be deleted.');">
@@ -106,7 +113,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="{{ 4 if user.role == 'super_admin' else 3 }}" class="empty">No products found</td></tr>
+        <tr><td colspan="{{ 1 + (2 if can_edit_products else 0) + (1 if user.role == 'super_admin' else 0) }}" class="empty">No products found</td></tr>
         {% endfor %}
       </tbody>
     </table>

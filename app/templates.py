@@ -1,16 +1,51 @@
 from fastapi.templating import Jinja2Templates
 
 from app.database import SessionLocal
-from app.services.access_control import role_has_access
+from app.services.access_control import configured_role_has_access, landing_path_for, role_has_access
 
 templates = Jinja2Templates(directory="app/templates")
 
 
-def role_can(role: str, access_key: str) -> bool:
-    if not role:
+def role_can(subject, access_key: str) -> bool:
+    if not subject:
         return False
+    role = getattr(subject, "role", subject)
+    access_config = getattr(subject, "_access_config", None)
+    if access_config is not None:
+        return configured_role_has_access(access_config, role, access_key)
     with SessionLocal() as db:
         return role_has_access(db, role, access_key)
 
 
 templates.env.globals["role_can"] = role_can
+
+
+def role_can_view_batch(subject, batch_type: str) -> bool:
+    access_key = {
+        "PURCHASE": "purchase_data",
+        "RECEIVE": "purchase_data",
+        "SALE": "sales_data",
+        "SALES_RETURN": "sales_data",
+        "PURCHASE_RETURN": "purchase_data",
+        "AUDIT": "audit_data",
+        "ISSUE": "issue_data",
+        "QR_ASSIGNMENT": "barcode_assignment",
+    }.get(batch_type)
+    return bool(access_key and role_can(subject, access_key))
+
+
+templates.env.globals["role_can_view_batch"] = role_can_view_batch
+
+
+def user_home_path(subject) -> str:
+    role = getattr(subject, "role", "")
+    access_config = getattr(subject, "_access_config", None)
+    if access_config is None:
+        with SessionLocal() as db:
+            from app.services.access_control import get_role_access_config
+
+            access_config = get_role_access_config(db)
+    return landing_path_for(access_config, role)
+
+
+templates.env.globals["user_home_path"] = user_home_path

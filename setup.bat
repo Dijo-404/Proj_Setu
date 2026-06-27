@@ -354,6 +354,84 @@ function Ensure-Caddy {
     return $caddyExe
 }
 
+function Find-NssmExecutable {
+    $command = Get-Command nssm.exe -ErrorAction SilentlyContinue
+    if ($command) {
+        return $command.Source
+    }
+
+    $bundledNssm = Join-Path $ProjectRoot "deployment\windows\nssm.exe"
+    if (Test-Path $bundledNssm) {
+        return $bundledNssm
+    }
+
+    $candidates = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Links\nssm.exe"),
+        (Join-Path $env:ProgramFiles "WinGet\Links\nssm.exe"),
+        "C:\Tools\nssm\nssm.exe"
+    )
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return $candidate
+        }
+    }
+
+    $packageRoots = @(
+        (Join-Path $env:LOCALAPPDATA "Microsoft\WinGet\Packages"),
+        (Join-Path $env:ProgramFiles "WinGet\Packages")
+    )
+    foreach ($packageRoot in $packageRoots) {
+        if (-not (Test-Path $packageRoot)) {
+            continue
+        }
+
+        $match = Get-ChildItem -Path $packageRoot -Filter nssm.exe -File -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -like "*NSSM.NSSM*" } |
+            Select-Object -First 1
+        if ($match) {
+            return $match.FullName
+        }
+    }
+
+    return $null
+}
+
+function Ensure-Nssm {
+    $nssmExe = Find-NssmExecutable
+    if (-not $nssmExe) {
+        $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+        if (-not $winget) {
+            throw "NSSM is required for the Setu Windows service, but WinGet is unavailable. Install App Installer from Microsoft Store and run setup again."
+        }
+
+        Write-Host "NSSM was not found. Installing it automatically with WinGet..."
+        & $winget.Source install --id NSSM.NSSM -e --source winget --accept-package-agreements --accept-source-agreements --disable-interactivity | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "NSSM installation failed with exit code $LASTEXITCODE."
+        }
+
+        $nssmExe = Find-NssmExecutable
+        if (-not $nssmExe) {
+            throw "NSSM was installed, but nssm.exe could not be located."
+        }
+    }
+
+    & $nssmExe version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "The NSSM executable at '$nssmExe' could not be run."
+    }
+
+    # Keep a stable copy with the service installer so a WinGet link or package
+    # update cannot invalidate the Windows service management path later.
+    $stableNssm = Join-Path $ProjectRoot "deployment\windows\nssm.exe"
+    $sourcePath = (Resolve-Path -LiteralPath $nssmExe).Path
+    if ($sourcePath -ne $stableNssm) {
+        Copy-Item -LiteralPath $sourcePath -Destination $stableNssm -Force
+    }
+    Write-Host "Found NSSM at $sourcePath"
+    return $stableNssm
+}
+
 function Write-CaddyConfig {
     param(
         [string]$Address,
@@ -499,29 +577,22 @@ function Offer-CaddySetup {
 }
 
 function Offer-ServiceInstall {
-    $installService = Read-YesNo "Install Setu as a Windows service now? This needs Administrator PowerShell and NSSM." $false
+    $installService = Read-YesNo "Install Setu as an auto-starting Windows service now?" $false
     if (-not $installService) {
-        return
+        return $false
     }
 
     if (-not (Test-AdminShell)) {
-        Write-Host "Skipping service install because this window is not running as Administrator." -ForegroundColor Yellow
-        Write-Host "Run setup.bat again as Administrator if you want the service installed."
-        return
+        throw "Windows service installation needs Administrator access. Right-click setup.bat, choose 'Run as administrator', and run it again."
     }
 
-    $defaultNssm = "C:\Tools\nssm\nssm.exe"
-    $nssmPath = Read-Default "Path to nssm.exe" $defaultNssm
-    if (-not (Test-Path $nssmPath)) {
-        Write-Host "NSSM was not found at '$nssmPath'. Download NSSM, then run the service installer later." -ForegroundColor Yellow
-        return
-    }
-
+    $nssmPath = Ensure-Nssm
     $serviceScript = Join-Path $ProjectRoot "deployment\windows\install_service.ps1"
     & powershell -NoProfile -ExecutionPolicy Bypass -File $serviceScript -ProjectDir $ProjectRoot -NssmPath $nssmPath -Port $Port
     if ($LASTEXITCODE -ne 0) {
         throw "Windows service install failed."
     }
+    return $true
 }
 
 function Get-LocalIPv4 {
@@ -564,7 +635,7 @@ Write-Section "HTTPS with Caddy"
 $caddySetup = Offer-CaddySetup
 
 Write-Section "Optional Service"
-Offer-ServiceInstall
+$serviceInstalled = Offer-ServiceInstall
 
 Write-Section "Done"
 Write-Host "Setup completed successfully." -ForegroundColor Green
@@ -589,7 +660,16 @@ if ($credentials) {
     Write-Host "Keep this password somewhere safe. It is only shown during setup."
 }
 
-if (-not $SkipStart) {
+if ($serviceInstalled) {
+    Write-Host "Setu is running as the auto-starting Windows service." -ForegroundColor Green
+    if ($caddySetup) {
+        Start-Process "https://$($caddySetup.Address)"
+    }
+    else {
+        Start-Process "http://127.0.0.1:$Port"
+    }
+}
+elseif (-not $SkipStart) {
     $startNow = Read-YesNo "Start Setu now in a new window?" $true
     if ($startNow) {
         Start-Process -FilePath $StartScript -ArgumentList @("-Port", "$Port")

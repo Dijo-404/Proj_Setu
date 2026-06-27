@@ -32,12 +32,18 @@
       <tbody>
         {% for item in batch.items %}
         <tr>
-          <td><a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a></td>
+          <td>
+            {% if role_can(user, 'serial_data') %}
+            <a href="/serials/{{ item.serial.id }}">{{ item.serial.serial_number }}</a>
+            {% else %}
+            {{ item.serial.serial_number }}
+            {% endif %}
+          </td>
           <td>{{ item.serial.product.product_code }} - {{ item.serial.product.product_name }}</td>
           <td>{{ item.serial.product_batch_number or '-' }}<small>{{ item.serial.warehouse or '' }}</small></td>
           <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
           <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
-          <td><a href="/serials/labels?ids={{ item.serial.id }}">Open</a></td>
+          <td>{% if role_can(user, 'label_files') %}<a href="/serials/labels?ids={{ item.serial.id }}">Open</a>{% else %}-{% endif %}</td>
         </tr>
         {% else %}
         <tr><td colspan="6" class="empty">No QR labels generated</td></tr>

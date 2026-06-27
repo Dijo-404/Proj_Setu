@@ -63,9 +63,10 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/dashboard/data")
 def dashboard_data(request: Request, db: Session = Depends(get_db)):
-    require_permission(request, db, "dashboard_data")
+    user = require_permission(request, db, "dashboard_data")
     batches_html = templates.env.get_template("partials/dashboard_batches.html").render(
-        recent_batches=_recent_batches(db)
+        recent_batches=_recent_batches(db),
+        user=user,
     )
     scans_html = templates.env.get_template("partials/dashboard_scans.html").render(
         recent_scans=_recent_scans(db)
@@ -74,7 +75,8 @@ def dashboard_data(request: Request, db: Session = Depends(get_db)):
         **_chart_context(db)
     )
     expiry_html = templates.env.get_template("partials/expiry_summary.html").render(
-        expiry=expiry_summary(db)
+        expiry=expiry_summary(db),
+        user=user,
     )
     return JSONResponse(
         {

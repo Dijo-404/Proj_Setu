@@ -36,7 +36,7 @@ On the Windows server, double-click:
 setup.bat
 ```
 
-The setup helper checks for Python 3.11, can install it with `winget` when available, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app.
+The setup helper checks for Python 3.11, installs missing prerequisites with `winget`, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
 
 For the complete Caddy setup, right-click `setup.bat` and choose **Run as administrator**. Caddy setup is offered by default; pass `-SkipCaddy` if HTTPS will be handled separately.
 

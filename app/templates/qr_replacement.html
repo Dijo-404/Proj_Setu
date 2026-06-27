@@ -6,7 +6,7 @@
     <p class="eyebrow">Labels</p>
     <h1>Barcode Replacement</h1>
   </div>
-  {% if replacement %}
+  {% if replacement and role_can(user, 'label_files') %}
   <a class="button primary" href="/serials/labels?ids={{ replacement.id }}">Print new label</a>
   {% endif %}
 </section>

@@ -9,6 +9,7 @@
 </section>
 
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
 
 <section class="panel">
   <h2>New user</h2>
@@ -49,6 +50,13 @@
             </form>
             {% endif %}
             {% if user.role == 'super_admin' and row.id != user.id %}
+            <button
+              class="button small ghost"
+              type="button"
+              data-reset-password
+              data-user-id="{{ row.id }}"
+              data-username="{{ row.username }}"
+            >Reset password</button>
             <form method="post" action="/users/{{ row.id }}/delete" onsubmit="return confirm('Delete this user? Accounts with activity history will be removed from this list but kept for old records.');">
               <button class="button small danger" type="submit">Delete user</button>
             </form>
@@ -61,5 +69,40 @@
     </table>
   </div>
 </section>
+
+{% if user.role == 'super_admin' %}
+<dialog id="password-reset-modal" class="modal">
+  <div class="modal__head">
+    <div>
+      <h2>Reset password</h2>
+      <small class="muted">Set a new password for <strong data-reset-username></strong>.</small>
+    </div>
+    <button class="button ghost modal__close" type="button" data-reset-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body">
+    <p class="muted">Existing passwords are securely hashed and cannot be viewed.</p>
+    <form method="post" class="stack" data-reset-form>
+      <label>New password
+        <span class="password-field" data-password-field>
+          <input name="new_password" type="password" autocomplete="new-password" minlength="8" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirm new password
+        <input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required>
+      </label>
+      <label class="checkline">
+        <input type="checkbox" name="force_change" value="true" checked>
+        Require this user to change the password after signing in
+      </label>
+      <button class="button primary full" type="submit">Reset password</button>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
 <script src="/static/password-toggle.js"></script>
+{% if user.role == 'super_admin' %}
+<script src="/static/user-password-reset.js"></script>
+{% endif %}
 {% endblock %}

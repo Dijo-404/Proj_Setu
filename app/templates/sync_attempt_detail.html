@@ -6,7 +6,9 @@
     <p class="eyebrow">{{ batch.batch_number }}</p>
     <h1>Sync attempt</h1>
   </div>
+  {% if role_can_view_batch(user, batch.batch_type) %}
   <a class="button" href="/batches/{{ batch.id }}">Back to batch</a>
+  {% endif %}
 </section>
 
 <section class="panel narrow">

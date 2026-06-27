@@ -9,6 +9,8 @@ import os
 
 from app.config import get_settings
 
+MIN_PASSWORD_LENGTH = 8
+
 
 def _b64(data: bytes) -> str:
     return base64.urlsafe_b64encode(data).decode("ascii").rstrip("=")

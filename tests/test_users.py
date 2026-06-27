@@ -7,7 +7,7 @@ from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
 from app.models import Batch, BatchType, User
-from app.security import create_session_token
+from app.security import create_session_token, hash_password, verify_password
 
 
 def make_session():
@@ -102,3 +102,106 @@ def test_user_delete_is_super_admin_only_and_archives_history_user():
     assert used.active is False
     assert used.deleted_at is not None
     assert root is not None
+
+
+def test_super_admin_can_reset_another_users_password():
+    engine, Session = make_session()
+    with Session() as db:
+        db.add(User(id=1, username="root", password_hash=hash_password("old-root-pass"), role="super_admin", active=True))
+        db.add(User(id=2, username="staff", password_hash=hash_password("old-staff-pass"), role="sales", active=True))
+        db.commit()
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        cookies = {SESSION_COOKIE: create_session_token(1)}
+        page = client.get("/users", cookies=cookies)
+        response = client.post(
+            "/users/2/password",
+            cookies=cookies,
+            data={
+                "new_password": "new-staff-pass",
+                "confirm_password": "new-staff-pass",
+                "force_change": "true",
+            },
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    with Session() as db:
+        staff = db.get(User, 2)
+        assert staff is not None
+        assert verify_password("new-staff-pass", staff.password_hash)
+        assert not verify_password("old-staff-pass", staff.password_hash)
+        assert staff.must_change_password is True
+    engine.dispose()
+
+    assert page.status_code == 200
+    assert 'data-user-id="2"' in page.text
+    assert 'action="/users/2/password"' not in page.text
+    assert "old-staff-pass" not in page.text
+    assert response.status_code == 303
+    assert response.headers["location"] == "/users?success=password_reset"
+
+
+def test_password_reset_is_super_admin_only_and_validates_input():
+    engine, Session = make_session()
+    original_hash = hash_password("original-pass")
+    with Session() as db:
+        db.add(User(id=1, username="admin", password_hash=hash_password("admin-pass"), role="admin", active=True))
+        db.add(User(id=2, username="root", password_hash=hash_password("root-pass"), role="super_admin", active=True))
+        db.add(User(id=3, username="staff", password_hash=original_hash, role="purchase", active=True))
+        db.commit()
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        admin_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(1)})
+        admin_reset = client.post(
+            "/users/3/password",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+            data={"new_password": "changed-pass", "confirm_password": "changed-pass"},
+        )
+        short_reset = client.post(
+            "/users/3/password",
+            cookies={SESSION_COOKIE: create_session_token(2)},
+            data={"new_password": "short", "confirm_password": "short"},
+        )
+        mismatch_reset = client.post(
+            "/users/3/password",
+            cookies={SESSION_COOKIE: create_session_token(2)},
+            data={"new_password": "changed-pass", "confirm_password": "different-pass"},
+        )
+        self_reset = client.post(
+            "/users/2/password",
+            cookies={SESSION_COOKIE: create_session_token(2)},
+            data={"new_password": "changed-pass", "confirm_password": "changed-pass"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    with Session() as db:
+        staff = db.get(User, 3)
+        assert staff is not None
+        assert staff.password_hash == original_hash
+    engine.dispose()
+
+    assert "Reset password" not in admin_page.text
+    assert admin_reset.status_code == 403
+    assert short_reset.headers["location"] == "/users?error=password_too_short"
+    assert mismatch_reset.headers["location"] == "/users?error=password_mismatch"
+    assert self_reset.headers["location"] == "/users?error=password_reset_self"

@@ -7,7 +7,9 @@
     <h1>{{ serial.serial_number }}</h1>
   </div>
   <div class="actions">
+    {% if role_can(user, 'label_files') %}
     <a class="button" href="/serials/labels?ids={{ serial.id }}">Open label</a>
+    {% endif %}
     <a class="button" href="/serials">Serials</a>
   </div>
 </section>

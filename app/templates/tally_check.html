@@ -85,7 +85,11 @@
               <button class="button small" type="submit">Mark checked</button>
             </form>
             {% else %}
+            {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
             <a href="/settings">Fix settings</a>
+            {% else %}
+            <span class="muted">Settings access required</span>
+            {% endif %}
             {% endif %}
           </td>
         </tr>

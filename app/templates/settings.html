@@ -6,9 +6,11 @@
     <p class="eyebrow">System</p>
     <h1>Settings</h1>
   </div>
+  {% if user.role == 'super_admin' %}
   <div class="actions">
     <a class="button" href="/settings/access">Role access</a>
   </div>
+  {% endif %}
 </section>
 
 {% if error and not open_settings %}<div class="alert error">{{ error }}</div>{% endif %}

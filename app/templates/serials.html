@@ -30,7 +30,7 @@
           <td>{{ serial.product_batch_number or '-' }}<small>{{ serial.warehouse or '' }}</small></td>
           <td>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</td>
           <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
-          <td>{% if role_can(user.role, 'label_files') %}<a href="/serials/labels?ids={{ serial.id }}">Label</a>{% else %}-{% endif %}</td>
+          <td>{% if role_can(user, 'label_files') %}<a href="/serials/labels?ids={{ serial.id }}">Label</a>{% else %}-{% endif %}</td>
         </tr>
         {% else %}
         <tr><td colspan="6" class="empty">No serials found</td></tr>

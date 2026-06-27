@@ -6,12 +6,14 @@
     <p class="eyebrow">Audit trail</p>
     <h1>Reports</h1>
   </div>
+  {% if role_can(user, 'reports_export') %}
   <div class="actions">
     <a class="button" href="/reports/transactions.csv?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions CSV</a>
     <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions XLSX</a>
     <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Scans CSV</a>
     <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Scans XLSX</a>
   </div>
+  {% endif %}
 </section>
 
 <section class="panel">
@@ -137,7 +139,13 @@
         <tbody>
           {% for batch in pending %}
           <tr>
-            <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
+            <td>
+              {% if role_can_view_batch(user, batch.batch_type) %}
+              <a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a>
+              {% else %}
+              {{ batch.batch_number }}
+              {% endif %}
+            </td>
             <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
             <td>{{ batch.retry_count or 0 }}</td>
             <td>{{ batch.last_retry_at.strftime('%d %b %H:%M') if batch.last_retry_at else '-' }}</td>
