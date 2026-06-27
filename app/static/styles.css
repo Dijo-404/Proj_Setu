@@ -176,7 +176,7 @@ tfoot th, tfoot td {
 }
 
 .access-table {
-  min-width: 980px;
+  min-width: 1120px;
 }
 
 .access-matrix-scroll {
@@ -222,8 +222,8 @@ tfoot th, tfoot td {
   vertical-align: top;
 }
 
-.access-table td:nth-child(n+3):nth-child(-n+7),
-.access-table th:nth-child(n+3):nth-child(-n+7) {
+.access-table td:nth-child(n+3):nth-child(-n+8),
+.access-table th:nth-child(n+3):nth-child(-n+8) {
   text-align: center;
   white-space: nowrap;
 }
@@ -1742,6 +1742,320 @@ small {
   .button:hover,
   .button:active,
   .metric:hover { transform: none; }
+}
+
+/* Warehouse relocation */
+.warehouse-workflow {
+  display: grid;
+  gap: 18px;
+}
+
+.relocation-step {
+  margin-bottom: 0;
+  overflow: visible;
+}
+
+.step-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 20px;
+}
+
+.step-heading p {
+  margin: 5px 0 0;
+  color: var(--ink-48);
+  font-size: 14px;
+}
+
+.step-number {
+  display: grid;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--on-dark);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.relocation-results {
+  margin-top: 18px;
+}
+
+.relocation-results .table-scroll,
+.relocation-basket-scroll {
+  max-height: 380px;
+}
+
+.move-quantity {
+  display: grid;
+  gap: 6px;
+  width: 124px;
+}
+
+.move-quantity input {
+  min-height: 38px;
+  padding: 7px 10px;
+}
+
+.move-quantity .checkline {
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.destination-scan {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px;
+  margin-bottom: 18px;
+}
+
+.destination-scan input {
+  flex: 1 1 280px;
+}
+
+.location-hierarchy {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.destination-summary {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--parchment);
+  color: var(--ink-48);
+  font-size: 14px;
+}
+
+.destination-summary.is-selected {
+  border-color: rgba(29, 122, 62, 0.28);
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+  font-weight: 600;
+}
+
+.confirm-relocation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.confirm-relocation p {
+  margin: 0;
+  color: var(--ink-48);
+  font-size: 14px;
+}
+
+.scanner-modal .modal__body {
+  display: grid;
+  gap: 12px;
+}
+
+.scanner-modal .scanner-box {
+  min-height: min(380px, 60vh);
+}
+
+.location-create-form {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  align-items: end;
+  gap: 14px;
+}
+
+.location-qr-thumb {
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 6px;
+}
+
+.location-created-card {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 18px;
+  padding: 22px;
+  border: 1px solid rgba(29, 122, 62, 0.22);
+  border-radius: var(--r-lg);
+  background: linear-gradient(135deg, var(--ok-bg), var(--canvas));
+  box-shadow: var(--e1);
+}
+
+.location-created-card > img {
+  flex: 0 0 150px;
+  width: 150px;
+  height: 150px;
+  border: 8px solid var(--canvas);
+  border-radius: var(--r-md);
+  box-shadow: var(--e1);
+}
+
+.location-created-card > div {
+  min-width: 0;
+}
+
+.location-created-card p:not(.eyebrow) {
+  margin: 7px 0 16px;
+  color: var(--ink-48);
+  overflow-wrap: anywhere;
+}
+
+.location-label-actions {
+  display: flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.warehouse-map-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.location-card {
+  padding: 18px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-lg);
+  background: var(--canvas);
+  box-shadow: var(--e1);
+}
+
+.location-card.is-inactive {
+  opacity: 0.66;
+}
+
+.location-card__head,
+.location-card__qty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.location-card__head > div {
+  display: grid;
+}
+
+.location-card__head > div > span {
+  color: var(--ink-48);
+  font-size: 12px;
+}
+
+.location-card__head > div > strong {
+  font-size: 17px;
+}
+
+.location-path {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 17px 0;
+}
+
+.location-path span {
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  background: var(--parchment);
+  color: var(--ink-48);
+  font-size: 11px;
+}
+
+.location-path strong {
+  color: var(--ink);
+  font-size: 14px;
+}
+
+.location-card__qty {
+  justify-content: flex-start;
+  padding-top: 14px;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.location-card__qty strong {
+  color: var(--primary);
+  font-size: 28px;
+}
+
+.location-card__qty span {
+  color: var(--ink-48);
+  font-size: 13px;
+}
+
+.movement-history-table {
+  min-width: 1320px;
+}
+
+.device-cell {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  color: var(--ink-48);
+  font-size: 13px;
+}
+
+@media (max-width: 980px) {
+  .location-hierarchy {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .location-create-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .warehouse-map-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .relocation-step {
+    padding: 17px;
+  }
+
+  .location-hierarchy,
+  .location-create-form,
+  .warehouse-map-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .destination-scan {
+    display: grid;
+  }
+
+  .destination-scan input,
+  .destination-scan .button,
+  .confirm-relocation .button {
+    width: 100%;
+  }
+
+  .location-path {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .scanner-modal .scanner-box {
+    min-height: 300px;
+  }
+
+  .location-created-card {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .location-created-card > img {
+    align-self: center;
+  }
 }
 
 #scan-toast-container {

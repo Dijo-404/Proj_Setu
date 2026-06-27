@@ -93,6 +93,25 @@ def test_role_access_page_is_super_admin_only():
     assert 'class="table-scroll"' not in root_response.text
     assert 'href="/settings/access">Role access</a>' in root_response.text
     assert 'name="access__page_reports__admin"' in root_response.text
+    assert ">Purchase</summary>" in root_response.text
+    assert ">Sales</summary>" in root_response.text
+    assert ">Stock</summary>" in root_response.text
+    assert ">Batches</summary>" not in root_response.text
+    workflow_markers = [
+        ">Dashboard</a>",
+        ">Purchase</summary>",
+        ">Sales</summary>",
+        ">Stock</summary>",
+        ">Warehouse</summary>",
+        ">Barcodes</summary>",
+        ">Serials</a>",
+        ">Reports</a>",
+        ">Tally Check</a>",
+        ">Admin</summary>",
+    ]
+    assert [root_response.text.index(marker) for marker in workflow_markers] == sorted(
+        root_response.text.index(marker) for marker in workflow_markers
+    )
     assert admin_response.status_code == 403
     assert purchase_response.status_code == 403
 

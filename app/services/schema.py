@@ -30,6 +30,9 @@ def ensure_runtime_schema() -> None:
                 connection.execute(text("ALTER TABLE serials ADD COLUMN expiry_date DATE"))
             if "warehouse" not in serial_columns:
                 connection.execute(text("ALTER TABLE serials ADD COLUMN warehouse VARCHAR(80)"))
+            if "location_id" not in serial_columns:
+                connection.execute(text("ALTER TABLE serials ADD COLUMN location_id INTEGER"))
+                connection.execute(text("CREATE INDEX IF NOT EXISTS ix_serials_location_id ON serials (location_id)"))
 
         if "batch_items" in inspector.get_table_names():
             item_columns = {column["name"] for column in inspector.get_columns("batch_items")}
@@ -47,3 +50,28 @@ def ensure_runtime_schema() -> None:
                 connection.execute(text("ALTER TABLE users ADD COLUMN deleted_at DATETIME"))
             if "must_change_password" not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
+
+        if engine.dialect.name == "sqlite" and "stock_relocations" in inspector.get_table_names():
+            for table_name in ("stock_relocations", "relocation_serials"):
+                connection.execute(
+                    text(
+                        f"""
+                        CREATE TRIGGER IF NOT EXISTS prevent_{table_name}_update
+                        BEFORE UPDATE ON {table_name}
+                        BEGIN
+                            SELECT RAISE(ABORT, 'Relocation history is permanent');
+                        END
+                        """
+                    )
+                )
+                connection.execute(
+                    text(
+                        f"""
+                        CREATE TRIGGER IF NOT EXISTS prevent_{table_name}_delete
+                        BEFORE DELETE ON {table_name}
+                        BEGIN
+                            SELECT RAISE(ABORT, 'Relocation history is permanent');
+                        END
+                        """
+                    )
+                )

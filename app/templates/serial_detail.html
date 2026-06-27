@@ -21,7 +21,7 @@
     <dt>Product batch</dt><dd>{{ serial.product_batch_number or '-' }}</dd>
     <dt>Mfg date</dt><dd>{{ serial.mfg_date.strftime('%d %b %Y') if serial.mfg_date else '-' }}</dd>
     <dt>Expiry date</dt><dd>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</dd>
-    <dt>Warehouse</dt><dd>{{ serial.warehouse or '-' }}</dd>
+    <dt>Current location</dt><dd>{{ serial.location.full_path if serial.location else (serial.warehouse or 'Unassigned') }}</dd>
     <dt>Status</dt><dd><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></dd>
     <dt>Active</dt><dd>{{ 'Yes' if serial.active else 'No' }}</dd>
     <dt>Created</dt><dd>{{ serial.created_at.strftime('%d %b %Y %H:%M') }}</dd>
@@ -29,6 +29,29 @@
     <dt>Replacement</dt><dd><a href="/serials/{{ replacement.id }}">{{ replacement.serial_number }}</a></dd>
     {% endif %}
   </dl>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Location movement history</h2></div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Reference</th><th>Previous location</th><th>New location</th><th>User</th><th>Reason</th></tr></thead>
+      <tbody>
+        {% for move in relocations %}
+        <tr>
+          <td>{{ move.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ move.reference_number }}</td>
+          <td>{{ move.previous_location_snapshot }}</td>
+          <td>{{ move.new_location_snapshot }}</td>
+          <td>{{ move.user.username }}</td>
+          <td>{{ move.reason or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No location movements recorded</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 
 <section class="panel">

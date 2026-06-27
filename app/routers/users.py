@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission, require_user
 from app.database import get_db
-from app.models import Batch, InventoryTransaction, Role, ScanLog, Serial, TallyMasterConfirmation, User, utc_now
+from app.models import Batch, InventoryTransaction, Role, ScanLog, Serial, StockRelocation, TallyMasterConfirmation, User, utc_now
 from app.security import MIN_PASSWORD_LENGTH, hash_password
 from app.templates import templates
 
@@ -123,6 +123,7 @@ def delete_user(request: Request, user_id: int, db: Session = Depends(get_db)):
             db.scalar(select(func.count(ScanLog.id)).where(ScanLog.user_id == target.id)) or 0,
             db.scalar(select(func.count(Serial.id)).where(Serial.label_printed_by_id == target.id)) or 0,
             db.scalar(select(func.count(TallyMasterConfirmation.id)).where(TallyMasterConfirmation.confirmed_by_id == target.id)) or 0,
+            db.scalar(select(func.count(StockRelocation.id)).where(StockRelocation.user_id == target.id)) or 0,
         )
     )
     if reference_count:

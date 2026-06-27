@@ -27,7 +27,7 @@
         <tr>
           <td><a href="/serials/{{ serial.id }}">{{ serial.serial_number }}</a></td>
           <td>{{ serial.product.product_name }}</td>
-          <td>{{ serial.product_batch_number or '-' }}<small>{{ serial.warehouse or '' }}</small></td>
+          <td>{{ serial.product_batch_number or '-' }}<small>{{ serial.location.full_path if serial.location else (serial.warehouse or '') }}</small></td>
           <td>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</td>
           <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
           <td>{% if role_can(user, 'label_files') %}<a href="/serials/labels?ids={{ serial.id }}">Label</a>{% else %}-{% endif %}</td>

@@ -15,6 +15,7 @@ def utc_now() -> datetime:
 class Role(str, Enum):
     SUPER_ADMIN = "super_admin"
     ADMIN = "admin"
+    WAREHOUSE_MANAGER = "warehouse_manager"
     PURCHASE = "purchase"
     SALES = "sales"
     AUDITOR = "auditor"
@@ -56,6 +57,7 @@ class TransactionType(str, Enum):
     AUDIT = "AUDIT"
     QR_ASSIGNMENT = "QR_ASSIGNMENT"
     QR_REPLACEMENT = "QR_REPLACEMENT"
+    RELOCATION = "RELOCATION"
 
 
 class BatchStatus(str, Enum):
@@ -104,6 +106,38 @@ class Product(Base):
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="product")
 
 
+class StorageLocation(Base):
+    __tablename__ = "storage_locations"
+    __table_args__ = (
+        UniqueConstraint(
+            "warehouse",
+            "zone",
+            "section",
+            "rack",
+            "shelf",
+            "bin",
+            name="uq_storage_location_path",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(140), unique=True, index=True)
+    warehouse: Mapped[str] = mapped_column(String(80), index=True)
+    zone: Mapped[str] = mapped_column(String(80), index=True)
+    section: Mapped[str] = mapped_column(String(80), index=True)
+    rack: Mapped[str] = mapped_column(String(80), index=True)
+    shelf: Mapped[str] = mapped_column(String(80), index=True)
+    bin: Mapped[str] = mapped_column(String(80), index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    serials: Mapped[list["Serial"]] = relationship(back_populates="location")
+
+    @property
+    def full_path(self) -> str:
+        return " / ".join((self.warehouse, self.zone, self.section, self.rack, self.shelf, self.bin))
+
+
 class Serial(Base):
     __tablename__ = "serials"
 
@@ -120,10 +154,50 @@ class Serial(Base):
     mfg_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     warehouse: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("storage_locations.id"), nullable=True, index=True)
 
     product: Mapped[Product] = relationship(back_populates="serials")
+    location: Mapped[StorageLocation | None] = relationship(back_populates="serials")
     batch_items: Mapped[list["BatchItem"]] = relationship(back_populates="serial")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="serial")
+
+
+class StockRelocation(Base):
+    __tablename__ = "stock_relocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reference_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    product_batch_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    previous_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("storage_locations.id"), nullable=True, index=True
+    )
+    new_location_id: Mapped[int] = mapped_column(ForeignKey("storage_locations.id"), index=True)
+    previous_location_snapshot: Mapped[str] = mapped_column(String(520))
+    new_location_snapshot: Mapped[str] = mapped_column(String(520))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    device_used: Mapped[str] = mapped_column(String(240))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    product: Mapped[Product] = relationship()
+    previous_location: Mapped[StorageLocation | None] = relationship(foreign_keys=[previous_location_id])
+    new_location: Mapped[StorageLocation] = relationship(foreign_keys=[new_location_id])
+    user: Mapped[User] = relationship()
+    serial_links: Mapped[list["RelocationSerial"]] = relationship(back_populates="relocation")
+
+
+class RelocationSerial(Base):
+    __tablename__ = "relocation_serials"
+    __table_args__ = (UniqueConstraint("relocation_id", "serial_id", name="uq_relocation_serial"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    relocation_id: Mapped[int] = mapped_column(ForeignKey("stock_relocations.id"), index=True)
+    serial_id: Mapped[int] = mapped_column(ForeignKey("serials.id"), index=True)
+
+    relocation: Mapped[StockRelocation] = relationship(back_populates="serial_links")
+    serial: Mapped[Serial] = relationship()
 
 
 class Batch(Base):

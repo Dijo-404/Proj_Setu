@@ -26,17 +26,53 @@
       {% if role_can(user, 'page_dashboard') and role_can(user, 'dashboard_data') %}
       <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
       {% endif %}
-      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_purchase') or role_can(user, 'batch_purchase_return') or role_can(user, 'batch_sale') or role_can(user, 'batch_sales_return') or role_can(user, 'batch_issue') or role_can(user, 'batch_audit') or role_can(user, 'batch_list')) %}
+      {% set nav_batch_type = request.query_params.get('batch_type', '') %}
+      {% if batch is defined and batch %}{% set nav_batch_type = batch.batch_type %}{% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_purchase') or role_can(user, 'batch_purchase_return')) %}
       <details class="nav-menu">
-        <summary class="{{ 'active' if request.url.path.startswith('/batches') else '' }}">Batches</summary>
+        <summary class="{{ 'active' if request.url.path.startswith('/batches') and nav_batch_type in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] else '' }}">Purchase</summary>
         <div class="nav-menu__panel">
           {% if role_can(user, 'batch_purchase') %}<a href="/batches/new?batch_type=PURCHASE">Purchase</a>{% endif %}
           {% if role_can(user, 'batch_purchase_return') %}<a href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_sale') or role_can(user, 'batch_sales_return')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/batches') and nav_batch_type in ['SALE', 'SALES_RETURN'] else '' }}">Sales</summary>
+        <div class="nav-menu__panel">
           {% if role_can(user, 'batch_sale') %}<a href="/batches/new?batch_type=SALE">Sale</a>{% endif %}
           {% if role_can(user, 'batch_sales_return') %}<a href="/batches/new?batch_type=SALES_RETURN">Sales return</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_batches') and (role_can(user, 'batch_issue') or role_can(user, 'batch_audit') or role_can(user, 'batch_list')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path == '/batches' or (request.url.path.startswith('/batches') and nav_batch_type in ['ISSUE', 'AUDIT']) else '' }}">Stock</summary>
+        <div class="nav-menu__panel">
           {% if role_can(user, 'batch_issue') %}<a href="/batches/new?batch_type=ISSUE">Issue</a>{% endif %}
           {% if role_can(user, 'batch_audit') %}<a href="/batches/new?batch_type=AUDIT">Audit</a>{% endif %}
           {% if role_can(user, 'batch_list') %}<a href="/batches">All batches</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_warehouse') and (role_can(user, 'stock_relocation') or role_can(user, 'warehouse_data') or role_can(user, 'location_manage')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/warehouse') else '' }}">Warehouse</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'stock_relocation') %}<a href="/warehouse/move">Move stock</a>{% endif %}
+          {% if role_can(user, 'warehouse_data') %}<a href="/warehouse/map">Warehouse map</a>{% endif %}
+          {% if role_can(user, 'warehouse_data') %}<a href="/warehouse/history">Movement history</a>{% endif %}
+          {% if role_can(user, 'location_manage') %}<a href="/warehouse/locations">Storage locations</a>{% endif %}
+        </div>
+      </details>
+      {% endif %}
+      {% if role_can(user, 'page_barcodes') and (role_can(user, 'barcode_assignment') or role_can(user, 'barcode_replacement')) %}
+      <details class="nav-menu">
+        <summary class="{{ 'active' if request.url.path.startswith('/barcode-assignment') or request.url.path.startswith('/barcode-replacement') or request.url.path.startswith('/qr-replacement') else '' }}">Barcodes</summary>
+        <div class="nav-menu__panel">
+          {% if role_can(user, 'barcode_assignment') %}<a href="/barcode-assignment">Assignment</a>{% endif %}
+          {% if role_can(user, 'barcode_replacement') %}<a href="/barcode-replacement">Replacement</a>{% endif %}
         </div>
       </details>
       {% endif %}
@@ -48,15 +84,6 @@
       {% endif %}
       {% if role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit') %}
       <a href="/tally-check" class="{{ 'active' if request.url.path.startswith('/tally-check') else '' }}">Tally Check</a>
-      {% endif %}
-      {% if role_can(user, 'page_barcodes') and (role_can(user, 'barcode_assignment') or role_can(user, 'barcode_replacement')) %}
-      <details class="nav-menu">
-        <summary class="{{ 'active' if request.url.path.startswith('/barcode-assignment') or request.url.path.startswith('/barcode-replacement') or request.url.path.startswith('/qr-replacement') else '' }}">Barcodes</summary>
-        <div class="nav-menu__panel">
-          {% if role_can(user, 'barcode_assignment') %}<a href="/barcode-assignment">Assignment</a>{% endif %}
-          {% if role_can(user, 'barcode_replacement') %}<a href="/barcode-replacement">Replacement</a>{% endif %}
-        </div>
-      </details>
       {% endif %}
       {% if role_can(user, 'page_admin_menu') and ((role_can(user, 'page_products') and role_can(user, 'product_master')) or (role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics')) or (role_can(user, 'page_settings') and role_can(user, 'settings_edit')) or user.role == 'super_admin' or (role_can(user, 'page_maintenance') and role_can(user, 'backup_data')) or (role_can(user, 'page_users') and role_can(user, 'users_manage'))) %}
       <details class="nav-menu">
