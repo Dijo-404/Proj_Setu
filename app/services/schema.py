@@ -40,3 +40,10 @@ def ensure_runtime_schema() -> None:
             product_columns = {column["name"] for column in inspector.get_columns("products")}
             if "sales_discount_rate" not in product_columns:
                 connection.execute(text("ALTER TABLE products ADD COLUMN sales_discount_rate FLOAT DEFAULT 0"))
+
+        if "users" in inspector.get_table_names():
+            user_columns = {column["name"] for column in inspector.get_columns("users")}
+            if "deleted_at" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN deleted_at DATETIME"))
+            if "must_change_password" not in user_columns:
+                connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))

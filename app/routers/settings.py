@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
-from app.auth import require_permission
+from app.auth import require_permission, require_user
 from app.database import get_db
+from app.models import Role
 from app.services.access_control import ROLE_COLUMNS, config_from_form, role_access_sections, save_role_access_config
 from app.services.settings import (
     DEFAULT_SETTINGS,
@@ -62,7 +63,7 @@ def settings_page(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/access")
 def access_overview(request: Request, db: Session = Depends(get_db)):
-    user = require_permission(request, db, "role_access_edit")
+    user = require_user(request, db, {Role.SUPER_ADMIN})
     return templates.TemplateResponse(
         request,
         "role_access.html",
@@ -77,7 +78,7 @@ def access_overview(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/access")
 async def save_access_overview(request: Request, db: Session = Depends(get_db)):
-    require_permission(request, db, "role_access_edit")
+    require_user(request, db, {Role.SUPER_ADMIN})
     form = await request.form()
     save_role_access_config(db, config_from_form(form.multi_items()))
     return RedirectResponse("/settings/access", status_code=303)
@@ -163,8 +164,6 @@ def autosave_settings(
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    """Field-level auto-save for the active company. Never changes tally_enabled
-    (enabling sync must go through the explicit Save button + readiness gate)."""
     require_permission(request, db, "settings_edit")
     requested = {
         "company_name": company_name.strip(),

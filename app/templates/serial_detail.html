@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ serial.serial_number }} · Setu{% endblock %}
+{% block title %}{{ serial.serial_number }} - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -7,14 +7,16 @@
     <h1>{{ serial.serial_number }}</h1>
   </div>
   <div class="actions">
+    {% if role_can(user, 'label_files') %}
     <a class="button" href="/serials/labels?ids={{ serial.id }}">Open label</a>
+    {% endif %}
     <a class="button" href="/serials">Serials</a>
   </div>
 </section>
 
 <section class="panel">
   <dl class="details">
-    <dt>Product</dt><dd>{{ serial.product.product_code }} · {{ serial.product.product_name }}</dd>
+    <dt>Product</dt><dd>{{ serial.product.product_code }} - {{ serial.product.product_name }}</dd>
     <dt>Tally item</dt><dd>{{ serial.product.tally_stock_item_name }}</dd>
     <dt>Product batch</dt><dd>{{ serial.product_batch_number or '-' }}</dd>
     <dt>Mfg date</dt><dd>{{ serial.mfg_date.strftime('%d %b %Y') if serial.mfg_date else '-' }}</dd>

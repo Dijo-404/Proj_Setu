@@ -113,7 +113,7 @@ def labels_pdf(
     return Response(
         barcode_labels_pdf(rows, rows_per_page=rows_per_page, columns_per_page=columns_per_page),
         media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=setu-barcode-labels.pdf"},
+        headers={"Content-Disposition": "attachment; filename=setu-qr-labels.pdf"},
     )
 
 

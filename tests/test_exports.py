@@ -1,4 +1,5 @@
 from io import BytesIO
+from types import SimpleNamespace
 
 from openpyxl import load_workbook
 from PIL import Image
@@ -6,7 +7,7 @@ from sqlalchemy import select
 
 from app.models import BatchType, InventoryTransaction, Product, ScanLog, SerialStatus, TransactionType, User
 from app.services.audit import reconcile_audit_batch
-from app.services.exports import audit_report_pdf, barcode_labels_pdf, barcode_png, scans_xlsx, transactions_xlsx
+from app.services.exports import audit_report_pdf, barcode_labels_pdf, barcode_png, label_layout, scans_xlsx, transactions_xlsx
 from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 
 
@@ -35,13 +36,31 @@ def test_scans_xlsx_escapes_formula_like_values(db_session):
     assert sheet["D2"].value == "'=HYPERLINK(\"http://bad\")"
 
 
-def test_barcode_png_is_a_wide_1d_barcode():
+def test_barcode_png_is_square_qr_code():
     data = barcode_png("RCV-20260623-0001")
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
     width, height = Image.open(BytesIO(data)).size
-    # Code128 is a horizontal 1D barcode: clearly wider than tall.
-    # A square (≈1:1) image would mean we are still emitting a QR code.
-    assert width > height * 1.5
+    assert width == height
+    assert width >= 300
+
+
+def test_barcode_png_has_scan_quiet_zone():
+    data = barcode_png("DIJO-000001")
+    image = Image.open(BytesIO(data)).convert("L")
+    edge = max(8, image.width // 10)
+    top_edge = image.crop((0, 0, image.width, edge))
+    left_edge = image.crop((0, 0, edge, image.height))
+    bottom_edge = image.crop((0, image.height - edge, image.width, image.height))
+    right_edge = image.crop((image.width - edge, 0, image.width, image.height))
+
+    assert top_edge.getextrema()[0] > 245
+    assert left_edge.getextrema()[0] > 245
+    assert bottom_edge.getextrema()[0] > 245
+    assert right_edge.getextrema()[0] > 245
+
+
+def test_label_layout_defaults_to_48_5_by_25_4_sheet_grid():
+    assert label_layout() == (11, 4)
 
 
 def _make_product(db_session, code: str) -> Product:
@@ -70,6 +89,12 @@ def test_barcode_labels_pdf_accepts_custom_page_grid(db_session):
     product = _make_product(db_session, "SG053")
     serials = generate_serials(db_session, product, 5)
     data = barcode_labels_pdf(serials, rows_per_page=2, columns_per_page=2)
+    assert data.startswith(b"%PDF")
+
+
+def test_barcode_labels_pdf_renders_full_qr_label_sheet():
+    serials = [SimpleNamespace(serial_number=f"DIJO-{index:06d}") for index in range(44)]
+    data = barcode_labels_pdf(serials)
     assert data.startswith(b"%PDF")
 
 

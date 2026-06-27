@@ -1,4 +1,4 @@
-# QR Scan Bridge for Tally Prime — Build Reference
+# QR Scan Bridge for Tally Prime - Build Reference
 
 Client: Swarnagowri Foods & Beverages (friend's factory, biryani masala / spice products)
 Prepared by: Dijo S Benelen
@@ -29,10 +29,10 @@ Build against Doc 1's workflow first. Treat Doc 2 and Doc 3 as a backlog, not a 
 | Question | Answer | Implication |
 |---|---|---|
 | One company or multiple? | Single TallyPrime company | Hardcode the company name in config. No company-switching logic needed in the XML envelope. |
-| Network scope | LAN only, inside the factory | No need for Tailscale, VPN, or public exposure. Solve HTTPS for camera access with a local cert only (see §8). |
+| Network scope | LAN only, inside the factory | No need for Tailscale, VPN, or public exposure. Solve HTTPS for camera access with a local cert only (see section 8). |
 | Number of sites | Single factory | Drop the Godown/multi-location dimension from the schema for now. Cheap to add later, not worth building speculatively. |
 | Tally edition | Unconfirmed | Check via TallyPrime → F1 (Help) → About. Silver is fine if Tally Prime is only ever opened on the SERVER machine itself. Gold is required only if a second physical PC (e.g. the accountant's desktop) also opens the same company data. |
-| Was the test voucher scripted or typed manually, and what are the exact ledger names in Tally? | Unconfirmed, message sent to friend | Blocking item. Do not start writing the XML converter until this comes back. See §12. |
+| Was the test voucher scripted or typed manually, and what are the exact ledger names in Tally? | Unconfirmed, message sent to friend | Blocking item. Do not start writing the XML converter until this comes back. See section 12. |
 
 ---
 
@@ -73,7 +73,7 @@ If the app is built literally as 1 scan = 1 voucher:
 - Purchase User: start a goods-receipt session → scan all units from one supplier delivery → submit once → one Tally voucher with qty = N.
 - Auditor: no batching needed, audit never creates a Tally voucher at all.
 
-This changes the Transactions table from "one row per scan" to "scans roll up into a batch, batch maps to exactly one voucher." Resolve this before finalizing the schema in §10.
+This changes the Transactions table from "one row per scan" to "scans roll up into a batch, batch maps to exactly one voucher." Resolve this before finalizing the schema in section 10.
 
 ---
 
@@ -115,8 +115,8 @@ No official REST API exists. The real mechanism:
 | Tally HTTP client | `requests`/`httpx` with a timeout + retry wrapper | Catch `ConnectionRefusedError` explicitly and surface "Tally Connection Failed" per the original spec. |
 | Background retry | APScheduler | Polls `status = PENDING_SYNC` rows every N minutes. No need for Celery/Redis at this scale. |
 | Excel/CSV export | `openpyxl` | Matches the column shape already proven against this client's Tally setup. |
-| Reverse proxy / TLS | Caddy or nginx + mkcert | See §8. |
-| Deployment | Windows Service via NSSM | See §9. |
+| Reverse proxy / TLS | Caddy or nginx + mkcert | See section 8. |
+| Deployment | Windows Service via NSSM | See section 9. |
 
 ---
 
@@ -171,7 +171,7 @@ Specs observed: i7-4770 (Haswell), 32GB RAM, 233GB SSD with 212GB already used (
 
 ## 10. Database schema (first cut)
 
-Reflects the batching fix from §4 and the decision to keep serials local-only from §3.
+Reflects the batching fix from section 4 and the decision to keep serials local-only from section 3.
 
 ```
 users
@@ -207,8 +207,8 @@ Audit scans write directly to `scan_logs` with no `batch_id` and never touch Tal
 
 ## 11. Build order
 
-1. **Phase 0**: master-sync tool. Push/verify Stock Item, Unit, Ledger, HSN masters exist in Tally with exact names before any transaction screen is usable. This is the single highest-value piece of defensive tooling given §5.
-2. **Phase 1 (MVP)**: Doc 1's workflow, with the batching fix from §4. Login, scan, Receive/Sell/Audit, Tally push, retry queue, scan history. No returns, no replacement, no audit reconciliation.
+1. **Phase 0**: master-sync tool. Push/verify Stock Item, Unit, Ledger, HSN masters exist in Tally with exact names before any transaction screen is usable. This is the single highest-value piece of defensive tooling given section 5.
+2. **Phase 1 (MVP)**: Doc 1's workflow, with the batching fix from section 4. Login, scan, Receive/Sell/Audit, Tally push, retry queue, scan history. No returns, no replacement, no audit reconciliation.
 3. **Phase 2**: returns (sales return, purchase return), QR replacement, simple dashboard. From Doc 2.
 4. **Phase 3**: audit session reconciliation (expected vs scanned, missing/extra items), reports/export polish, anything from Doc 3's "future expansion" list (batch/expiry tracking, multi-warehouse) only if actually requested.
 
@@ -223,15 +223,15 @@ Get Phase 1 running against real Tally data for at least a week with real users 
 - [ ] Check Tally edition via F1 (Help) → About. Confirm whether any machine other than SERVER ever opens this company in Tally Prime; if yes, Gold is required.
 - [ ] Confirm free disk space on SERVER and a plan if it's tight.
 - [ ] Confirm F11 company features: Maintain Inventory = Yes, Integrate Accounts with Inventory = Yes.
-- [ ] Decide and confirm with the friend: does one "Sale" in the app always correspond to one customer/one invoice (per §4), or does the business sometimes want partial/split invoicing from a single scan session? Get this in writing before building the Sales screen.
+- [ ] Decide and confirm with the friend: does one "Sale" in the app always correspond to one customer/one invoice (per section 4), or does the business sometimes want partial/split invoicing from a single scan session? Get this in writing before building the Sales screen.
 
 ---
 
 ## 13. Risk checklist (quick reference)
 
-- Master name mismatch (Tally rejects the import) — mitigated by Phase 0 master-sync tool.
-- Scan-to-voucher mismatch inflating invoice count — mitigated by the batching/session model in §4.
-- Camera access silently failing on real phones over LAN HTTP — mitigated by mkcert + reverse proxy in §8.
-- Tally edition mismatch if a second PC ever opens the company — confirm via §12.
-- Disk space exhaustion on SERVER — confirm via §12.
-- Reusing the buggy duplicate-row logic from the proof of concept — fix before building the real converter, see §3.
+- Master name mismatch (Tally rejects the import) - mitigated by Phase 0 master-sync tool.
+- Scan-to-voucher mismatch inflating invoice count - mitigated by the batching/session model in section 4.
+- Camera access silently failing on real phones over LAN HTTP - mitigated by mkcert + reverse proxy in section 8.
+- Tally edition mismatch if a second PC ever opens the company - confirm via section 12.
+- Disk space exhaustion on SERVER - confirm via section 12.
+- Reusing the buggy duplicate-row logic from the proof of concept - fix before building the real converter, see section 3.

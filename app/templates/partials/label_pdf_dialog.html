@@ -13,10 +13,10 @@
       {% endif %}
       <div class="two-col">
         <label>Rows per page
-          <input name="rows_per_page" type="number" min="1" max="20" step="1" value="{{ label_pdf_rows|default(7) }}" required>
+          <input name="rows_per_page" type="number" min="1" max="11" step="1" value="{{ label_pdf_rows|default(11) }}" required>
         </label>
         <label>Columns per page
-          <input name="columns_per_page" type="number" min="1" max="8" step="1" value="{{ label_pdf_columns|default(3) }}" required>
+          <input name="columns_per_page" type="number" min="1" max="4" step="1" value="{{ label_pdf_columns|default(4) }}" required>
         </label>
       </div>
       <div class="save-row">

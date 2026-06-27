@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Products · Setu{% endblock %}
+{% block title %}Products - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -14,6 +14,8 @@
 
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 
+{% set can_edit_products = role_can(user, 'product_create') %}
+{% if can_edit_products %}
 <section class="panel">
   <h2>New product</h2>
   <form method="post" action="/products" class="grid-form" data-draft="setu:newproduct">
@@ -30,44 +32,88 @@
     <span data-autosave-status class="autosave-status"></span>
   </form>
 </section>
+{% endif %}
 
 <section class="panel">
   <div class="section-title"><h2>Product list</h2></div>
-  <div class="table-scroll">
-    <table>
+  <div class="table-scroll product-table-scroll">
+    <table class="product-table">
       <thead>
-        <tr><th>Code</th><th>Name</th><th>HSN</th><th>GST</th><th>Pricing</th><th>Generate Barcode</th></tr>
+        <tr>
+          <th class="product-col-main">Product</th>
+          {% if can_edit_products %}
+          <th class="product-col-pricing">Sales pricing</th>
+          <th class="product-col-labels">Label batch</th>
+          {% endif %}
+          {% if user.role == 'super_admin' %}<th class="product-col-manage">Manage</th>{% endif %}
+        </tr>
       </thead>
       <tbody>
         {% for product in products %}
         <tr>
-          <td>{{ product.product_code }}</td>
-          <td>{{ product.product_name }}</td>
-          <td>{{ product.hsn }}</td>
-          <td>{{ product.gst_rate }}%</td>
           <td>
-            <form method="post" action="/products/{{ product.id }}/pricing" class="inline-form compact-inline">
-              <input name="default_rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.default_rate or 0) }}" placeholder="Rate" aria-label="Default rate">
-              <input name="sales_discount_rate" type="number" min="0" max="100" step="0.01" value="{{ '%.2f'|format(product.sales_discount_rate or 0) }}" placeholder="Discount %" aria-label="Sales discount percent">
-              <button class="button small" type="submit">Save</button>
+            <div class="product-cell">
+              <strong class="product-code">{{ product.product_code }}</strong>
+              <span class="product-name">{{ product.product_name }}</span>
+              <div class="product-meta">
+                <span>HSN {{ product.hsn }}</span>
+                <span>{{ product.gst_rate }}% GST</span>
+              </div>
+            </div>
+          </td>
+          {% if can_edit_products %}
+          <td>
+            <form method="post" action="/products/{{ product.id }}/pricing" class="product-pricing-form">
+              <label class="product-field">
+                <span>Default rate</span>
+                <input name="default_rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.default_rate or 0) }}" aria-label="Default rate">
+              </label>
+              <label class="product-field">
+                <span>Sales discount %</span>
+                <input name="sales_discount_rate" type="number" min="0" max="100" step="0.01" value="{{ '%.2f'|format(product.sales_discount_rate or 0) }}" aria-label="Sales discount percent">
+              </label>
+              <button class="button small" type="submit">Save pricing</button>
             </form>
           </td>
           <td>
-            <form method="post" action="/products/{{ product.id }}/generate" class="inline-form">
-              <input name="quantity" type="number" min="1" max="5000" placeholder="Qty" required>
-              <input name="product_batch_number" placeholder="Batch">
-              <input name="expiry_date" type="date" aria-label="Expiry date">
-              <input name="prefix" placeholder="Prefix" value="{{ product.product_code }}">
-              <select name="initial_status">
-                <option value="GENERATED">Generated</option>
-                <option value="IN_STOCK">Existing stock</option>
-              </select>
-              <button class="button small" type="submit">Generate</button>
+            <form method="post" action="/products/{{ product.id }}/generate" class="product-label-form">
+              <label class="product-field">
+                <span>Quantity</span>
+                <input name="quantity" type="number" min="1" max="5000" placeholder="How many" required>
+              </label>
+              <label class="product-field">
+                <span>Batch number</span>
+                <input name="product_batch_number" placeholder="Optional">
+              </label>
+              <label class="product-field">
+                <span>Product expiry</span>
+                <input name="expiry_date" type="date" aria-label="Product expiry date">
+              </label>
+              <label class="product-field">
+                <span>Serial prefix</span>
+                <input name="prefix" value="{{ product.product_code }}">
+              </label>
+              <label class="product-field">
+                <span>Start as</span>
+                <select name="initial_status">
+                  <option value="GENERATED">Generated</option>
+                  <option value="IN_STOCK">Existing stock</option>
+                </select>
+              </label>
+              <button class="button small" type="submit">Generate labels</button>
             </form>
           </td>
+          {% endif %}
+          {% if user.role == 'super_admin' %}
+          <td class="product-manage-cell">
+            <form method="post" action="/products/{{ product.id }}/delete" class="product-manage-form" onsubmit="return confirm('Delete this product? Products with serials or transaction history cannot be deleted.');">
+              <button class="button small danger product-delete" type="submit">Delete product</button>
+            </form>
+          </td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="6" class="empty">No products found</td></tr>
+        <tr><td colspan="{{ 1 + (2 if can_edit_products else 0) + (1 if user.role == 'super_admin' else 0) }}" class="empty">No products found</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.auth import require_permission
+from app.auth import require_permission, require_user
 from app.database import get_db
-from app.models import Product, SerialStatus
+from app.models import InventoryTransaction, Product, Role, Serial, SerialStatus
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
@@ -21,6 +21,7 @@ def products(request: Request, q: str = "", error: str = "", db: Session = Depen
         "serial_generation_failed": "Barcode generation failed",
         "default_rate_invalid": "Default rate cannot be negative",
         "sales_discount_invalid": "Sales discount must be between 0 and 100%",
+        "product_delete_blocked": "Product has serials or transaction history and cannot be deleted",
     }.get(error, error)
     query = select(Product).order_by(Product.product_code)
     if q:
@@ -80,6 +81,33 @@ def create_product(
             {"request": request, "user": user, "products": rows, "q": "", "error": "Product code already exists"},
             status_code=400,
         )
+    return RedirectResponse("/products", status_code=303)
+
+
+@router.api_route("/{product_id}/name", methods=["GET", "POST"])
+def product_name_legacy_redirect(request: Request, product_id: int, db: Session = Depends(get_db)):
+    require_permission(request, db, "product_master")
+    return RedirectResponse("/products", status_code=303)
+
+
+@router.post("/{product_id}/delete")
+def delete_product(
+    request: Request,
+    product_id: int,
+    db: Session = Depends(get_db),
+):
+    require_user(request, db, {Role.SUPER_ADMIN})
+    product = db.get(Product, product_id)
+    if not product:
+        return RedirectResponse("/products", status_code=303)
+
+    serial_count = db.scalar(select(func.count(Serial.id)).where(Serial.product_id == product.id)) or 0
+    transaction_count = db.scalar(select(func.count(InventoryTransaction.id)).where(InventoryTransaction.product_id == product.id)) or 0
+    if serial_count or transaction_count:
+        return RedirectResponse("/products?error=product_delete_blocked", status_code=303)
+
+    db.delete(product)
+    db.commit()
     return RedirectResponse("/products", status_code=303)
 
 

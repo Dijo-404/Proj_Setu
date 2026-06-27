@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Batches · Setu{% endblock %}
+{% block title %}Batches - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -7,22 +7,22 @@
     <h1>Batches</h1>
   </div>
   <div class="actions">
-    {% if role_can(user.role, 'batch_purchase') %}
+    {% if role_can(user, 'batch_purchase') %}
     <a class="button primary" href="/batches/new?batch_type=PURCHASE">Purchase</a>
     {% endif %}
-    {% if role_can(user.role, 'batch_purchase_return') %}
+    {% if role_can(user, 'batch_purchase_return') %}
     <a class="button" href="/batches/new?batch_type=PURCHASE_RETURN">Purchase return</a>
     {% endif %}
-    {% if role_can(user.role, 'batch_sale') %}
+    {% if role_can(user, 'batch_sale') %}
     <a class="button secondary" href="/batches/new?batch_type=SALE">Sale</a>
     {% endif %}
-    {% if role_can(user.role, 'batch_sales_return') %}
+    {% if role_can(user, 'batch_sales_return') %}
     <a class="button" href="/batches/new?batch_type=SALES_RETURN">Sales return</a>
     {% endif %}
-    {% if role_can(user.role, 'batch_issue') %}
+    {% if role_can(user, 'batch_issue') %}
     <a class="button" href="/batches/new?batch_type=ISSUE">Issue</a>
     {% endif %}
-    {% if role_can(user.role, 'batch_audit') %}
+    {% if role_can(user, 'batch_audit') %}
     <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
     {% endif %}
   </div>
@@ -35,7 +35,13 @@
       <tbody>
         {% for batch in batches %}
         <tr>
-          <td><a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a></td>
+          <td>
+            {% if role_can_view_batch(user, batch.batch_type) %}
+            <a href="/batches/{{ batch.id }}">{{ batch.batch_number }}</a>
+            {% else %}
+            {{ batch.batch_number }}
+            {% endif %}
+          </td>
           <td>{{ batch.batch_type }}</td>
           <td>{{ batch.party_name or '-' }}</td>
           <td>{{ batch.reason_code or '-' }}</td>

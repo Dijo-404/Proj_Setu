@@ -174,6 +174,17 @@ def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: st
     )
     if existing:
         raise InventoryError("Already scanned in this batch")
+    in_other_draft = db.scalar(
+        select(BatchItem.id)
+        .join(Batch, BatchItem.batch_id == Batch.id)
+        .where(
+            BatchItem.serial_id == serial.id,
+            Batch.status == BatchStatus.DRAFT.value,
+            Batch.id != batch.id,
+        )
+    )
+    if in_other_draft:
+        raise InventoryError(f"{serial.serial_number} is already in another open batch")
     item = BatchItem(batch_id=batch.id, serial_id=serial.id)
     db.add(item)
     db.add(
@@ -235,7 +246,6 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
             scan_status = SerialStatus.AUDITED.value
 
         if batch_type != BatchType.AUDIT:
-            # Atomic claim: aborts if another batch already moved this serial.
             claimed = db.execute(
                 update(Serial)
                 .where(Serial.id == item.serial.id, Serial.status == previous_status, Serial.active == True)

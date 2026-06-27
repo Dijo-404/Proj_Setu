@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -66,12 +66,24 @@ def _money(value: float | int | Decimal) -> str:
     return str(Decimal(str(value)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
+# Tally voucher dates follow the local business day.
+_IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _voucher_date(batch: Batch) -> str:
+    moment = batch.submitted_at or batch.created_at or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(_IST).strftime("%Y%m%d")
+
+
 def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     require_tally_settings(settings)
     batch_type = BatchType(batch.batch_type)
-    voucher_type = settings["sales_voucher_type"] if batch_type == BatchType.SALE else settings["purchase_voucher_type"]
+    is_sale = batch_type == BatchType.SALE
+    voucher_type = settings["sales_voucher_type"] if is_sale else settings["purchase_voucher_type"]
     party_name = batch.party_name or settings["default_party_name"]
-    date_value = (batch.submitted_at or batch.created_at or datetime.now()).strftime("%Y%m%d")
+    income_ledger = settings["sales_ledger_name"] if is_sale else settings["purchase_ledger_name"]
 
     envelope = ET.Element("ENVELOPE")
     header = ET.SubElement(envelope, "HEADER")
@@ -85,7 +97,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     request_data = ET.SubElement(import_data, "REQUESTDATA")
     message = ET.SubElement(request_data, "TALLYMESSAGE", {"xmlns:UDF": "TallyUDF"})
     voucher = ET.SubElement(message, "VOUCHER", {"VCHTYPE": voucher_type, "ACTION": "Create", "OBJVIEW": "Accounting Voucher View"})
-    _text(voucher, "DATE", date_value)
+    _text(voucher, "DATE", _voucher_date(batch))
     _text(voucher, "VOUCHERTYPENAME", voucher_type)
     _text(voucher, "VOUCHERNUMBER", batch.batch_number)
     _text(voucher, "PARTYLEDGERNAME", party_name)
@@ -93,35 +105,55 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     _text(voucher, "NARRATION", f"Setu barcode batch {batch.batch_number}")
 
     summary = calculate_voucher_summary(batch)
+
+    # Tally uses negative amounts for debits and positive amounts for credits.
+    income_is_credit = is_sale
+
+    def add_ledger(parent: ET.Element, tag: str, name: str, amount: Decimal, credit: bool) -> None:
+        entry = ET.SubElement(parent, tag)
+        _text(entry, "LEDGERNAME", name)
+        _text(entry, "ISDEEMEDPOSITIVE", "No" if credit else "Yes")
+        _text(entry, "AMOUNT", _money(amount if credit else -amount))
+
     for line in summary.lines:
         inventory = ET.SubElement(voucher, "ALLINVENTORYENTRIES.LIST")
         _text(inventory, "STOCKITEMNAME", line.tally_stock_item_name)
-        _text(inventory, "ISDEEMEDPOSITIVE", "Yes" if batch_type == BatchType.SALE else "No")
+        _text(inventory, "ISDEEMEDPOSITIVE", "No" if income_is_credit else "Yes")
         _text(inventory, "RATE", f"{_money(line.rate)}/{line.unit}")
-        if batch_type == BatchType.SALE and line.discount_rate > 0:
+        if is_sale and line.discount_rate > 0:
             _text(inventory, "DISCOUNT", _money(line.discount_rate))
-        _text(inventory, "AMOUNT", _money(-line.taxable_value if batch_type == BatchType.SALE else line.taxable_value))
+        signed_line = line.taxable_value if income_is_credit else -line.taxable_value
+        _text(inventory, "AMOUNT", _money(signed_line))
         _text(inventory, "ACTUALQTY", f"{line.quantity} {line.unit}")
         _text(inventory, "BILLEDQTY", f"{line.quantity} {line.unit}")
+        allocations = ET.SubElement(inventory, "ACCOUNTINGALLOCATIONS.LIST")
+        _text(allocations, "LEDGERNAME", income_ledger)
+        _text(allocations, "ISDEEMEDPOSITIVE", "No" if income_is_credit else "Yes")
+        _text(allocations, "AMOUNT", _money(signed_line))
 
-    if summary.taxable_value > 0:
-        ledger = settings["sales_ledger_name"] if batch_type == BatchType.SALE else settings["purchase_ledger_name"]
-        ledger_entry = ET.SubElement(voucher, "LEDGERENTRIES.LIST")
-        _text(ledger_entry, "LEDGERNAME", ledger)
-        _text(ledger_entry, "ISDEEMEDPOSITIVE", "No" if batch_type == BatchType.SALE else "Yes")
-        _text(ledger_entry, "AMOUNT", _money(summary.taxable_value if batch_type == BatchType.SALE else -summary.taxable_value))
+    if summary.cgst_amount > 0:
+        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["cgst_ledger_name"], summary.cgst_amount, credit=income_is_credit)
+    if summary.sgst_amount > 0:
+        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["sgst_ledger_name"], summary.sgst_amount, credit=income_is_credit)
+    if summary.round_off != 0:
+        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["round_off_ledger_name"], summary.round_off, credit=income_is_credit)
+
+    add_ledger(voucher, "LEDGERENTRIES.LIST", party_name, summary.final_value, credit=not is_sale)
 
     return ET.tostring(envelope, encoding="unicode")
 
 
 def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
-    url = f"http://{settings['tally_host']}:{settings['tally_port']}"
+    host = settings.get("tally_host")
+    port = settings.get("tally_port")
+    if not host or not port:
+        raise TallySyncError("Tally host/port is not configured", retryable=True, request_xml=xml)
+    url = f"http://{host}:{port}"
     request = Request(url, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, method="POST")
     try:
         with urlopen(request, timeout=5) as response:
             response_xml = response.read().decode("utf-8", errors="replace")
     except (URLError, OSError) as exc:
-        # OSError also covers socket timeouts, which urllib does not wrap in URLError.
         raise TallySyncError("Tally connection failed", retryable=True, request_xml=xml) from exc
 
     try:
@@ -135,12 +167,25 @@ def post_to_tally(xml: str, settings: dict[str, str]) -> TallyResult:
 
     created = next((node.text for node in root.iter() if node.tag.upper().endswith("CREATED")), None)
     altered = next((node.text for node in root.iter() if node.tag.upper().endswith("ALTERED")), None)
+
+    def _as_int(value: str | None) -> int:
+        try:
+            return int((value or "0").strip())
+        except (TypeError, ValueError):
+            return 0
+
+    # A 200 response can still mean Tally imported nothing.
+    exceptions = next((node.text for node in root.iter() if node.tag.upper().endswith("EXCEPTIONS")), None)
+    if _as_int(created) + _as_int(altered) < 1:
+        detail = f"Tally created/altered nothing (CREATED={created or 0}, ALTERED={altered or 0}"
+        detail += f", EXCEPTIONS={exceptions})" if exceptions is not None else ")"
+        raise TallySyncError(detail, retryable=False, request_xml=xml, response_xml=response_xml)
+
     reference = f"CREATED={created or 0}; ALTERED={altered or 0}"
     return TallyResult(request_xml=xml, response_xml=response_xml, reference=reference)
 
 
-# Serializes POST + commit across the request thread and retry worker so a racing
-# retry can't post the same voucher to Tally twice.
+# Prevent request/retry races from posting the same voucher twice.
 _SYNC_LOCK = threading.Lock()
 
 

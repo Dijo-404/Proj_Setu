@@ -4,7 +4,9 @@
       <h2>Expiry control</h2>
       <span>FEFO, forecast risk, sleeping stock</span>
     </div>
+    {% if user is defined and role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics') %}
     <a href="/expiry">Open expiry module</a>
+    {% endif %}
   </div>
 
   <section class="metric-grid expiry-metric-grid">
@@ -50,7 +52,7 @@
             <tbody>
               {% for row in expiry.risk_rows[:8] %}
               <tr>
-                <td>{{ row.product_name }}<small>{{ row.batch }} · {{ row.months_left }} months</small></td>
+                <td>{{ row.product_name }}<small>{{ row.batch }} - {{ row.months_left }} months</small></td>
                 <td>{{ row.stock }}</td>
                 <td>{{ row.sales_per_month }}</td>
                 <td><span class="status {{ row.risk_class }}">{{ row.unsold_stock }}</span></td>

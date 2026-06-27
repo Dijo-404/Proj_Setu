@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Expiry · Setu{% endblock %}
+{% block title %}Expiry - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -7,8 +7,12 @@
     <h1>Expiry Control</h1>
   </div>
   <div class="actions">
+    {% if role_can(user, 'barcode_assignment') %}
     <a class="button primary" href="/barcode-assignment">Product batch entry</a>
+    {% endif %}
+    {% if role_can(user, 'batch_sale') %}
     <a class="button" href="/batches/new?batch_type=SALE">FEFO sale</a>
+    {% endif %}
   </div>
 </section>
 
@@ -37,7 +41,7 @@
       <tbody>
         {% for row in expiry.risk_rows %}
         <tr>
-          <td>{{ row.product_name }}<small>{{ row.product_code }} · {{ row.warehouse }}</small></td>
+          <td>{{ row.product_name }}<small>{{ row.product_code }} - {{ row.warehouse }}</small></td>
           <td>{{ row.batch }}</td>
           <td>{{ row.stock }}</td>
           <td>{{ row.sales_per_month }}</td>

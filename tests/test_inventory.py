@@ -40,7 +40,6 @@ def test_submit_aborts_when_serial_grabbed_concurrently(db_session):
     batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
 
-    # Move the DB row out from under the stale in-memory object.
     db_session.execute(
         update(Serial).where(Serial.id == serial.id).values(status=SerialStatus.SOLD.value)
         .execution_options(synchronize_session=False)
@@ -53,6 +52,31 @@ def test_submit_aborts_when_serial_grabbed_concurrently(db_session):
         pass
     assert batch.status == "DRAFT"
     assert db_session.scalar(select(InventoryTransaction).where(InventoryTransaction.batch_id == batch.id)) is None
+
+
+def test_serial_cannot_be_added_to_two_open_batches(db_session):
+    user = User(username="sales-dup", password_hash="x", role="sales")
+    product = Product(
+        product_code="SG098",
+        product_name="Masala",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Masala",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch_a = create_batch(db_session, user, BatchType.SALE, "Customer A", "")
+    batch_b = create_batch(db_session, user, BatchType.SALE, "Customer B", "")
+    add_serial_to_batch(db_session, batch_a, user, serial.serial_number)
+
+    try:
+        add_serial_to_batch(db_session, batch_b, user, serial.serial_number)
+        assert False, "serial already in an open batch must be rejected"
+    except InventoryError as exc:
+        assert "another open batch" in str(exc)
 
 
 def test_sale_rejects_generated_serial(db_session):

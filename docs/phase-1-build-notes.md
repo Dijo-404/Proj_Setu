@@ -7,7 +7,7 @@
 - Session-cookie authentication
 - User management
 - Product management
-- Barcode serial generation
+- Serial QR label generation
 - Printable labels
 - Purchase batches
 - Sale batches
@@ -22,7 +22,7 @@
 - Retry count and last retry tracking
 - Persisted audit reconciliation findings
 - XLSX scan report export
-- PDF barcode labels and audit reports
+- PDF QR labels and audit reports
 - SQLite-safe backup download and restore procedure
 - Live-sync gate tied to Tally Check readiness
 - Tally XML preview and sync-attempt request/response viewer

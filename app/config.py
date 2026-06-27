@@ -1,4 +1,5 @@
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
@@ -10,6 +11,7 @@ PLACEHOLDER_SECRET_KEYS = {
     "replace-with-a-long-random-secret",
 }
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+SECRET_KEY_FILE = PROJECT_ROOT / "data" / "secret_key"
 
 
 def _load_env_file(path: Path) -> None:
@@ -42,17 +44,31 @@ def _flag(name: str, default: str = "false") -> bool:
     return os.getenv(name, default).strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _resolve_secret_key() -> str:
+    env_value = os.getenv("APP_SECRET_KEY", "").strip()
+    if env_value and env_value not in PLACEHOLDER_SECRET_KEYS and len(env_value) >= 32:
+        return env_value
+    try:
+        if SECRET_KEY_FILE.exists():
+            stored = SECRET_KEY_FILE.read_text(encoding="utf-8").strip()
+            if len(stored) >= 32:
+                return stored
+        SECRET_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
+        generated = secrets.token_urlsafe(48)
+        SECRET_KEY_FILE.write_text(generated, encoding="utf-8")
+        return generated
+    except OSError:
+        return env_value or DEFAULT_SECRET_KEY
+
+
 class Settings:
     app_name: str = os.getenv("APP_NAME", "Setu Barcode Tally Bridge")
-    secret_key: str = os.getenv("APP_SECRET_KEY", DEFAULT_SECRET_KEY)
+    secret_key: str = _resolve_secret_key()
     database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setu.db")
     session_timeout_minutes: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))
     bootstrap_admin_username: str = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
     bootstrap_admin_password: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "admin123")
-    # Set to true when the app is served over HTTPS (e.g. behind Caddy on the LAN)
-    # so the session cookie is only sent over secure connections.
     cookie_secure: bool = _flag("SESSION_COOKIE_SECURE")
-    # Throttle repeated failed logins per username to slow brute-force attempts.
     login_max_attempts: int = int(os.getenv("LOGIN_MAX_ATTEMPTS", "8"))
     login_lockout_minutes: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
 

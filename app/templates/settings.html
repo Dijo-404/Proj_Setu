@@ -1,14 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Settings · Setu{% endblock %}
+{% block title %}Settings - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
     <p class="eyebrow">System</p>
     <h1>Settings</h1>
   </div>
+  {% if user.role == 'super_admin' %}
   <div class="actions">
     <a class="button" href="/settings/access">Role access</a>
   </div>
+  {% endif %}
 </section>
 
 {% if error and not open_settings %}<div class="alert error">{{ error }}</div>{% endif %}
@@ -100,7 +102,7 @@
       <label>Company name<input name="company_name" value="{{ settings.company_name }}" required></label>
       <label class="checkline">
         <input type="checkbox" name="tally_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_enabled == 'true' else '' }}>
-        Enable Tally sync <small class="muted" style="display:inline">— saved only with the button below</small>
+        Enable Tally sync <small class="muted" style="display:inline">- saved only with the button below</small>
       </label>
       <div class="two-col">
         <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>

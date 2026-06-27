@@ -1,10 +1,3 @@
-// Auto-save helper. Two modes, driven by data attributes:
-//   form[data-autosave="<url>"]  -> debounced POST of the form to <url> (existing records -> DB).
-//   form[data-draft="<key>"]     -> debounced save of fields to localStorage (creation forms).
-// Fields marked [data-no-autosave] are skipped (e.g. the Tally-sync toggle, which must
-// only change via the explicit Save button so the readiness gate is preserved).
-// Pattern mirrors app/static/scanner.js (fetch + FormData + JSON {ok,error}).
-
 (function () {
   const DEBOUNCE = 600;
 
@@ -46,10 +39,10 @@
         if ((field.type === "checkbox" || field.type === "radio") && !field.checked) return;
         data.append(field.name, field.value);
       });
-      setStatus(status, "Saving…", "saving");
+      setStatus(status, "Saving...", "saving");
       fetch(url, { method: "POST", body: data, headers: { Accept: "application/json" } })
         .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
-        .then(function (p) { setStatus(status, p.ok ? "Saved ✓" : (p.error || "Save failed"), p.ok ? "ok" : "error"); })
+        .then(function (p) { setStatus(status, p.ok ? "Saved" : (p.error || "Save failed"), p.ok ? "ok" : "error"); })
         .catch(function () { setStatus(status, "Save failed", "error"); });
     }, DEBOUNCE);
     fields(form).forEach(function (field) {
@@ -76,14 +69,14 @@
       try {
         localStorage.setItem(key, JSON.stringify(draft));
         setStatus(status, "Draft saved", "ok");
-      } catch (e) { /* storage full / disabled */ }
+      } catch (e) {}
     }, DEBOUNCE);
     fields(form).forEach(function (field) {
       field.addEventListener("input", save);
       field.addEventListener("change", save);
     });
     form.addEventListener("submit", function () {
-      try { localStorage.removeItem(key); } catch (e) { /* ignore */ }
+      try { localStorage.removeItem(key); } catch (e) {}
     });
   }
 

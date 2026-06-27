@@ -9,10 +9,14 @@ from app.auth import SESSION_COOKIE, current_user, get_user_by_username
 from app.config import get_settings
 from app.database import get_db
 from app.models import LoginAudit
-from app.security import create_session_token, verify_password
+from app.security import create_session_token, hash_password, verify_password
+from app.services.access_control import get_role_access_config, landing_path_for
 from app.templates import templates
 
 router = APIRouter()
+
+# Keeps missing/inactive usernames on the normal password-verify path.
+_DUMMY_PASSWORD_HASH = hash_password("setu-dummy-password-never-matches")
 
 
 def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int:
@@ -28,8 +32,10 @@ def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int
 
 @router.get("/login")
 def login_page(request: Request, db: Session = Depends(get_db)):
-    if current_user(request, db):
-        return RedirectResponse("/", status_code=303)
+    user = current_user(request, db)
+    if user:
+        destination = "/account/password" if user.must_change_password else landing_path_for(get_role_access_config(db), user.role)
+        return RedirectResponse(destination, status_code=303)
     return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
 
 
@@ -56,7 +62,11 @@ def login(
         )
 
     user = get_user_by_username(db, normalized)
-    ok = bool(user and user.active and verify_password(password, user.password_hash))
+    if user and user.active:
+        ok = verify_password(password, user.password_hash)
+    else:
+        verify_password(password, _DUMMY_PASSWORD_HASH)
+        ok = False
     db.add(
         LoginAudit(
             username=normalized,
@@ -75,7 +85,8 @@ def login(
         )
     user.last_login_at = datetime.now(timezone.utc)
     db.commit()
-    redirect = RedirectResponse("/", status_code=303)
+    destination = "/account/password" if user.must_change_password else landing_path_for(get_role_access_config(db), user.role)
+    redirect = RedirectResponse(destination, status_code=303)
     redirect.set_cookie(
         SESSION_COOKIE,
         create_session_token(user.id),
@@ -89,6 +100,13 @@ def login(
 
 @router.post("/logout")
 def logout():
+    settings = get_settings()
     response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
     return response

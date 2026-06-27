@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}Labels · Setu{% endblock %}
+{% block title %}Labels - Setu{% endblock %}
 {% block content %}
 <section class="page-head print-hide">
   <div>
-    <p class="eyebrow">Barcode labels</p>
+    <p class="eyebrow">QR labels</p>
     <h1>Print labels</h1>
   </div>
   <div class="actions">
@@ -35,10 +35,9 @@
 <section class="panel label-controls print-hide" data-label-dimensions>
   <h2>Print dimensions</h2>
   <div class="grid-form compact">
-    <label>Label width mm<input type="number" min="20" max="120" step="0.1" value="58" data-print-var="--print-label-width"></label>
-    <label>Label height mm<input type="number" min="12" max="80" step="0.1" value="34" data-print-var="--print-label-height"></label>
-    <label>Barcode width mm<input type="number" min="20" max="110" step="0.1" value="52" data-print-var="--print-barcode-width"></label>
-    <label>Barcode height mm<input type="number" min="8" max="60" step="0.1" value="22" data-print-var="--print-barcode-height"></label>
+    <label>Label width mm<input type="number" min="20" max="120" step="0.1" value="48.5" data-print-var="--print-label-width"></label>
+    <label>Label height mm<input type="number" min="12" max="80" step="0.1" value="25.4" data-print-var="--print-label-height"></label>
+    <label>QR size mm<input type="number" min="10" max="24" step="0.1" value="19.5" data-print-var="--print-qr-size"></label>
   </div>
   <p class="muted" data-print-status></p>
 </section>

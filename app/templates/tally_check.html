@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Tally Check · Setu{% endblock %}
+{% block title %}Tally Check - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -64,7 +64,7 @@
           <td>
             {% if confirmation %}
             <span class="status synced">CONFIRMED</span>
-            <small>{{ confirmation.confirmed_by.username }} · {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
+            <small>{{ confirmation.confirmed_by.username }} - {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
             {% else %}
             <span class="status pending_sync">UNCHECKED</span>
             {% endif %}
@@ -85,7 +85,11 @@
               <button class="button small" type="submit">Mark checked</button>
             </form>
             {% else %}
+            {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
             <a href="/settings">Fix settings</a>
+            {% else %}
+            <span class="muted">Settings access required</span>
+            {% endif %}
             {% endif %}
           </td>
         </tr>

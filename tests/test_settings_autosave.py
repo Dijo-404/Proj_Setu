@@ -46,9 +46,6 @@ def _valid_request(db):
 
 
 def test_autosave_endpoint_cannot_change_tally_enabled():
-    # Structural guard: the auto-save route must not accept tally_enabled,
-    # so field edits can never silently enable Tally sync (readiness gate stays
-    # behind the explicit Save button).
     params = inspect.signature(autosave_settings).parameters
     assert "tally_enabled" not in params
 
@@ -68,7 +65,7 @@ def test_autosave_persists_fields_and_mirrors_active_company(db_session):
     saved = get_all_settings(db_session)
     assert saved["sales_ledger_name"] == "Sales @ 12%"
     assert saved["retry_interval_seconds"] == "200"
-    assert saved["tally_enabled"] == "false"  # untouched
+    assert saved["tally_enabled"] == "false"
 
     active = get_active_company(db_session)
     assert json.loads(active.config)["sales_ledger_name"] == "Sales @ 12%"

@@ -11,6 +11,7 @@ from app.services.settings import get_setting, update_settings
 
 SETTING_KEY = "role_access_config"
 DENY_VALUES = {"hidden", "no"}
+SUPER_ADMIN_ONLY_KEYS = {"page_role_access", "role_access_edit"}
 
 
 @dataclass(frozen=True)
@@ -133,7 +134,14 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 ),
                 AccessRowDefinition("page_expiry", "Expiry", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition("page_settings", "Settings", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_role_access", "Role access", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_role_access",
+                    "Role access",
+                    "Admin menu",
+                    _defaults(PAGE_OPTIONS, "shown", []),
+                    PAGE_OPTIONS,
+                    "Locked to super admin so other roles cannot change their own access.",
+                ),
                 AccessRowDefinition("page_maintenance", "Maintenance", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition("page_users", "Users", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
             ],
@@ -158,8 +166,22 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("reports_export", "Reports", "Filter and export scan/transaction reports", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("tally_check_edit", "Tally Check", "Confirm, refresh, and remove master checks", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition("settings_edit", "Settings", "Edit company settings and enable sync", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
-                AccessRowDefinition("role_access_edit", "Role access", "Edit role permission matrix", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
-                AccessRowDefinition("users_manage", "Users", "Create users and enable/disable accounts", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "role_access_edit",
+                    "Role access",
+                    "Edit role permission matrix",
+                    _defaults(ACTION_OPTIONS, "edit", []),
+                    ACTION_OPTIONS,
+                    "Locked to super admin.",
+                ),
+                AccessRowDefinition(
+                    "users_manage",
+                    "Users",
+                    "Create users and enable/disable accounts",
+                    _admin(ACTION_OPTIONS, "edit"),
+                    ACTION_OPTIONS,
+                    "Only super admins can delete user accounts. Accounts with history are hidden and kept for old records.",
+                ),
                 AccessRowDefinition("backup_download", "Backup", "Download SQLite backup", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
             ],
         ),
@@ -215,6 +237,11 @@ def normalize_role_access_config(raw_config: dict | None) -> dict[str, dict[str,
                 config[row_key][role.key] = value
     for row_key, row in definitions.items():
         config[row_key][Role.SUPER_ADMIN.value] = row.defaults[Role.SUPER_ADMIN.value]
+        if row_key in SUPER_ADMIN_ONLY_KEYS:
+            denied = "hidden" if row.options == PAGE_OPTIONS else "no"
+            for role in ROLE_COLUMNS:
+                if role.key != Role.SUPER_ADMIN.value:
+                    config[row_key][role.key] = denied
     return config
 
 
@@ -292,10 +319,50 @@ def role_access_value(db: Session, role: Role | str, access_key: str) -> str:
     return row.get(role_value, "no")
 
 
-def role_has_access(db: Session, role: Role | str, access_key: str, allowed_values: set[str] | None = None) -> bool:
-    value = role_access_value(db, role, access_key)
+def configured_role_has_access(
+    config: dict[str, dict[str, str]],
+    role: Role | str,
+    access_key: str,
+    allowed_values: set[str] | None = None,
+) -> bool:
+    role_value = role.value if isinstance(role, Role) else str(role)
+    if role_value == Role.SUPER_ADMIN.value:
+        value = "edit"
+    else:
+        value = config.get(access_key, {}).get(role_value, "no")
     if value in DENY_VALUES:
         return False
     if allowed_values is not None:
         return value in allowed_values
     return True
+
+
+def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str:
+    can = lambda key: configured_role_has_access(config, role, key)
+    destinations = [
+        ("page_dashboard", "dashboard_data", "/"),
+        ("page_batches", "batch_list", "/batches"),
+        ("page_batches", "batch_purchase", "/batches/new?batch_type=PURCHASE"),
+        ("page_batches", "batch_sale", "/batches/new?batch_type=SALE"),
+        ("page_batches", "batch_audit", "/batches/new?batch_type=AUDIT"),
+        ("page_serials", "serial_data", "/serials"),
+        ("page_reports", "reports_data", "/reports"),
+        ("page_tally_check", "tally_check_edit", "/tally-check"),
+        ("page_barcodes", "barcode_assignment", "/barcode-assignment"),
+        ("page_barcodes", "barcode_replacement", "/barcode-replacement"),
+        ("page_products", "product_master", "/products"),
+        ("page_expiry", "expiry_analytics", "/expiry"),
+        ("page_settings", "settings_edit", "/settings"),
+        ("page_maintenance", "backup_data", "/maintenance"),
+        ("page_users", "users_manage", "/users"),
+    ]
+    for page_key, permission_key, path in destinations:
+        if can(page_key) and can(permission_key):
+            return path
+    if str(role) in {Role.SUPER_ADMIN.value, str(Role.SUPER_ADMIN)}:
+        return "/settings/access"
+    return "/account/password"
+
+
+def role_has_access(db: Session, role: Role | str, access_key: str, allowed_values: set[str] | None = None) -> bool:
+    return configured_role_has_access(get_role_access_config(db), role, access_key, allowed_values)
