@@ -19,6 +19,7 @@ from app.models import (
     StorageLocation,
     TransactionType,
     User,
+    WarehouseLevel,
 )
 
 
@@ -58,6 +59,7 @@ def create_location(
     rack: str,
     shelf: str,
     bin_name: str,
+    warehouse_level: str = WarehouseLevel.COMPANY_WAREHOUSE.value,
 ) -> StorageLocation:
     values = {
         "code": _clean(code),
@@ -72,6 +74,10 @@ def create_location(
         raise RelocationError("Complete the warehouse, zone, section, rack, shelf, bin, and location code")
     if not LOCATION_CODE_PATTERN.fullmatch(values["code"]):
         raise RelocationError("Location code may use letters, numbers, dots, dashes, underscores, colons, and slashes")
+    try:
+        values["warehouse_level"] = WarehouseLevel(warehouse_level).value
+    except ValueError as exc:
+        raise RelocationError("Select a recognized warehouse or franchise level") from exc
     location = StorageLocation(**values)
     db.add(location)
     try:
@@ -301,7 +307,11 @@ def relocate_stock(
                     if item.source_location_id is not None
                     else Serial.location_id.is_(None),
                 )
-                .values(location_id=destination.id, warehouse=destination.warehouse)
+                .values(
+                    location_id=destination.id,
+                    warehouse=destination.warehouse,
+                    warehouse_level=destination.warehouse_level,
+                )
                 .execution_options(synchronize_session=False)
             ).rowcount
             if claimed != item.quantity:

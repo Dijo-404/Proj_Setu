@@ -32,6 +32,13 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
     else:
         replacement = generate_serials(db, old_serial.product, 1, old_serial.product.product_code, original_status)[0]
 
+    # A label replacement is the same physical unit, so retain every stock-analysis dimension.
+    replacement.product_batch_number = old_serial.product_batch_number
+    replacement.mfg_date = old_serial.mfg_date
+    replacement.expiry_date = old_serial.expiry_date
+    replacement.warehouse = old_serial.warehouse
+    replacement.warehouse_level = old_serial.warehouse_level
+    replacement.location_id = old_serial.location_id
     old_serial.status = SerialStatus.INVALID.value
     old_serial.active = False
     old_serial.replaced_by_id = replacement.id

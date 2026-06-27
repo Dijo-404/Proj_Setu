@@ -22,12 +22,27 @@
 
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 {% if batch.last_error %}<div class="alert warn">{{ batch.last_error }}</div>{% endif %}
+{% if shelf_state.controlled %}
+<div
+  id="shelf-verification-status"
+  class="alert {{ 'warn' if shelf_state.pending_count else '' }}"
+  data-pending="{{ shelf_state.pending_count }}"
+  data-controlled="true"
+>
+  {% if shelf_state.pending_count %}
+  {{ shelf_state.pending_count }} product{{ '' if shelf_state.pending_count == 1 else 's' }} awaiting shelf verification.
+  Scan the shelf QR before submitting{% if shelf_state.shelf_required %} or scanning another product{% endif %}.
+  {% else %}
+  Shelf placement is verified. Products with a configured interval will require a shelf QR scan.
+  {% endif %}
+</div>
+{% endif %}
 
 <section class="batch-layout">
   <div class="panel scanner-panel">
     <div class="section-title">
       <h2>Scanner</h2>
-      <span>{{ batch.items|length }} scanned</span>
+      <span id="scan-count" data-count="{{ batch.items|length }}">{{ batch.items|length }} scanned</span>
     </div>
     {% if batch.status == 'DRAFT' and can_edit_batch %}
     <div class="scanner-box" id="scanner-box">
@@ -47,7 +62,7 @@
       <button class="button primary" type="button" id="camera-button" aria-pressed="false">Start scanning</button>
     </div>
     <form id="scan-form" method="post" action="/batches/{{ batch.id }}/scan" class="scan-form" data-can-manual="{{ 'true' if can_manual_scan else 'false' }}">
-      <input id="serial-input" name="serial_number" placeholder="Serial number" autocomplete="off" required {% if not can_manual_scan %}type="hidden"{% endif %}>
+      <input id="serial-input" name="serial_number" placeholder="Product or shelf QR code" autocomplete="off" required {% if not can_manual_scan %}type="hidden"{% endif %}>
       <input id="scan-source" name="scan_source" type="hidden" value="{{ 'manual' if can_manual_scan else 'camera' }}">
       {% if can_manual_scan %}
       <button class="button primary" type="submit">Add</button>
@@ -89,7 +104,7 @@
     </dl>
     {% if batch.status == 'DRAFT' and can_edit_batch %}
     <form method="post" action="/batches/{{ batch.id }}/submit">
-      <button class="button success full" type="submit" {{ 'disabled' if batch.items|length == 0 else '' }}>Submit batch</button>
+      <button class="button success full" id="submit-batch-button" type="submit" {{ 'disabled' if batch.items|length == 0 or shelf_state.pending_count else '' }}>Submit batch</button>
     </form>
     {% elif can_retry_sync and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] %}
     <form method="post" action="/batches/{{ batch.id }}/retry">
@@ -200,7 +215,7 @@
   <div class="section-title"><h2>Scanned serials</h2></div>
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Serial</th><th>Product</th><th>Product batch</th><th>Expiry</th><th>Status</th><th>Rate</th><th></th></tr></thead>
+      <thead><tr><th>Serial</th><th>Product</th><th>Product batch</th><th>Expiry</th><th>Shelf</th><th>Status</th><th>Rate</th><th></th></tr></thead>
       <tbody>
         {% for item in batch.items %}
         <tr>
@@ -211,6 +226,16 @@
             {% if item.fefo_picked %}<small>FEFO picked</small>{% endif %}
           </td>
           <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
+          <td>
+            {% if item.shelf_verified_at %}
+            <strong>{{ item.shelf_location.code }}</strong>
+            <small>Verified {{ item.shelf_verified_at.strftime('%d %b %H:%M') }}</small>
+            {% elif item.serial.product.shelf_verification_interval %}
+            <span class="status pending_sync">PENDING</span>
+            {% else %}
+            Not required
+            {% endif %}
+          </td>
           <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
           <td>
             {% if batch.status == 'DRAFT' and can_edit_batch and batch.batch_type != 'AUDIT' %}
@@ -231,7 +256,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="empty">No scans yet</td></tr>
+        <tr><td colspan="8" class="empty">No scans yet</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -264,5 +289,5 @@
 </script>
 {% endif %}
 <script src="/static/zxing.min.js"></script>
-<script src="/static/scanner.js?v=20260626-v16" data-batch-id="{{ batch.id }}"></script>
+<script src="/static/scanner.js?v=20260627-v17" data-batch-id="{{ batch.id }}"></script>
 {% endblock %}

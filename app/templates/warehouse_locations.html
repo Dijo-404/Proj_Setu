@@ -33,6 +33,11 @@
   <form method="post" action="/warehouse/locations" class="location-create-form">
     <label>Location code<input name="code" placeholder="WH1-A-C-R04-S02-B05" required></label>
     <label>Warehouse<input name="warehouse" placeholder="Warehouse 1" required></label>
+    <label>Warehouse level
+      <select name="warehouse_level">
+        {% for level in warehouse_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
+      </select>
+    </label>
     <label>Zone<input name="zone" placeholder="A" required></label>
     <label>Section<input name="section" placeholder="C" required></label>
     <label>Rack<input name="rack" placeholder="04" required></label>
@@ -45,13 +50,13 @@
 <section class="panel">
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Unique QR</th><th>Code</th><th>Warehouse</th><th>Zone</th><th>Section</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Status</th><th>Label</th><th></th></tr></thead>
+      <thead><tr><th>Unique QR</th><th>Code</th><th>Warehouse</th><th>Level</th><th>Zone</th><th>Section</th><th>Rack</th><th>Shelf</th><th>Bin</th><th>Status</th><th>Label</th><th></th></tr></thead>
       <tbody>
         {% for location in locations %}
         <tr>
           <td><a href="/warehouse/locations/{{ location.id }}/qr.png" target="_blank"><img class="location-qr-thumb" src="/warehouse/locations/{{ location.id }}/qr.png" alt="QR for {{ location.code }}"></a></td>
           <td><strong>{{ location.code }}</strong></td>
-          <td>{{ location.warehouse }}</td><td>{{ location.zone }}</td><td>{{ location.section }}</td>
+          <td>{{ location.warehouse }}</td><td>{{ location.warehouse_level }}</td><td>{{ location.zone }}</td><td>{{ location.section }}</td>
           <td>{{ location.rack }}</td><td>{{ location.shelf }}</td><td>{{ location.bin }}</td>
           <td><span class="status {{ 'synced' if location.active else 'failed' }}">{{ 'ACTIVE' if location.active else 'INACTIVE' }}</span></td>
           <td>
@@ -67,7 +72,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11" class="empty">No locations configured</td></tr>
+        <tr><td colspan="12" class="empty">No locations configured</td></tr>
         {% endfor %}
       </tbody>
     </table>

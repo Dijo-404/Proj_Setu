@@ -20,6 +20,13 @@ from app.services.inventory import (
 )
 from app.services.access_control import role_has_access
 from app.services.settings import get_all_settings
+from app.services.relocation import find_location_by_code
+from app.services.shelf_verification import (
+    ShelfVerificationError,
+    ensure_product_scan_allowed,
+    shelf_verification_state,
+    verify_pending_items_on_shelf,
+)
 from app.services.tally import TallySyncError, build_voucher_xml, sync_batch
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 from app.templates import templates
@@ -144,6 +151,7 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
             "summary": calculate_voucher_summary(batch),
             "audit_summary": summarize_audit_findings(batch),
+            "shelf_state": shelf_verification_state(batch),
             "can_manual_scan": can_use_manual_scan(db, user),
             **batch_permission_context(db, user, batch),
             "error": None,
@@ -165,16 +173,50 @@ def scan_into_batch(
     user = require_permission(request, db, action_key_for_batch(BatchType(batch.batch_type)))
     if not scan_source_allowed(db, user, scan_source):
         return JSONResponse({"ok": False, "error": "Use camera scan to add serials"}, status_code=403)
+    location = find_location_by_code(db, serial_number)
+    if location:
+        try:
+            verified_count = verify_pending_items_on_shelf(
+                db,
+                batch=batch,
+                location=location,
+                user=user,
+            )
+        except ShelfVerificationError as exc:
+            return JSONResponse(
+                {
+                    "ok": False,
+                    "error": str(exc),
+                    **shelf_verification_state(batch),
+                },
+                status_code=400,
+            )
+        return JSONResponse(
+            {
+                "ok": True,
+                "scan_type": "shelf",
+                "location_code": location.code,
+                "location": location.full_path,
+                "verified_count": verified_count,
+                **shelf_verification_state(batch),
+            }
+        )
     try:
+        ensure_product_scan_allowed(batch)
         item = add_serial_to_batch(db, batch, user, serial_number)
-    except InventoryError as exc:
-        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except (InventoryError, ShelfVerificationError) as exc:
+        return JSONResponse(
+            {"ok": False, "error": str(exc), **shelf_verification_state(batch)},
+            status_code=400,
+        )
     return JSONResponse(
         {
             "ok": True,
+            "scan_type": "product",
             "serial": item.serial.serial_number,
             "product": item.serial.product.product_name,
             "status": item.serial.status,
+            **shelf_verification_state(batch),
         }
     )
 
@@ -210,6 +252,7 @@ def fefo_pick_into_batch(
                 "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
+                "shelf_state": shelf_verification_state(batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
                 **batch_permission_context(db, user, batch),
                 "fefo_error": str(exc),
@@ -311,6 +354,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
                 "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
+                "shelf_state": shelf_verification_state(batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
                 **batch_permission_context(db, user, batch),
                 "error": str(exc),

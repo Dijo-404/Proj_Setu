@@ -60,6 +60,14 @@ class TransactionType(str, Enum):
     RELOCATION = "RELOCATION"
 
 
+class WarehouseLevel(str, Enum):
+    COMPANY_WAREHOUSE = "Company Warehouse"
+    C_AND_F = "C&F"
+    MASTER_FRANCHISE = "Master Franchise"
+    TALUK_FRANCHISE = "Taluk Franchise"
+    HOME_FRANCHISE = "Home Franchise"
+
+
 class BatchStatus(str, Enum):
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
@@ -93,11 +101,13 @@ class Product(Base):
     product_code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     product_name: Mapped[str] = mapped_column(String(180), index=True)
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     hsn: Mapped[str] = mapped_column(String(40))
     gst_rate: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(40), default="Pcs")
     default_rate: Mapped[float] = mapped_column(Float, default=0)
     sales_discount_rate: Mapped[float] = mapped_column(Float, default=0)
+    shelf_verification_interval: Mapped[int] = mapped_column(Integer, default=1)
     tally_stock_item_name: Mapped[str] = mapped_column(String(180))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -123,6 +133,11 @@ class StorageLocation(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     code: Mapped[str] = mapped_column(String(140), unique=True, index=True)
     warehouse: Mapped[str] = mapped_column(String(80), index=True)
+    warehouse_level: Mapped[str] = mapped_column(
+        String(40),
+        default=WarehouseLevel.COMPANY_WAREHOUSE.value,
+        index=True,
+    )
     zone: Mapped[str] = mapped_column(String(80), index=True)
     section: Mapped[str] = mapped_column(String(80), index=True)
     rack: Mapped[str] = mapped_column(String(80), index=True)
@@ -154,6 +169,11 @@ class Serial(Base):
     mfg_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     warehouse: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    warehouse_level: Mapped[str] = mapped_column(
+        String(40),
+        default=WarehouseLevel.COMPANY_WAREHOUSE.value,
+        index=True,
+    )
     location_id: Mapped[int | None] = mapped_column(ForeignKey("storage_locations.id"), nullable=True, index=True)
 
     product: Mapped[Product] = relationship(back_populates="serials")
@@ -240,10 +260,17 @@ class BatchItem(Base):
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     fefo_picked: Mapped[bool] = mapped_column(Boolean, default=False)
+    shelf_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("storage_locations.id"), nullable=True, index=True
+    )
+    shelf_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    shelf_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     batch: Mapped[Batch] = relationship(back_populates="items")
     serial: Mapped[Serial] = relationship(back_populates="batch_items")
+    shelf_location: Mapped[StorageLocation | None] = relationship()
+    shelf_verified_by: Mapped[User | None] = relationship()
 
 
 class ScanLog(Base):

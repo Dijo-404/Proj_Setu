@@ -8,7 +8,7 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Batch, BatchItem, BatchStatus, BatchType, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import Batch, BatchItem, BatchStatus, BatchType, Product, ScanLog, Serial, SerialStatus, TransactionType, User, WarehouseLevel
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError, create_batch, generate_serials, log_inventory_transaction, normalize_serial
 
@@ -25,6 +25,7 @@ class AssignmentLine:
     mfg_date: date | None = None
     expiry_date: date | None = None
     warehouse: str | None = None
+    warehouse_level: str = WarehouseLevel.COMPANY_WAREHOUSE.value
 
 
 def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]:
@@ -45,6 +46,7 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]
     mfg_col = _find_column(header, {"mfg date", "manufacturing date", "manufacture date"})
     expiry_col = _find_column(header, {"expiry date", "expiry", "exp date"})
     warehouse_col = _find_column(header, {"warehouse", "wh", "location"})
+    warehouse_level_col = _find_column(header, {"warehouse level", "franchise level", "location level"})
     if product_col is None or qty_col is None:
         product_col, qty_col = 0, 1
 
@@ -77,6 +79,15 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]
             raise InventoryError(f"Row {index}: expiry date must be after mfg date")
         product_batch_number = str(row[batch_col] or "").strip() if batch_col is not None and batch_col < len(row) else None
         warehouse = str(row[warehouse_col] or "").strip() if warehouse_col is not None and warehouse_col < len(row) else None
+        warehouse_level = (
+            str(row[warehouse_level_col] or "").strip()
+            if warehouse_level_col is not None and warehouse_level_col < len(row)
+            else WarehouseLevel.COMPANY_WAREHOUSE.value
+        )
+        try:
+            warehouse_level = WarehouseLevel(warehouse_level or WarehouseLevel.COMPANY_WAREHOUSE.value).value
+        except ValueError as exc:
+            raise InventoryError(f"Row {index}: warehouse level is not recognized") from exc
         lines.append(
             AssignmentLine(
                 product=product,
@@ -85,6 +96,7 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes) -> list[AssignmentLine]
                 mfg_date=mfg_date,
                 expiry_date=expiry_date,
                 warehouse=warehouse or None,
+                warehouse_level=warehouse_level,
             )
         )
 
@@ -130,6 +142,7 @@ def assign_barcodes_to_existing_stock(
                 mfg_date=line.mfg_date,
                 expiry_date=line.expiry_date,
                 warehouse=line.warehouse,
+                warehouse_level=line.warehouse_level,
             )
         )
 

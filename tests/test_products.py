@@ -65,6 +65,7 @@ def test_product_master_saves_and_updates_sales_discount_rate():
         saved = db.scalar(select(Product).where(Product.product_code == "D001"))
         assert saved.default_rate == 525
         assert saved.sales_discount_rate == 12
+        assert saved.shelf_verification_interval == 1
     engine.dispose()
 
     assert page.status_code == 200

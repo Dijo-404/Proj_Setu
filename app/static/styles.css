@@ -844,6 +844,68 @@ tfoot th, tfoot td {
 .metric.danger { background: linear-gradient(180deg, #fdeeee 0%, #fde8e8 100%); border-color: transparent; }
 .metric.danger strong { color: var(--bad-fg); }
 
+.stock-movement-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.stock-movement-filters {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.stock-movement-filters .filter-actions {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+
+.stock-movement-table table {
+  min-width: 1480px;
+}
+
+.stock-movement-table td {
+  vertical-align: top;
+}
+
+.stock-movement-table td small {
+  display: block;
+  margin-top: 4px;
+  color: var(--ink-48);
+  white-space: normal;
+}
+
+.movement-settings > summary,
+.movement-formulas > summary {
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.movement-settings[open] > summary,
+.movement-formulas[open] > summary {
+  margin-bottom: 18px;
+}
+
+.formula-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.formula-grid p {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding: 14px;
+  border-radius: var(--r-md);
+  background: var(--neutral-bg);
+}
+
+.formula-grid span {
+  color: var(--ink-48);
+  font-size: 13px;
+}
+
 .expiry-metric-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -1157,7 +1219,7 @@ details.add-company[open] > summary { margin-bottom: 16px; }
 }
 
 .product-table {
-  min-width: 1260px;
+  min-width: 900px;
 }
 
 .product-table th,
@@ -1165,109 +1227,173 @@ details.add-company[open] > summary { margin-bottom: 16px; }
   vertical-align: middle;
 }
 
-.product-table td {
-  padding-top: 16px;
-  padding-bottom: 16px;
+.product-table tbody tr {
+  transition: background var(--dur) var(--ease);
 }
 
-.product-col-main { width: 280px; }
-.product-col-pricing { width: 330px; }
-.product-col-labels { width: 520px; }
-.product-col-manage { width: 150px; }
-
-.product-cell {
-  display: grid;
-  gap: 10px;
-  min-width: 0;
+.product-table tbody tr:hover {
+  background: rgba(0, 102, 204, 0.035);
 }
 
-.product-code {
-  font-size: 17px;
-  font-weight: 650;
-  letter-spacing: 0.01em;
+.product-open-link {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--primary);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.product-name {
-  color: var(--ink-80);
+.product-open-link:hover {
+  text-decoration: underline;
 }
 
-.product-pricing-form,
-.product-label-form {
-  display: grid;
-  gap: 8px;
-  align-items: end;
+.product-list-name {
+  display: block;
+  font-weight: 600;
 }
 
-.product-pricing-form {
-  grid-template-columns: 112px 136px auto;
+.product-page-actions {
+  flex: 1 1 620px;
 }
 
-.product-label-form {
-  grid-template-columns: repeat(3, minmax(130px, 1fr));
+.product-page-actions .search {
+  flex: 1 1 420px;
 }
 
-.product-field {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0;
-  color: var(--ink-48);
+.product-list-title {
+  margin-top: 0;
 }
 
-.product-field span {
+.product-list-panel {
   overflow: hidden;
+}
+
+dialog.product-modal {
+  width: min(940px, calc(100vw - 32px));
+}
+
+.product-modal-body {
+  display: grid;
+  gap: 24px;
+}
+
+.product-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.product-summary-grid > div {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: var(--parchment);
+}
+
+.product-summary-grid span {
+  display: block;
+  margin-bottom: 5px;
+  color: var(--ink-48);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.product-summary-grid strong {
+  display: block;
+  overflow: hidden;
+  color: var(--ink-80);
+  font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.product-field input,
-.product-field select {
-  font-weight: 500;
+.product-modal-section {
+  padding-top: 22px;
+  border-top: 1px solid var(--hairline-soft);
 }
 
-.product-meta {
+.product-modal-section__head {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.product-meta span {
-  display: inline-flex;
-  min-height: 24px;
-  align-items: center;
-  border-radius: var(--r-pill);
-  padding: 3px 9px;
-  background: rgba(0, 0, 0, 0.045);
-  font-size: 11px;
-  font-weight: 700;
+.product-modal-section__head p,
+.product-danger-zone p {
+  margin: 4px 0 0;
   color: var(--ink-48);
+  font-size: 13px;
 }
 
-.product-table input,
-.product-table select {
-  min-height: 38px;
-  padding: 7px 11px;
+.product-modal-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
 }
 
-.product-table .button.small {
-  min-height: 38px;
-  padding-inline: 14px;
-}
-
-.product-manage-cell {
-  text-align: right;
-}
-
-.product-manage-form {
+.product-modal-actions {
+  grid-column: 1 / -1;
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 9px;
+  padding-top: 2px;
 }
 
-.product-delete,
-.user-actions .button {
-  min-width: 96px;
+.product-modal-actions .autosave-status {
+  margin-right: auto;
+}
+
+.product-danger-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.product-danger-zone form {
+  flex: none;
+}
+
+@media (max-width: 980px) {
+  .product-summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .product-modal-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  dialog.product-modal {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+  }
+
+  .product-summary-grid,
+  .product-modal-form {
+    grid-template-columns: 1fr;
+  }
+
+  .product-modal-actions,
+  .product-danger-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .product-modal-actions .button,
+  .product-danger-zone .button {
+    width: 100%;
+  }
 }
 
 .user-actions {
@@ -1603,6 +1729,8 @@ small {
   .grid-form, .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .label-controls .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stock-movement-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .stock-movement-filters, .formula-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (min-width: 980px) {
@@ -1639,6 +1767,12 @@ small {
   .filters,
   .label-controls .grid-form.compact,
   .two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .stock-movement-metrics,
+  .stock-movement-filters,
+  .formula-grid {
     grid-template-columns: 1fr;
   }
 

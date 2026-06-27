@@ -27,6 +27,10 @@
       const tbody = document.querySelector("[data-live-scans]");
       if (tbody) tbody.innerHTML = data.scans_html;
     }
+    if (typeof data.shelf_alerts_html === "string") {
+      const alerts = document.querySelector("[data-live-shelf-alerts]");
+      if (alerts) alerts.outerHTML = data.shelf_alerts_html;
+    }
   }
 
   function tick() {

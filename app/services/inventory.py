@@ -18,6 +18,7 @@ from app.models import (
     SerialStatus,
     TransactionType,
     User,
+    WarehouseLevel,
 )
 from app.services.expiry import validate_fefo_scan
 
@@ -217,15 +218,21 @@ def remove_batch_item(db: Session, batch: Batch, item_id: int) -> None:
 
 
 def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
+    from app.services.shelf_verification import validate_shelf_verification_complete
+
     batch_type = BatchType(batch.batch_type)
     if not batch.items:
         raise InventoryError("Scan at least one serial before submitting")
+    validate_shelf_verification_complete(batch)
     for item in batch.items:
         serial_allowed_for_batch(item.serial, batch_type)
     for item in batch.items:
         previous_status = item.serial.status
         target_status = previous_status
         scan_status = "SUBMITTED"
+        if batch_type != BatchType.AUDIT and item.rate is None:
+            # Preserve the valuation used when the stock moved; product rates can change later.
+            item.rate = float(item.serial.product.default_rate or 0)
         if batch_type in {BatchType.RECEIVE, BatchType.PURCHASE}:
             target_status = SerialStatus.IN_STOCK.value
             scan_status = SerialStatus.PURCHASED.value
@@ -348,6 +355,7 @@ def generate_serials(
     mfg_date: date | None = None,
     expiry_date: date | None = None,
     warehouse: str | None = None,
+    warehouse_level: str = WarehouseLevel.COMPANY_WAREHOUSE.value,
 ) -> list[Serial]:
     if quantity < 1:
         raise InventoryError("Quantity must be at least 1")
@@ -372,6 +380,7 @@ def generate_serials(
                 mfg_date=mfg_date,
                 expiry_date=expiry_date,
                 warehouse=warehouse.strip().upper() if warehouse else None,
+                warehouse_level=WarehouseLevel(warehouse_level).value,
             )
             db.add(serial)
             created.append(serial)
@@ -389,6 +398,8 @@ def generate_serials(
 
 
 def dashboard_counts(db: Session) -> dict[str, int]:
+    from app.services.shelf_verification import pending_shelf_batches
+
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     counts = {
         "products": db.scalar(select(func.count(Product.id))) or 0,
@@ -398,6 +409,7 @@ def dashboard_counts(db: Session) -> dict[str, int]:
         "pending_sync": db.scalar(select(func.count(Batch.id)).where(Batch.status == BatchStatus.PENDING_SYNC.value)) or 0,
         "failed": db.scalar(select(func.count(Batch.id)).where(Batch.status == BatchStatus.FAILED.value)) or 0,
         "today_scans": db.scalar(select(func.count(ScanLog.id)).where(ScanLog.created_at >= today_start)) or 0,
+        "shelf_verification_pending": len(pending_shelf_batches(db)),
     }
     return counts
 

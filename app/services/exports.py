@@ -102,6 +102,7 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
             "Mfg Date",
             "Expiry Date",
             "Warehouse",
+            "Warehouse Level",
             "Status",
             "Created At",
         ]
@@ -119,6 +120,7 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
                     serial.mfg_date.isoformat() if serial.mfg_date else "",
                     serial.expiry_date.isoformat() if serial.expiry_date else "",
                     serial.warehouse or "",
+                    serial.warehouse_level,
                     serial.status,
                     serial.created_at.isoformat(),
                 ]

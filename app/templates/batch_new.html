@@ -29,10 +29,13 @@
       <select name="reason_code">
         <option value="SAMPLE">Sample</option>
         <option value="OFFICE_USE">Office use</option>
-        <option value="DAMAGE">Damage</option>
         <option value="MARKETING">Marketing</option>
         <option value="PRODUCTION">Production</option>
-        <option value="OTHER">Other</option>
+        <optgroup label="Loss factors">
+          <option value="TRANSPORTATION">Transportation</option>
+          <option value="THEFT">Theft</option>
+          <option value="OTHER">Other Things</option>
+        </optgroup>
       </select>
     </label>
     {% elif batch_type.value == 'PURCHASE_RETURN' %}

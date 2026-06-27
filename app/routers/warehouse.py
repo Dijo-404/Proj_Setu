@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Product, Role, StockRelocation, StorageLocation
+from app.models import Product, Role, StockRelocation, StorageLocation, WarehouseLevel
 from app.services.exports import barcode_png, location_labels_pdf
 from app.services.relocation import (
     MoveItem,
@@ -273,6 +273,7 @@ def locations_page(
             "user": user,
             "locations": rows,
             "created_location": next((row for row in rows if row.id == created), None),
+            "warehouse_levels": [level.value for level in WarehouseLevel],
             "error": error or None,
         },
     )
@@ -283,6 +284,7 @@ def add_location(
     request: Request,
     code: str = Form(...),
     warehouse: str = Form(...),
+    warehouse_level: str = Form(WarehouseLevel.COMPANY_WAREHOUSE.value),
     zone: str = Form(...),
     section: str = Form(...),
     rack: str = Form(...),
@@ -296,6 +298,7 @@ def add_location(
             db,
             code=code,
             warehouse=warehouse,
+            warehouse_level=warehouse_level,
             zone=zone,
             section=section,
             rack=rack,

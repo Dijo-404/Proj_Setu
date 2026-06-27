@@ -21,7 +21,7 @@
     <dt>Product batch</dt><dd>{{ serial.product_batch_number or '-' }}</dd>
     <dt>Mfg date</dt><dd>{{ serial.mfg_date.strftime('%d %b %Y') if serial.mfg_date else '-' }}</dd>
     <dt>Expiry date</dt><dd>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</dd>
-    <dt>Current location</dt><dd>{{ serial.location.full_path if serial.location else (serial.warehouse or 'Unassigned') }}</dd>
+    <dt>Current location</dt><dd>{{ serial.location.full_path if serial.location else (serial.warehouse or 'Unassigned') }}{% if serial.warehouse %} · {{ serial.warehouse_level }}{% endif %}</dd>
     <dt>Status</dt><dd><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></dd>
     <dt>Active</dt><dd>{{ 'Yes' if serial.active else 'No' }}</dd>
     <dt>Created</dt><dd>{{ serial.created_at.strftime('%d %b %Y %H:%M') }}</dd>

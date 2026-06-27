@@ -1,7 +1,8 @@
 from sqlalchemy import select, update
 
-from app.models import BatchType, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
+from app.models import BatchType, InventoryTransaction, Product, Serial, SerialStatus, StorageLocation, TransactionType, User
 from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
+from app.services.shelf_verification import verify_pending_items_on_shelf
 
 
 def test_receive_generated_serial(db_session):
@@ -113,11 +114,21 @@ def test_purchase_batch_logs_purchase_transaction(db_session):
         default_rate=100,
         tally_stock_item_name="Turmeric",
     )
-    db_session.add_all([user, product])
+    location = StorageLocation(
+        code="PURCHASE-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, product, location])
     db_session.commit()
     serial = generate_serials(db_session, product, 1)[0]
     batch = create_batch(db_session, user, BatchType.PURCHASE, "Supplier", "")
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
     apply_batch_statuses(db_session, batch, user)
     txn = db_session.scalar(select(InventoryTransaction).where(InventoryTransaction.serial_id == serial.id))
     assert serial.status == SerialStatus.IN_STOCK.value

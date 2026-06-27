@@ -6,8 +6,9 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Batch, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
 from app.security import create_session_token
+from app.services.access_control import save_role_access_config
 
 
 def test_reports_page_renders_scan_and_transaction_rows():
@@ -85,6 +86,119 @@ def test_reports_page_renders_scan_and_transaction_rows():
     assert "SG100-000001" in response.text
     assert "TALLY-001" in response.text
     assert "BATCH-001" in response.text
+
+
+def test_loss_report_shows_factor_values_for_admin_and_super_admin():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        admin = User(id=1, username="admin", password_hash="x", role="admin", active=True)
+        root = User(id=2, username="root", password_hash="x", role="super_admin", active=True)
+        sales = User(id=3, username="sales", password_hash="x", role="sales", active=True)
+        product = Product(
+            product_code="LOSS100",
+            product_name="Loss test product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Loss test product",
+        )
+        db.add_all([admin, root, sales, product])
+        db.flush()
+        theft_serial = Serial(
+            serial_number="LOSS100-000001",
+            product_id=product.id,
+            status=SerialStatus.ISSUED.value,
+        )
+        transport_serial = Serial(
+            serial_number="LOSS100-000002",
+            product_id=product.id,
+            status=SerialStatus.ISSUED.value,
+        )
+        db.add_all([theft_serial, transport_serial])
+        db.flush()
+        theft_batch = Batch(
+            batch_number="ISS-THEFT-001",
+            batch_type=BatchType.ISSUE.value,
+            reason_code="THEFT",
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+        )
+        transport_batch = Batch(
+            batch_number="ISS-TRANSPORT-001",
+            batch_type=BatchType.ISSUE.value,
+            reason_code="TRANSPORTATION",
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+        )
+        db.add_all([theft_batch, transport_batch])
+        db.flush()
+        db.add_all(
+            [
+                BatchItem(batch_id=theft_batch.id, serial_id=theft_serial.id, quantity=1, rate=125.50),
+                BatchItem(batch_id=transport_batch.id, serial_id=transport_serial.id, quantity=1),
+                InventoryTransaction(
+                    transaction_type=TransactionType.ISSUE.value,
+                    serial_id=theft_serial.id,
+                    product_id=product.id,
+                    batch_id=theft_batch.id,
+                    user_id=admin.id,
+                    serial_number=theft_serial.serial_number,
+                    status_from=SerialStatus.IN_STOCK.value,
+                    status_to=SerialStatus.ISSUED.value,
+                    reason_code="THEFT",
+                ),
+                InventoryTransaction(
+                    transaction_type=TransactionType.ISSUE.value,
+                    serial_id=transport_serial.id,
+                    product_id=product.id,
+                    batch_id=transport_batch.id,
+                    user_id=admin.id,
+                    serial_number=transport_serial.serial_number,
+                    status_from=SerialStatus.IN_STOCK.value,
+                    status_to=SerialStatus.ISSUED.value,
+                    reason_code="TRANSPORTATION",
+                ),
+            ]
+        )
+        db.commit()
+        save_role_access_config(db, {"reports_data": {"sales": "view"}})
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        admin_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(1)})
+        root_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(2)})
+        sales_response = client.get("/reports", cookies={SESSION_COOKIE: create_session_token(3)})
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    for response in (admin_response, root_response):
+        assert response.status_code == 200
+        assert "<h2>Losses</h2>" in response.text
+        assert "<th>Loss due to</th>" in response.text
+        assert "Transportation" in response.text
+        assert "Theft" in response.text
+        assert "Other Things" in response.text
+        assert "Rs 125.50" in response.text
+        assert "Rs 225.50" in response.text
+    assert sales_response.status_code == 200
+    assert "<h2>Losses</h2>" not in sales_response.text
 
 
 def test_dashboard_renders_stock_and_activity_charts():

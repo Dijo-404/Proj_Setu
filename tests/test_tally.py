@@ -3,9 +3,10 @@ from xml.etree import ElementTree as ET
 
 import pytest
 
-from app.models import BatchType, Product, SerialStatus, User
+from app.models import BatchType, Product, SerialStatus, StorageLocation, User
 from app.services import tally as tally_service
 from app.services.inventory import apply_batch_statuses, add_serial_to_batch, create_batch, generate_serials
+from app.services.shelf_verification import verify_pending_items_on_shelf
 from app.services.tally import TallySyncError, build_voucher_xml, post_to_tally
 
 
@@ -150,12 +151,22 @@ def test_purchase_voucher_xml_is_balanced(db_session):
         default_rate=333,
         tally_stock_item_name="Masala",
     )
-    db_session.add_all([user, product])
+    location = StorageLocation(
+        code="TALLY-PURCHASE-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, product, location])
     db_session.commit()
     serials = generate_serials(db_session, product, 3)
     batch = create_batch(db_session, user, BatchType.PURCHASE, "Vendor", "")
     for serial in serials:
         add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
     apply_batch_statuses(db_session, batch, user)
 
     xml = build_voucher_xml(batch, VALID_SETTINGS)

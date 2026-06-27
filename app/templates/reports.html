@@ -109,6 +109,32 @@
   </div>
 </section>
 
+{% if losses %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Losses</h2>
+    <span>Recorded stock rate before GST · current filters</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Loss due to</th><th>Quantity</th><th>Value</th></tr></thead>
+      <tbody>
+        {% for loss in losses.rows %}
+        <tr>
+          <td>{{ loss.label }}</td>
+          <td>{{ loss.quantity }}</td>
+          <td>Rs {{ '%.2f'|format(loss.value) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th>Total loss</th><th>{{ losses.total_quantity }}</th><th>Rs {{ '%.2f'|format(losses.total_value) }}</th></tr>
+      </tfoot>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 <section class="split">
   <div>
     <div class="section-title"><h2>Scans</h2></div>
