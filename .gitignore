@@ -13,6 +13,7 @@ data/secret_key
 .pytest_cache/
 .coverage
 htmlcov/
+logs/
 docs/context/*.zip
 docs/context/*.7z
 docs/context/*.rar
