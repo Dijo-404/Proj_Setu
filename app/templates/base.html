@@ -3,26 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#000000">
+  <meta name="theme-color" content="#faf9f5">
   <title>{% block title %}Setu Barcode Tally Bridge{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20260628-role-picker-2">
+  <link rel="stylesheet" href="/static/styles.css?v=20260628-editorial-theme-10">
 </head>
 <body>
   {% if user %}
   <header class="global-nav">
     <a class="brand" href="{{ user_home_path(user) }}">
       <span class="brand__mark">Setu</span>
-      <span class="brand__sub">Barcode Tally Bridge</span>
     </a>
-    <div class="global-nav__spacer"></div>
-    <form method="post" action="/logout" class="session">
-      <span class="session__user">{{ user.username }}</span>
-      <button type="submit" class="button on-dark small">Sign out</button>
-    </form>
-  </header>
-  <nav class="subnav" aria-label="Sections">
-    <div class="subnav__inner">
+    <nav class="subnav" aria-label="Sections">
+      <div class="subnav__inner">
       {% if role_can(user, 'page_dashboard') and role_can(user, 'dashboard_data') %}
       <a href="/" class="{{ 'active' if request.url.path == '/' else '' }}">Dashboard</a>
       {% endif %}
@@ -101,10 +94,28 @@
         </div>
       </details>
       {% endif %}
-    </div>
-  </nav>
+      </div>
+    </nav>
+    <details class="profile-menu">
+      <summary class="profile-menu__trigger" aria-label="Open account menu" title="Account">
+        <span class="profile-avatar" aria-hidden="true">{{ user.username[:1]|upper }}</span>
+      </summary>
+      <div class="profile-menu__panel">
+        <div class="profile-menu__identity">
+          <span class="profile-avatar profile-avatar--large" aria-hidden="true">{{ user.username[:1]|upper }}</span>
+          <strong>Hi, {{ user.username }}!</strong>
+          <span>{{ user.role|replace('_', ' ')|title }}</span>
+        </div>
+        <a class="profile-menu__account" href="/account/password">Change password</a>
+        <form method="post" action="/logout">
+          <button type="submit" class="button primary full">Sign out</button>
+        </form>
+      </div>
+    </details>
+  </header>
   <script>
     const navMenus = Array.from(document.querySelectorAll("details.nav-menu"));
+    const profileMenu = document.querySelector("details.profile-menu");
 
     function positionNavMenu(menu) {
       if (!menu.open) return;
@@ -133,6 +144,7 @@
     navMenus.forEach((menu) => {
       menu.addEventListener("toggle", () => {
         if (!menu.open) return;
+        if (profileMenu) profileMenu.removeAttribute("open");
         navMenus.forEach((otherMenu) => {
           if (otherMenu !== menu) otherMenu.removeAttribute("open");
         });
@@ -147,14 +159,25 @@
     window.addEventListener("resize", positionOpenNavMenus);
     window.addEventListener("scroll", positionOpenNavMenus, true);
 
+    if (profileMenu) {
+      profileMenu.addEventListener("toggle", () => {
+        if (!profileMenu.open) return;
+        navMenus.forEach((menu) => menu.removeAttribute("open"));
+      });
+    }
+
     document.addEventListener("click", (event) => {
       navMenus.forEach((menu) => {
         if (!menu.contains(event.target)) menu.removeAttribute("open");
       });
+      if (profileMenu && !profileMenu.contains(event.target)) {
+        profileMenu.removeAttribute("open");
+      }
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape") {
         navMenus.forEach((menu) => menu.removeAttribute("open"));
+        if (profileMenu) profileMenu.removeAttribute("open");
       }
     });
     positionOpenNavMenus();
