@@ -49,6 +49,14 @@ start_setu.bat
 
 Use `setup.bat` for first-time setup and `start_setu.bat` for normal app startup. No root-level PowerShell helper files are needed for the client-facing flow.
 
+To download the latest version from GitHub and restart Setu, double-click:
+
+```text
+update.bat
+```
+
+The updater uses a safe fast-forward-only Git pull, refreshes Python packages, runs an import check, and restarts the existing Windows service or console server. If Setu is installed as a Windows service, run `update.bat` as Administrator.
+
 ## 1. Open The Project Folder
 
 ```bash

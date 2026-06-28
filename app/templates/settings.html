@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Settings - Setu{% endblock %}
+{% from "partials/ledger_mapping_editor.html" import sales_ledger_editor %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -80,6 +81,7 @@
       <label>CGST ledger<input name="cgst_ledger_name" required></label>
       <label>SGST ledger<input name="sgst_ledger_name" required></label>
     </div>
+    {{ sales_ledger_editor() }}
     <div class="two-col">
       <label>Round off ledger<input name="round_off_ledger_name" required></label>
       <label>Default party<input name="default_party_name" value="{{ settings.default_party_name }}" required></label>
@@ -112,10 +114,11 @@
         <label>Sales voucher<input name="sales_voucher_type" value="{{ settings.sales_voucher_type }}" required></label>
         <label>Purchase voucher<input name="purchase_voucher_type" value="{{ settings.purchase_voucher_type }}" required></label>
       </div>
-      <label>Sales ledger<input name="sales_ledger_name" value="{{ settings.sales_ledger_name }}" required></label>
+      <label>Default sales ledger<input name="sales_ledger_name" value="{{ settings.sales_ledger_name }}" required></label>
       <label>Purchase ledger<input name="purchase_ledger_name" value="{{ settings.purchase_ledger_name }}" required></label>
-      <label>CGST ledger<input name="cgst_ledger_name" value="{{ settings.cgst_ledger_name }}" required></label>
-      <label>SGST ledger<input name="sgst_ledger_name" value="{{ settings.sgst_ledger_name }}" required></label>
+      <label>Default CGST ledger<input name="cgst_ledger_name" value="{{ settings.cgst_ledger_name }}" required></label>
+      <label>Default SGST ledger<input name="sgst_ledger_name" value="{{ settings.sgst_ledger_name }}" required></label>
+      {{ sales_ledger_editor(settings.sales_gst_ledger_mappings) }}
       <label>Round off ledger<input name="round_off_ledger_name" value="{{ settings.round_off_ledger_name }}" required></label>
       <label>Default party<input name="default_party_name" value="{{ settings.default_party_name }}" required></label>
       <label>Retry interval seconds<input name="retry_interval_seconds" type="number" min="30" step="1" value="{{ settings.retry_interval_seconds }}" required></label>
@@ -127,6 +130,7 @@
   </div>
 </dialog>
 
+<script src="/static/ledger-mapping-editor.js?v=20260628-1"></script>
 <script>
   (function () {
     const dialog = document.getElementById("company-modal");

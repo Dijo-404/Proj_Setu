@@ -13,7 +13,12 @@ from sqlalchemy.orm import Session
 
 from app.models import Batch, BatchStatus, BatchType, SyncAttempt, utc_now
 from app.services.inventory import update_batch_transaction_references
-from app.services.settings import get_all_settings, is_tally_enabled
+from app.services.settings import (
+    get_all_settings,
+    gst_rate_key,
+    is_tally_enabled,
+    parse_sales_gst_ledger_mappings,
+)
 from app.services.voucher import calculate_voucher_summary
 
 
@@ -54,6 +59,10 @@ def require_tally_settings(settings: dict[str, str]) -> None:
     missing = missing_tally_settings(settings)
     if missing:
         raise TallySyncError(f"Complete Tally settings before generating XML: {', '.join(missing)}", retryable=False)
+    try:
+        parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
+    except ValueError as exc:
+        raise TallySyncError(str(exc), retryable=False) from exc
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -84,6 +93,17 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     voucher_type = settings["sales_voucher_type"] if is_sale else settings["purchase_voucher_type"]
     party_name = batch.party_name or settings["default_party_name"]
     income_ledger = settings["sales_ledger_name"] if is_sale else settings["purchase_ledger_name"]
+    sales_gst_mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
+
+    def sales_ledgers(gst_rate: Decimal) -> dict[str, str]:
+        return sales_gst_mappings.get(
+            gst_rate_key(gst_rate),
+            {
+                "sales": settings["sales_ledger_name"],
+                "cgst": settings["cgst_ledger_name"],
+                "sgst": settings["sgst_ledger_name"],
+            },
+        )
 
     envelope = ET.Element("ENVELOPE")
     header = ET.SubElement(envelope, "HEADER")
@@ -127,14 +147,41 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
         _text(inventory, "ACTUALQTY", f"{line.quantity} {line.unit}")
         _text(inventory, "BILLEDQTY", f"{line.quantity} {line.unit}")
         allocations = ET.SubElement(inventory, "ACCOUNTINGALLOCATIONS.LIST")
-        _text(allocations, "LEDGERNAME", income_ledger)
+        line_income_ledger = sales_ledgers(line.gst_rate)["sales"] if is_sale else income_ledger
+        _text(allocations, "LEDGERNAME", line_income_ledger)
         _text(allocations, "ISDEEMEDPOSITIVE", "No" if income_is_credit else "Yes")
         _text(allocations, "AMOUNT", _money(signed_line))
 
-    if summary.cgst_amount > 0:
-        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["cgst_ledger_name"], summary.cgst_amount, credit=income_is_credit)
-    if summary.sgst_amount > 0:
-        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["sgst_ledger_name"], summary.sgst_amount, credit=income_is_credit)
+    if is_sale:
+        tax_by_rate: dict[str, dict[str, Decimal]] = {}
+        for line in summary.lines:
+            key = gst_rate_key(line.gst_rate)
+            totals = tax_by_rate.setdefault(key, {"cgst": Decimal("0"), "sgst": Decimal("0")})
+            totals["cgst"] += line.cgst_amount
+            totals["sgst"] += line.sgst_amount
+        for key, totals in tax_by_rate.items():
+            ledgers = sales_ledgers(Decimal(key))
+            if totals["cgst"] > 0:
+                add_ledger(voucher, "LEDGERENTRIES.LIST", ledgers["cgst"], totals["cgst"], credit=True)
+            if totals["sgst"] > 0:
+                add_ledger(voucher, "LEDGERENTRIES.LIST", ledgers["sgst"], totals["sgst"], credit=True)
+    else:
+        if summary.cgst_amount > 0:
+            add_ledger(
+                voucher,
+                "LEDGERENTRIES.LIST",
+                settings["cgst_ledger_name"],
+                summary.cgst_amount,
+                credit=False,
+            )
+        if summary.sgst_amount > 0:
+            add_ledger(
+                voucher,
+                "LEDGERENTRIES.LIST",
+                settings["sgst_ledger_name"],
+                summary.sgst_amount,
+                credit=False,
+            )
     if summary.round_off != 0:
         add_ledger(voucher, "LEDGERENTRIES.LIST", settings["round_off_ledger_name"], summary.round_off, credit=income_is_credit)
 

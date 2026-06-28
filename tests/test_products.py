@@ -58,6 +58,8 @@ def test_product_master_saves_and_updates_sales_discount_rate():
             data={"default_rate": "525", "sales_discount_rate": "12"},
             cookies=cookies,
         )
+        report_page = client.get("/products", cookies=cookies)
+        sales_pdf = client.get(f"/products/{product_id}/sales-report.pdf", cookies=cookies)
     finally:
         app.dependency_overrides.clear()
 
@@ -70,6 +72,15 @@ def test_product_master_saves_and_updates_sales_discount_rate():
 
     assert page.status_code == 200
     assert "Sales discount %" in page.text
+    assert "Available stock" in report_page.text
+    assert "Missing stock" in report_page.text
+    assert "Restock" in report_page.text
+    assert "<th>Report</th>" in report_page.text
+    assert f'data-product-open="product-report-modal-{product_id}"' in report_page.text
+    assert f'href="/products/{product_id}/sales-report.pdf"' in report_page.text
+    assert sales_pdf.status_code == 200
+    assert sales_pdf.headers["content-type"] == "application/pdf"
+    assert sales_pdf.content.startswith(b"%PDF")
     assert create.status_code == 303
     assert update.status_code == 303
 

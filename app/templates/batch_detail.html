@@ -11,6 +11,9 @@
     {% if batch.batch_type == 'AUDIT' and batch.status != 'DRAFT' %}
     <a class="button" href="/batches/{{ batch.id }}/audit.pdf">Audit PDF</a>
     {% endif %}
+    {% if batch.batch_type == 'SALE' and batch.items|length > 0 %}
+    <a class="button" href="/batches/{{ batch.id }}/preinvoice.pdf">Pre-invoice PDF</a>
+    {% endif %}
     {% if can_tally_xml and batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.items|length > 0 %}
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}

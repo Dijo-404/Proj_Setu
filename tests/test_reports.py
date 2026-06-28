@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
 from app.security import create_session_token
 from app.services.access_control import save_role_access_config
 
@@ -86,6 +86,80 @@ def test_reports_page_renders_scan_and_transaction_rows():
     assert "SG100-000001" in response.text
     assert "TALLY-001" in response.text
     assert "BATCH-001" in response.text
+
+
+def test_reports_page_includes_filterable_missing_stock():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        user = User(id=1, username="auditor", password_hash="x", role="admin", active=True)
+        product = Product(
+            product_code="MISS100",
+            product_name="Missing masala",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Missing masala",
+        )
+        db.add_all([user, product])
+        db.flush()
+        serial = Serial(
+            serial_number="MISS100-000001",
+            product_id=product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        batch = Batch(
+            batch_number="AUD-001",
+            batch_type=BatchType.AUDIT.value,
+            user_id=user.id,
+            status=BatchStatus.SUBMITTED.value,
+        )
+        db.add_all([serial, batch])
+        db.flush()
+        db.add(
+            AuditFinding(
+                batch_id=batch.id,
+                serial_id=serial.id,
+                serial_number=serial.serial_number,
+                product_code=product.product_code,
+                product_name=product.product_name,
+                finding_type="MISSING",
+                expected_status=SerialStatus.IN_STOCK.value,
+            )
+        )
+        db.commit()
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        response = client.get(
+            "/reports?action=MISSING",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    assert response.status_code == 200
+    assert '<option value="MISSING" selected>MISSING</option>' in response.text
+    assert "<h2>Missing stock</h2>" in response.text
+    assert "MISS100-000001" in response.text
+    assert "Missing masala" in response.text
+    assert "AUD-001" in response.text
 
 
 def test_loss_report_shows_factor_values_for_admin_and_super_admin():

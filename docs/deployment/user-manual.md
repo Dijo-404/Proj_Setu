@@ -31,7 +31,9 @@ Only super admins can delete users. Deleted users with old batches, scans, or re
 3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, round-off ledger, and default party.
 4. Keep `Enable Tally sync` off until setup is validated.
 5. Open `Products` and create product masters with exact Tally stock item names.
-6. Open `Tally Check` and confirm each required master only after comparing with Tally.
+6. Open `Tally Check`. Click a company name to edit its Tally settings in the
+   popup. For the active company, use the same popup to test the gateway and
+   confirm each required master only after comparing it with Tally.
 7. Create named users from `Users`.
 
 Settings fields auto-save while editing. The sync checkbox is saved only by the `Save settings` button and is blocked until Tally Check is complete.
@@ -94,9 +96,13 @@ Submitted purchase serials become `IN_STOCK`.
 2. Enter customer/reference details.
 3. Scan in-stock serials, or use `Pick FEFO` for product and quantity.
 4. Confirm rates, sales discount, GST split, round off, and final invoice value.
-5. Submit the batch.
+5. Use `Pre-invoice PDF` to download a provisional sales bill showing the
+   customer reference name, product lines, GST breakup, round off, and total.
+6. Submit the batch.
 
 Submitted sale serials become `SOLD`.
+The pre-invoice is available for every sale after at least one item is added.
+It is clearly marked as provisional and is not the final statutory GST invoice.
 
 ## Audit
 

@@ -26,7 +26,15 @@ VALID_SETTINGS = {
 
 
 def test_collect_master_requirements_includes_products_and_settings(db_session):
-    update_settings(db_session, VALID_SETTINGS)
+    update_settings(
+        db_session,
+        {
+            **VALID_SETTINGS,
+            "sales_gst_ledger_mappings": (
+                "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5%"
+            ),
+        },
+    )
     product = Product(
         product_code="SG010",
         product_name="Pepper",
@@ -43,6 +51,9 @@ def test_collect_master_requirements_includes_products_and_settings(db_session):
     assert ("Stock Item", "Sg Pepper 100grm") in names
     assert ("Unit", "Pcs") in names
     assert ("Voucher Type", "Sales") in names
+    assert ("Ledger", "Sales @ 5%") in names
+    assert ("Ledger", "Output CGST @ 2.5%") in names
+    assert ("Ledger", "Output SGST @ 2.5%") in names
 
 
 def test_confirmation_updates_readiness_counts(db_session):

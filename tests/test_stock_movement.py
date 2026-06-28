@@ -8,12 +8,15 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User, WarehouseLevel
+from app.models import AuditFinding, Batch, BatchStatus, BatchType, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User, WarehouseLevel
 from app.security import create_session_token
 from app.services.stock_movement import (
     MovementConfig,
     MovementFilters,
     movement_status,
+    product_inventory_metrics,
+    product_sales_report_pdf,
+    product_sales_transactions,
     stock_movement_pdf,
     stock_movement_rows,
     stock_movement_xlsx,
@@ -112,6 +115,88 @@ def test_movement_threshold_boundaries_are_configurable():
     assert movement_status(100, 80, 80, config) == "Medium Moving"
     assert movement_status(100, 81, 81, config) == "Fast Moving"
     assert movement_status(0, 5, None, config) == "Fast Moving"
+
+
+def test_product_inventory_metrics_reports_sales_available_missing_and_restock(db_session):
+    as_of = date(2026, 6, 27)
+    user = User(username="admin", password_hash="x", role="admin", active=True)
+    product = _product("REPORT-1", "Reported product")
+    db_session.add_all([user, product])
+    db_session.flush()
+    stock = [
+        Serial(
+            serial_number=f"REPORT-STOCK-{index}",
+            product_id=product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        for index in range(4)
+    ]
+    sold = [
+        Serial(
+            serial_number=f"REPORT-SOLD-{index}",
+            product_id=product.id,
+            status=SerialStatus.SOLD.value,
+        )
+        for index in range(2)
+    ]
+    audit_batch = Batch(
+        batch_number="AUD-REPORT-1",
+        batch_type=BatchType.AUDIT.value,
+        user_id=user.id,
+        status=BatchStatus.SUBMITTED.value,
+    )
+    db_session.add_all([*stock, *sold, audit_batch])
+    db_session.flush()
+    db_session.add(
+        AuditFinding(
+            batch_id=audit_batch.id,
+            serial_id=stock[0].id,
+            serial_number=stock[0].serial_number,
+            product_code=product.product_code,
+            product_name=product.product_name,
+            finding_type="MISSING",
+            expected_status=SerialStatus.IN_STOCK.value,
+            created_at=datetime(2026, 6, 26, tzinfo=timezone.utc),
+        )
+    )
+    for serial in sold:
+        db_session.add(
+            InventoryTransaction(
+                transaction_type=TransactionType.SALE.value,
+                serial_id=serial.id,
+                product_id=product.id,
+                user_id=user.id,
+                serial_number=serial.serial_number,
+                status_from=SerialStatus.IN_STOCK.value,
+                status_to=SerialStatus.SOLD.value,
+                created_at=datetime(2026, 6, 20, tzinfo=timezone.utc),
+            )
+        )
+    db_session.commit()
+
+    metrics, analysis_days = product_inventory_metrics(
+        db_session,
+        [product],
+        config=MovementConfig(analysis_days=30),
+        as_of=as_of,
+    )
+
+    assert analysis_days == 30
+    assert metrics[product.id]["units_sold"] == 2
+    assert metrics[product.id]["system_stock"] == 4
+    assert metrics[product.id]["missing_stock"] == 1
+    assert metrics[product.id]["available_stock"] == 3
+    assert metrics[product.id]["restock_label"] == "In 45 days"
+    assert metrics[product.id]["restock_detail"] == "By 11 Aug 2026"
+    sales = product_sales_transactions(db_session, {product.id}, analysis_days, as_of=as_of)
+    assert len(sales) == 2
+    assert product_sales_report_pdf(
+        product,
+        metrics[product.id],
+        sales,
+        analysis_days,
+        as_of=as_of,
+    ).startswith(b"%PDF")
 
 
 def test_stock_movement_exports_are_valid(db_session):

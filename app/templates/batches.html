@@ -31,7 +31,7 @@
 <section class="panel">
   <div class="table-scroll">
     <table>
-      <thead><tr><th>Batch</th><th>Type</th><th>Party</th><th>Reason</th><th>Status</th><th>Items</th><th>Retries</th><th>Created</th></tr></thead>
+      <thead><tr><th>Batch</th><th>Type</th><th>Party</th><th>Reason</th><th>Status</th><th>Items</th><th>Retries</th><th>Created</th><th></th></tr></thead>
       <tbody>
         {% for batch in batches %}
         <tr>
@@ -49,9 +49,14 @@
           <td>{{ batch.items|length }}</td>
           <td>{{ batch.retry_count or 0 }}</td>
           <td>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>
+            {% if batch.batch_type == 'SALE' and batch.items|length > 0 and role_can_view_batch(user, batch.batch_type) %}
+            <a class="button small" href="/batches/{{ batch.id }}/preinvoice.pdf">Pre-invoice</a>
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="empty">No batches yet</td></tr>
+        <tr><td colspan="9" class="empty">No batches yet</td></tr>
         {% endfor %}
       </tbody>
     </table>

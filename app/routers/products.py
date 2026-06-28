@@ -1,14 +1,19 @@
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.auth import require_permission, require_user
 from app.database import get_db
-from app.models import InventoryTransaction, Product, Role, Serial, SerialStatus, WarehouseLevel
+from app.models import InventoryTransaction, Product, Role, Serial, SerialStatus, User, WarehouseLevel
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
+from app.services.stock_movement import (
+    product_inventory_metrics,
+    product_sales_report_pdf,
+    product_sales_transactions,
+)
 from app.templates import templates
 
 router = APIRouter(prefix="/products")
@@ -16,6 +21,25 @@ router = APIRouter(prefix="/products")
 
 def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
+
+
+def product_page_context(db: Session, user: User, rows: list[Product], q: str, error: str | None = None) -> dict:
+    inventory_metrics, analysis_days = product_inventory_metrics(db, rows)
+    sales = product_sales_transactions(db, {product.id for product in rows}, analysis_days)
+    sales_by_product: dict[int, list[InventoryTransaction]] = {product.id: [] for product in rows}
+    for sale in sales:
+        if sale.product_id in sales_by_product:
+            sales_by_product[sale.product_id].append(sale)
+    return {
+        "user": user,
+        "products": rows,
+        "inventory_metrics": inventory_metrics,
+        "sales_by_product": sales_by_product,
+        "analysis_days": analysis_days,
+        "warehouse_levels": [level.value for level in WarehouseLevel],
+        "q": q,
+        "error": error,
+    }
 
 
 @router.get("")
@@ -38,11 +62,27 @@ def products(request: Request, q: str = "", error: str = "", db: Session = Depen
         "products.html",
         {
             "request": request,
-            "user": user,
-            "products": rows,
-            "warehouse_levels": [level.value for level in WarehouseLevel],
-            "q": q,
-            "error": error_message or None,
+            **product_page_context(db, user, rows, q, error_message or None),
+        },
+    )
+
+
+@router.get("/{product_id}/sales-report.pdf")
+def product_sales_pdf(request: Request, product_id: int, db: Session = Depends(get_db)):
+    require_permission(request, db, "product_master")
+    product = db.get(Product, product_id)
+    if not product:
+        return RedirectResponse("/products", status_code=303)
+    metrics, analysis_days = product_inventory_metrics(db, [product])
+    sales = product_sales_transactions(db, {product.id}, analysis_days)
+    safe_code = "".join(character for character in product.product_code if character.isalnum() or character in "-_")
+    return Response(
+        product_sales_report_pdf(product, metrics[product.id], sales, analysis_days),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename={safe_code or f'product-{product.id}'}-sales-report.pdf"
+            )
         },
     )
 
@@ -71,11 +111,7 @@ def create_product(
             "products.html",
             {
                 "request": request,
-                "user": user,
-                "products": rows,
-                "warehouse_levels": [level.value for level in WarehouseLevel],
-                "q": "",
-                "error": "Sales discount must be between 0 and 100%",
+                **product_page_context(db, user, rows, "", "Sales discount must be between 0 and 100%"),
             },
             status_code=400,
         )
@@ -86,11 +122,7 @@ def create_product(
             "products.html",
             {
                 "request": request,
-                "user": user,
-                "products": rows,
-                "warehouse_levels": [level.value for level in WarehouseLevel],
-                "q": "",
-                "error": "Shelf verification interval must be between 1 and 1000 scans",
+                **product_page_context(db, user, rows, "", "Shelf verification interval must be between 1 and 1000 scans"),
             },
             status_code=400,
         )
@@ -118,11 +150,7 @@ def create_product(
             "products.html",
             {
                 "request": request,
-                "user": user,
-                "products": rows,
-                "warehouse_levels": [level.value for level in WarehouseLevel],
-                "q": "",
-                "error": "Product code already exists",
+                **product_page_context(db, user, rows, "", "Product code already exists"),
             },
             status_code=400,
         )

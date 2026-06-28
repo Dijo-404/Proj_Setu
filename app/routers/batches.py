@@ -18,6 +18,7 @@ from app.services.inventory import (
     update_batch_item_rate,
     update_product_rate_in_batch,
 )
+from app.services.preinvoice import sale_preinvoice_pdf
 from app.services.access_control import role_has_access
 from app.services.settings import get_all_settings
 from app.services.relocation import find_location_by_code
@@ -397,6 +398,38 @@ def audit_pdf(request: Request, batch_id: int, db: Session = Depends(get_db)):
         audit_report_pdf(batch),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-audit.pdf"},
+    )
+
+
+@router.get("/{batch_id}/preinvoice.pdf")
+def sale_preinvoice(request: Request, batch_id: int, db: Session = Depends(get_db)):
+    batch = db.scalar(
+        select(Batch)
+        .where(Batch.id == batch_id)
+        .options(
+            selectinload(Batch.items)
+            .selectinload(BatchItem.serial)
+            .selectinload(Serial.product)
+        )
+    )
+    if not batch:
+        return RedirectResponse("/batches", status_code=303)
+    require_permission(request, db, "sales_data")
+    if batch.batch_type != BatchType.SALE.value:
+        return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    if not batch.items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Add at least one item before generating a pre-invoice.",
+        )
+    return Response(
+        sale_preinvoice_pdf(batch, get_all_settings(db)),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f"attachment; filename={batch.batch_number}-preinvoice.pdf"
+            )
+        },
     )
 
 

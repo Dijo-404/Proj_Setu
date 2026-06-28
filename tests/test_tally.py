@@ -140,6 +140,62 @@ def test_sale_voucher_xml_is_balanced_with_tax_and_party(db_session):
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
+def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
+    user = User(username="sales-multi-gst", password_hash="x", role="sales")
+    product_5 = Product(
+        product_code="GST005",
+        product_name="Five Percent Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Five Percent Product",
+    )
+    product_18 = Product(
+        product_code="GST018",
+        product_name="Eighteen Percent Product",
+        hsn="0902",
+        gst_rate=18,
+        unit="Pcs",
+        default_rate=200,
+        tally_stock_item_name="Eighteen Percent Product",
+    )
+    db_session.add_all([user, product_5, product_18])
+    db_session.commit()
+    serial_5 = generate_serials(db_session, product_5, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    serial_18 = generate_serials(db_session, product_18, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial_5.serial_number)
+    add_serial_to_batch(db_session, batch, user, serial_18.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+    settings = {
+        **VALID_SETTINGS,
+        "sales_gst_ledger_mappings": (
+            "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5%\n"
+            "18 | Sales @ 18% | Output CGST @ 9% | Output SGST @ 9%"
+        ),
+    }
+
+    xml = build_voucher_xml(batch, settings)
+    root = ET.fromstring(xml)
+    allocation_names = [
+        entry.findtext("LEDGERNAME")
+        for entry in root.iter("ACCOUNTINGALLOCATIONS.LIST")
+    ]
+    ledger_amounts = {
+        entry.findtext("LEDGERNAME"): Decimal(entry.findtext("AMOUNT"))
+        for entry in root.iter("LEDGERENTRIES.LIST")
+    }
+
+    assert allocation_names == ["Sales @ 5%", "Sales @ 18%"]
+    assert ledger_amounts["Output CGST @ 2.5%"] == Decimal("2.50")
+    assert ledger_amounts["Output SGST @ 2.5%"] == Decimal("2.50")
+    assert ledger_amounts["Output CGST @ 9%"] == Decimal("18.00")
+    assert ledger_amounts["Output SGST @ 9%"] == Decimal("18.00")
+    assert VALID_SETTINGS["sales_ledger_name"] not in xml
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
 def test_purchase_voucher_xml_is_balanced(db_session):
     user = User(username="purch-bal", password_hash="x", role="purchase")
     product = Product(

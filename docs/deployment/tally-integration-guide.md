@@ -14,6 +14,10 @@ In Setu:
 1. Open `Settings`.
 2. Add or activate the correct company profile.
 3. Enter exact company, voucher type, ledger, GST ledger, round-off ledger, stock item, unit, and party names.
+   When products in the same company use different GST rates, open `Add product ledger`
+   and enter the GST rate, Sales ledger, CGST ledger, and SGST ledger. Use
+   `Add product ledger` again for every additional GST rate. Products without a
+   matching rate use the default Sales, CGST, and SGST ledgers.
 4. Leave `Enable Tally sync` off during setup.
 5. Open `Tally Check`.
 6. Confirm each required master only after comparing exact spelling in Tally.
@@ -55,6 +59,11 @@ Setu requires these fields before it can generate supported Tally XML:
 - default party
 
 Product masters must also have exact Tally stock item names and units.
+
+For sale vouchers, Setu selects the Sales, CGST, and SGST ledgers from each
+product's GST rate. A single voucher can therefore contain products at multiple
+GST rates while posting each amount to the correct ledger. Purchase vouchers
+continue to use the default Purchase, CGST, and SGST ledgers.
 
 ## Sync Statuses
 

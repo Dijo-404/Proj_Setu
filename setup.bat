@@ -23,6 +23,7 @@ $ProjectRoot = Split-Path -Parent $env:SETU_SETUP_BAT
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 $StartScript = Join-Path $ProjectRoot "start_setu.bat"
+$StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setu.ps1"
 $EnvPath = Join-Path $ProjectRoot ".env"
 $DataDir = Join-Path $ProjectRoot "data"
 $LogsDir = Join-Path $ProjectRoot "logs"
@@ -577,6 +578,22 @@ function Offer-CaddySetup {
 }
 
 function Offer-ServiceInstall {
+    $existingService = Get-Service -Name "SetuQrTallyBridge" -ErrorAction SilentlyContinue
+    if ($existingService) {
+        Write-Host "Existing Setu Windows service found. Updating and restarting it."
+        if (-not (Test-AdminShell)) {
+            throw "Updating the existing Windows service needs Administrator access. Right-click setup.bat and choose 'Run as administrator'."
+        }
+
+        $nssmPath = Ensure-Nssm
+        $serviceScript = Join-Path $ProjectRoot "deployment\windows\install_service.ps1"
+        & powershell -NoProfile -ExecutionPolicy Bypass -File $serviceScript -ProjectDir $ProjectRoot -NssmPath $nssmPath -Port $Port
+        if ($LASTEXITCODE -ne 0) {
+            throw "Windows service update failed."
+        }
+        return $true
+    }
+
     $installService = Read-YesNo "Install Setu as an auto-starting Windows service now?" $false
     if (-not $installService) {
         return $false
@@ -614,6 +631,12 @@ Write-Host "This setup will prepare Python, install packages, create .env, confi
 
 Set-Location $ProjectRoot
 New-Item -ItemType Directory -Force -Path $DataDir, $LogsDir | Out-Null
+
+Write-Section "Stop Existing Server"
+if (-not (Test-Path $StopScript)) {
+    throw "The server management helper is missing: '$StopScript'."
+}
+& $StopScript -ProjectDir $ProjectRoot
 
 Write-Section "Python"
 $python = Ensure-Python

@@ -796,6 +796,21 @@ tfoot th, tfoot td {
   margin-bottom: 26px;
 }
 
+.dashboard-metric-grid {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.dashboard-metric-grid .metric {
+  min-height: 96px;
+  padding: 14px 10px;
+}
+
+.dashboard-metric-grid .metric strong {
+  padding-top: 8px;
+  font-size: 28px;
+}
+
 .readiness-grid .metric strong {
   font-size: 22px;
   overflow-wrap: anywhere;
@@ -1175,6 +1190,10 @@ dialog.modal[open] { animation: modal-in var(--dur) var(--ease); }
 .col-actions { width: 1%; white-space: nowrap; }
 
 details.add-company > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
   cursor: pointer;
   font-size: 15px;
   font-weight: 600;
@@ -1186,6 +1205,71 @@ details.add-company > summary::-webkit-details-marker { display: none; }
 details.add-company > summary::before { content: "+ "; font-weight: 700; }
 details.add-company[open] > summary::before { content: "− "; }
 details.add-company[open] > summary { margin-bottom: 16px; }
+details.add-company:not([open]) { padding-block: 8px; }
+
+.ledger-mapping-editor {
+  padding: 14px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.ledger-mapping-editor > summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  cursor: pointer;
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 600;
+  list-style: none;
+}
+
+.ledger-mapping-editor > summary::-webkit-details-marker { display: none; }
+.ledger-mapping-editor > summary::before { content: "+ "; font-weight: 700; }
+.ledger-mapping-editor[open] > summary::before { content: "− "; }
+.ledger-mapping-editor[open] > summary { margin-bottom: 12px; }
+.ledger-mapping-editor:not([open]) { padding-block: 6px; }
+
+.ledger-mapping-help { margin: 0 0 12px; }
+
+.ledger-mapping-list {
+  display: grid;
+  gap: 12px;
+}
+
+.ledger-mapping-row {
+  padding: 13px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: var(--canvas);
+}
+
+.ledger-mapping-row__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.ledger-mapping-grid {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1.55fr);
+  gap: 10px 12px;
+}
+
+.ledger-mapping-empty {
+  padding: 13px;
+  border: 1px dashed var(--hairline);
+  border-radius: var(--r-md);
+  color: var(--ink-48);
+  font-size: 13px;
+  text-align: center;
+}
+
+.ledger-mapping-editor > .button { margin-top: 12px; }
 
 .save-row { display: flex; align-items: center; gap: 12px; }
 .save-row .button { flex: 1; }
@@ -1219,7 +1303,7 @@ details.add-company[open] > summary { margin-bottom: 16px; }
 }
 
 .product-table {
-  min-width: 900px;
+  min-width: 980px;
 }
 
 .product-table th,
@@ -1275,6 +1359,10 @@ dialog.product-modal {
   width: min(940px, calc(100vw - 32px));
 }
 
+dialog.product-report-modal {
+  width: min(1080px, calc(100vw - 32px));
+}
+
 .product-modal-body {
   display: grid;
   gap: 24px;
@@ -1311,6 +1399,24 @@ dialog.product-modal {
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.product-report-summary {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.product-report-summary small {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink-48);
+}
+
+.product-report-sales {
+  max-height: min(430px, 48vh);
+}
+
+.product-report-sales table {
+  min-width: 760px;
 }
 
 .product-modal-section {
@@ -1363,6 +1469,106 @@ dialog.product-modal {
   flex: none;
 }
 
+.company-list-panel {
+  width: 100%;
+  max-width: none;
+  margin-inline: 0;
+  overflow: hidden;
+}
+
+.company-list-title {
+  margin-top: 0;
+}
+
+.company-name-list {
+  display: grid;
+  gap: 10px;
+}
+
+.company-name-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  min-height: 54px;
+  padding: 11px 16px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: var(--canvas);
+  color: var(--primary);
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: var(--e1);
+}
+
+.company-name-card:hover {
+  border-color: rgba(0, 102, 204, 0.34);
+  background: rgba(0, 102, 204, 0.035);
+  box-shadow: var(--e2);
+}
+
+.company-name-card:focus-visible {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 2px;
+}
+
+.company-empty {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.company-empty p {
+  margin: 0;
+}
+
+dialog.company-config-modal {
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.company-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.company-modal-form .ledger-mapping-editor {
+  grid-column: 1 / -1;
+}
+
+.company-check-head {
+  align-items: center;
+}
+
+.company-check-head form {
+  flex: none;
+}
+
+.company-readiness-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 16px;
+}
+
+.company-readiness-grid .metric {
+  min-height: 86px;
+  padding: 12px;
+}
+
+.company-readiness-grid .metric strong {
+  padding-top: 7px;
+  font-size: 24px;
+}
+
+.company-master-scroll {
+  max-height: 430px;
+}
+
+.company-master-scroll table {
+  min-width: 820px;
+}
+
 @media (max-width: 980px) {
   .product-summary-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1370,6 +1576,14 @@ dialog.product-modal {
 
   .product-modal-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .company-readiness-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
@@ -1384,6 +1598,16 @@ dialog.product-modal {
     grid-template-columns: 1fr;
   }
 
+  .company-summary-grid,
+  .company-readiness-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .company-check-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .product-modal-actions,
   .product-danger-zone {
     align-items: stretch;
@@ -1391,7 +1615,8 @@ dialog.product-modal {
   }
 
   .product-modal-actions .button,
-  .product-danger-zone .button {
+  .product-danger-zone .button,
+  .company-check-head .button {
     width: 100%;
   }
 }
@@ -1723,6 +1948,7 @@ small {
 
 @media (max-width: 980px) {
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .dashboard-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .expiry-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid { grid-template-columns: 1fr; }
   .split, .batch-layout { grid-template-columns: 1fr; }
@@ -1766,7 +1992,8 @@ small {
   .grid-form.compact,
   .filters,
   .label-controls .grid-form.compact,
-  .two-col {
+  .two-col,
+  .ledger-mapping-grid {
     grid-template-columns: 1fr;
   }
 

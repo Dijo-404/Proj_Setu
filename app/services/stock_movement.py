@@ -4,7 +4,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
-from math import floor
+from math import ceil, floor
 from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
@@ -12,10 +12,10 @@ from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import InventoryTransaction, Product, Serial, SerialStatus, TransactionType, WarehouseLevel
+from app.models import AuditFinding, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, WarehouseLevel
 from app.services.exports import safe_row
 from app.services.settings import get_setting
 
@@ -394,6 +394,214 @@ def stock_movement_rows(
         "understocked": sum(row["inventory_signal"] == "Understocked" for row in rows),
     }
     return rows, summary
+
+
+def product_inventory_metrics(
+    db: Session,
+    products: list[Product],
+    config: MovementConfig | None = None,
+    as_of: date | None = None,
+) -> tuple[dict[int, dict[str, object]], int]:
+    """Summarize sales, physically available stock, and restock timing per product."""
+    as_of = as_of or datetime.now(timezone.utc).date()
+    config = config or movement_config(db)
+    movement_rows, summary = stock_movement_rows(db, config=config, as_of=as_of)
+    analysis_days = int(summary["analysis_days"])
+    metrics: dict[int, dict[str, object]] = {
+        product.id: {
+            "units_sold": 0,
+            "system_stock": 0,
+            "available_stock": 0,
+            "missing_stock": 0,
+            "restock_label": "Not forecast",
+            "restock_detail": f"No sales in {analysis_days} days",
+            "restock_css": "generated",
+        }
+        for product in products
+    }
+
+    for row in movement_rows:
+        product_id = int(row["product_id"])
+        if product_id not in metrics:
+            continue
+        metrics[product_id]["units_sold"] = int(metrics[product_id]["units_sold"]) + int(row["units_sold"])
+        metrics[product_id]["system_stock"] = int(metrics[product_id]["system_stock"]) + int(row["current_stock"])
+
+    latest_findings = db.scalars(
+        select(AuditFinding)
+        .where(AuditFinding.serial_id.is_not(None))
+        .order_by(AuditFinding.serial_id, desc(AuditFinding.created_at), desc(AuditFinding.id))
+        .options(selectinload(AuditFinding.serial))
+    ).all()
+    seen_serial_ids: set[int] = set()
+    for finding in latest_findings:
+        if finding.serial_id in seen_serial_ids:
+            continue
+        seen_serial_ids.add(finding.serial_id)
+        serial = finding.serial
+        if (
+            finding.finding_type == "MISSING"
+            and serial
+            and serial.active
+            and serial.status in STOCK_STATUSES
+            and serial.product_id in metrics
+        ):
+            metrics[serial.product_id]["missing_stock"] = int(metrics[serial.product_id]["missing_stock"]) + 1
+
+    for metric in metrics.values():
+        units_sold = int(metric["units_sold"])
+        system_stock = int(metric["system_stock"])
+        missing_stock = int(metric["missing_stock"])
+        available_stock = max(system_stock - missing_stock, 0)
+        metric["available_stock"] = available_stock
+        if not units_sold:
+            continue
+        if not available_stock:
+            metric.update(
+                {
+                    "restock_label": "Restock now",
+                    "restock_detail": "No available stock",
+                    "restock_css": "failed",
+                }
+            )
+            continue
+        daily_sales = units_sold / analysis_days
+        days_remaining = max(1, ceil(available_stock / daily_sales))
+        metric.update(
+            {
+                "restock_label": f"In {days_remaining} days",
+                "restock_detail": f"By {(as_of + timedelta(days=days_remaining)).strftime('%d %b %Y')}",
+                "restock_css": "pending_sync" if days_remaining <= 30 else "active",
+            }
+        )
+    return metrics, analysis_days
+
+
+def product_sales_transactions(
+    db: Session,
+    product_ids: set[int],
+    analysis_days: int,
+    as_of: date | None = None,
+) -> list[InventoryTransaction]:
+    if not product_ids:
+        return []
+    as_of = as_of or datetime.now(timezone.utc).date()
+    start = as_of - timedelta(days=analysis_days - 1)
+    start_at = datetime.combine(start, time.min, tzinfo=timezone.utc)
+    end_at = datetime.combine(as_of + timedelta(days=1), time.min, tzinfo=timezone.utc)
+    return db.scalars(
+        select(InventoryTransaction)
+        .where(
+            InventoryTransaction.product_id.in_(product_ids),
+            InventoryTransaction.transaction_type == TransactionType.SALE.value,
+            InventoryTransaction.status_to == SerialStatus.SOLD.value,
+            InventoryTransaction.created_at >= start_at,
+            InventoryTransaction.created_at < end_at,
+        )
+        .order_by(desc(InventoryTransaction.created_at))
+        .options(
+            selectinload(InventoryTransaction.user),
+            selectinload(InventoryTransaction.batch),
+        )
+    ).all()
+
+
+def product_sales_report_pdf(
+    product: Product,
+    metric: dict[str, object],
+    sales: list[InventoryTransaction],
+    analysis_days: int,
+    as_of: date | None = None,
+) -> bytes:
+    as_of = as_of or datetime.now(timezone.utc).date()
+    stream = BytesIO()
+    doc = SimpleDocTemplate(
+        stream,
+        pagesize=A4,
+        leftMargin=14 * mm,
+        rightMargin=14 * mm,
+        topMargin=14 * mm,
+        bottomMargin=14 * mm,
+    )
+    styles = getSampleStyleSheet()
+    story = [
+        Paragraph(escape(f"Product Sales Report: {product.product_code} - {product.product_name}"), styles["Title"]),
+        Paragraph(
+            escape(
+                f"Period: {as_of - timedelta(days=analysis_days - 1)} to {as_of} "
+                f"({analysis_days} days)"
+            ),
+            styles["BodyText"],
+        ),
+        Spacer(1, 5 * mm),
+    ]
+    summary = Table(
+        [
+            ["Sales", "Available stock", "Missing stock", "Restock"],
+            [
+                metric["units_sold"],
+                metric["available_stock"],
+                metric["missing_stock"],
+                f"{metric['restock_label']} - {metric['restock_detail']}",
+            ],
+        ],
+        colWidths=[32 * mm, 38 * mm, 34 * mm, 76 * mm],
+    )
+    summary.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#e8f2ff")),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.4, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 9),
+                ("LEFTPADDING", (0, 0), (-1, -1), 5),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 5),
+                ("TOPPADDING", (0, 0), (-1, -1), 5),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+            ]
+        )
+    )
+    story.extend([summary, Spacer(1, 7 * mm), Paragraph("Individual sales", styles["Heading2"])])
+    sale_rows: list[list[object]] = [["Date", "Serial", "Sold by", "Batch / reference", "Tally reference"]]
+    for sale in sales:
+        reference = sale.reference_number or (sale.batch.batch_number if sale.batch else "")
+        sale_rows.append(
+            [
+                sale.created_at.strftime("%d %b %Y %H:%M"),
+                sale.serial_number or "",
+                sale.user.username,
+                reference,
+                sale.tally_reference or "",
+            ]
+        )
+    if not sales:
+        sale_rows.append(["No sales during this period", "", "", "", ""])
+    sales_table = Table(
+        sale_rows,
+        repeatRows=1,
+        colWidths=[32 * mm, 42 * mm, 28 * mm, 40 * mm, 38 * mm],
+    )
+    sales_table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#202124")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                ("GRID", (0, 0), (-1, -1), 0.35, colors.lightgrey),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("FONTSIZE", (0, 0), (-1, -1), 8),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f7f7f7")]),
+                ("LEFTPADDING", (0, 0), (-1, -1), 4),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(sales_table)
+    doc.build(story)
+    return stream.getvalue()
 
 
 MOVEMENT_EXPORT_HEADERS = [

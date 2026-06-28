@@ -43,6 +43,17 @@ start_setu.bat
 
 Use `start_setu.bat --port 8001` if port `8000` is already in use.
 
+To pull the latest version from GitHub, update dependencies, and restart the
+server, run:
+
+```text
+update.bat
+```
+
+Run the updater as Administrator when Setu is installed as a Windows service.
+The updater only accepts a fast-forward Git update, so it will not overwrite
+local code changes.
+
 Pass `-SkipCaddy` to `setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install
 `deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType
+from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType
 from app.services.charts import bar_chart, donut_chart
 from app.services.expiry import expiry_summary
 from app.services.exports import safe_row, scans_xlsx, transactions_xlsx
@@ -19,6 +19,7 @@ from app.services.log_fields import barcode_sold_by, invoice_created_by, product
 from app.templates import templates
 
 router = APIRouter(prefix="/reports")
+MISSING_STOCK_ACTION = "MISSING"
 
 
 def parse_filter_date(value: str, field_name: str) -> datetime | None:
@@ -97,6 +98,37 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
     return query
 
 
+def missing_stock_query(q: str = "", start: str = "", end: str = ""):
+    conditions = [AuditFinding.finding_type == MISSING_STOCK_ACTION]
+    if q:
+        like = f"%{q.strip()}%"
+        conditions.append(
+            or_(
+                AuditFinding.serial_number.ilike(like),
+                AuditFinding.product_code.ilike(like),
+                AuditFinding.product_name.ilike(like),
+                Batch.batch_number.ilike(like),
+            )
+        )
+    start_dt = parse_filter_date(start, "start")
+    if start_dt:
+        conditions.append(AuditFinding.created_at >= start_dt)
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        conditions.append(AuditFinding.created_at < end_dt + timedelta(days=1))
+    return (
+        select(AuditFinding)
+        .join(Batch, AuditFinding.batch_id == Batch.id)
+        .where(and_(*conditions))
+        .order_by(desc(AuditFinding.created_at))
+        .limit(500)
+        .options(
+            selectinload(AuditFinding.batch).selectinload(Batch.user),
+            selectinload(AuditFinding.serial),
+        )
+    )
+
+
 @router.get("")
 def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
     user = require_permission(request, db, "reports_data")
@@ -104,9 +136,17 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
     end_dt = parse_filter_date(end, "end")
     if end_dt:
         end_dt = end_dt + timedelta(days=1)
-    scans = db.scalars(scan_query(action, start, end)).all()
-    transactions = db.scalars(transaction_query(action, q, start, end)).all()
+    missing_stock_selected = action == MISSING_STOCK_ACTION
+    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end)).all()
+    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, q, start, end)).all()
+    missing_stock = (
+        db.scalars(missing_stock_query(q, start, end)).all()
+        if not action or missing_stock_selected
+        else []
+    )
     transaction_counts = Counter(txn.transaction_type for txn in transactions)
+    if missing_stock:
+        transaction_counts[MISSING_STOCK_ACTION] = len(missing_stock)
     scan_status_counts = Counter(scan.status for scan in scans)
     pending = db.scalars(
         select(Batch)
@@ -122,6 +162,7 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "user": user,
             "scans": scans,
             "transactions": transactions,
+            "missing_stock": missing_stock,
             "pending": pending,
             "transaction_chart": bar_chart(transaction_counts.items()),
             "scan_status_chart": donut_chart(scan_status_counts.items()),
@@ -135,7 +176,7 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "q": q,
             "start": start,
             "end": end,
-            "transaction_types": [item.value for item in TransactionType],
+            "transaction_types": [item.value for item in TransactionType] + [MISSING_STOCK_ACTION],
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,

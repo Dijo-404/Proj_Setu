@@ -36,6 +36,7 @@
           <th>HSN</th>
           <th>GST</th>
           <th>Shelf verification</th>
+          <th>Report</th>
           <th class="col-actions">Actions</th>
         </tr>
       </thead>
@@ -67,13 +68,21 @@
             <button
               class="button small"
               type="button"
+              data-product-open="product-report-modal-{{ product.id }}"
+              aria-haspopup="dialog"
+            >Report</button>
+          </td>
+          <td>
+            <button
+              class="button small"
+              type="button"
               data-product-open="product-modal-{{ product.id }}"
               aria-haspopup="dialog"
             >{{ 'Open' if can_edit_products else 'View' }}</button>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="empty">No products found</td></tr>
+        <tr><td colspan="8" class="empty">No products found</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -116,6 +125,70 @@
 {% endif %}
 
 {% for product in products %}
+{% set metrics = inventory_metrics[product.id] %}
+<dialog id="product-report-modal-{{ product.id }}" class="modal product-modal product-report-modal">
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">{{ product.product_code }}</p>
+      <h2>Product report</h2>
+      <p>{{ product.product_name }} · Last {{ analysis_days }} days</p>
+    </div>
+    <button class="button ghost modal__close" type="button" data-product-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body product-modal-body">
+    <div class="product-summary-grid product-report-summary">
+      <div>
+        <span>Sales</span>
+        <strong>{{ metrics.units_sold }}</strong>
+        <small>Last {{ analysis_days }} days</small>
+      </div>
+      <div>
+        <span>Available stock</span>
+        <strong>{{ metrics.available_stock }}</strong>
+        <small>Missing stock excluded</small>
+      </div>
+      <div>
+        <span>Missing stock</span>
+        <strong>{{ metrics.missing_stock }}</strong>
+        <small>Latest audit status</small>
+      </div>
+      <div>
+        <span>Restock</span>
+        <strong>{{ metrics.restock_label }}</strong>
+        <small>{{ metrics.restock_detail }}</small>
+      </div>
+    </div>
+
+    <section class="product-modal-section">
+      <div class="product-modal-section__head">
+        <div>
+          <h3>Individual sales</h3>
+          <p>Every sale recorded for this product during the analysis period.</p>
+        </div>
+        <a class="button primary" href="/products/{{ product.id }}/sales-report.pdf">Download PDF</a>
+      </div>
+      <div class="table-scroll product-report-sales">
+        <table>
+          <thead><tr><th>Date</th><th>Serial</th><th>Sold by</th><th>Batch / reference</th><th>Tally</th></tr></thead>
+          <tbody>
+            {% for sale in sales_by_product[product.id] %}
+            <tr>
+              <td>{{ sale.created_at.strftime('%d %b %Y %H:%M') }}</td>
+              <td>{{ sale.serial_number or '-' }}</td>
+              <td>{{ sale.user.username }}</td>
+              <td>{{ sale.reference_number or (sale.batch.batch_number if sale.batch else '-') }}</td>
+              <td>{{ sale.tally_reference or '-' }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="5" class="empty">No sales during this period</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+</dialog>
+
 <dialog id="product-modal-{{ product.id }}" class="modal product-modal">
   <div class="modal__head">
     <div>

@@ -109,6 +109,43 @@
   </div>
 </section>
 
+{% if not action or action == 'MISSING' %}
+<section class="panel">
+  <div class="section-title">
+    <h2>Missing stock</h2>
+    <span>Items not found during audit · current filters</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Time</th><th>Audited by</th><th>Serial</th><th>Product</th><th>Audit batch</th><th>Expected status</th></tr></thead>
+      <tbody>
+        {% for finding in missing_stock %}
+        <tr>
+          <td>{{ finding.created_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ finding.batch.user.username }}</td>
+          <td>{% if finding.serial %}<a href="/serials/{{ finding.serial.id }}">{{ finding.serial_number }}</a>{% else %}{{ finding.serial_number }}{% endif %}</td>
+          <td>
+            <strong>{{ finding.product_code or '-' }}</strong>
+            <small>{{ finding.product_name or '-' }}</small>
+          </td>
+          <td>
+            {% if role_can_view_batch(user, finding.batch.batch_type) %}
+            <a href="/batches/{{ finding.batch.id }}">{{ finding.batch.batch_number }}</a>
+            {% else %}
+            {{ finding.batch.batch_number }}
+            {% endif %}
+          </td>
+          <td>{{ finding.expected_status or '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="empty">No missing stock found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
 {% if losses %}
 <section class="panel">
   <div class="section-title">

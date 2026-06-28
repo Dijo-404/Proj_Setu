@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Product, TallyMasterConfirmation, User, utc_now
-from app.services.settings import get_all_settings
+from app.services.settings import get_all_settings, parse_sales_gst_ledger_mappings
 
 
 @dataclass(frozen=True)
@@ -65,6 +65,12 @@ def collect_master_requirements(db: Session) -> list[MasterRequirement]:
     _add(requirements, "Ledger", settings["sgst_ledger_name"], "Settings", "GST posting ledger")
     _add(requirements, "Ledger", settings["round_off_ledger_name"], "Settings", "Round off posting ledger")
     _add(requirements, "Ledger", settings["default_party_name"], "Settings", "Fallback party ledger")
+    mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
+    for gst_rate, ledgers in mappings.items():
+        source = f"Sales GST {gst_rate}% mapping"
+        _add(requirements, "Ledger", ledgers["sales"], source, "Sales posting ledger")
+        _add(requirements, "Ledger", ledgers["cgst"], source, "CGST posting ledger")
+        _add(requirements, "Ledger", ledgers["sgst"], source, "SGST posting ledger")
 
     products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
     for product in products:

@@ -14,6 +14,7 @@ from app.services.settings import (
     get_active_company,
     get_all_settings,
     list_companies,
+    parse_sales_gst_ledger_mappings,
     save_active_company_config,
     update_settings,
 )
@@ -34,6 +35,10 @@ def validate_settings(requested: dict[str, str]) -> str | None:
     interval = requested["retry_interval_seconds"]
     if not interval.isdigit() or not (30 <= int(interval) <= 86400):
         return "Retry interval must be a whole number of seconds between 30 and 86400."
+    try:
+        parse_sales_gst_ledger_mappings(requested.get("sales_gst_ledger_mappings"))
+    except ValueError as exc:
+        return str(exc)
     return None
 
 
@@ -97,6 +102,7 @@ def save_settings(
     purchase_ledger_name: str = Form(...),
     cgst_ledger_name: str = Form(...),
     sgst_ledger_name: str = Form(...),
+    sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
     default_party_name: str = Form(...),
     retry_interval_seconds: str = Form(...),
@@ -115,6 +121,7 @@ def save_settings(
         "purchase_ledger_name": purchase_ledger_name.strip(),
         "cgst_ledger_name": cgst_ledger_name.strip(),
         "sgst_ledger_name": sgst_ledger_name.strip(),
+        "sales_gst_ledger_mappings": sales_gst_ledger_mappings.strip(),
         "round_off_ledger_name": round_off_ledger_name.strip(),
         "default_party_name": default_party_name.strip(),
         "retry_interval_seconds": retry_interval_seconds.strip(),
@@ -159,6 +166,7 @@ def autosave_settings(
     purchase_ledger_name: str = Form(...),
     cgst_ledger_name: str = Form(...),
     sgst_ledger_name: str = Form(...),
+    sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
     default_party_name: str = Form(...),
     retry_interval_seconds: str = Form(...),
@@ -175,6 +183,7 @@ def autosave_settings(
         "purchase_ledger_name": purchase_ledger_name.strip(),
         "cgst_ledger_name": cgst_ledger_name.strip(),
         "sgst_ledger_name": sgst_ledger_name.strip(),
+        "sales_gst_ledger_mappings": sales_gst_ledger_mappings.strip(),
         "round_off_ledger_name": round_off_ledger_name.strip(),
         "default_party_name": default_party_name.strip(),
         "retry_interval_seconds": retry_interval_seconds.strip(),
@@ -200,6 +209,7 @@ def create_company(
     purchase_ledger_name: str = Form(...),
     cgst_ledger_name: str = Form(...),
     sgst_ledger_name: str = Form(...),
+    sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
     default_party_name: str = Form(...),
     db: Session = Depends(get_db),
@@ -215,6 +225,7 @@ def create_company(
         "purchase_ledger_name": purchase_ledger_name,
         "cgst_ledger_name": cgst_ledger_name,
         "sgst_ledger_name": sgst_ledger_name,
+        "sales_gst_ledger_mappings": sales_gst_ledger_mappings,
         "round_off_ledger_name": round_off_ledger_name,
         "default_party_name": default_party_name,
     }
