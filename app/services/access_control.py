@@ -70,6 +70,7 @@ class AccessSection:
 ROLE_COLUMNS = [
     RoleColumn(Role.SUPER_ADMIN.value, "Super admin"),
     RoleColumn(Role.ADMIN.value, "Admin"),
+    RoleColumn(Role.DIRECTORS.value, "Directors"),
     RoleColumn(Role.WAREHOUSE_MANAGER.value, "Warehouse manager"),
     RoleColumn(Role.PURCHASE.value, "Purchase"),
     RoleColumn(Role.SALES.value, "Sales"),
@@ -104,8 +105,12 @@ def _defaults(options: list[AccessOption], allowed_value: str, allowed_roles: li
     return values
 
 
-def _all(options: list[AccessOption], value: str) -> dict[str, str]:
-    return {role.key: value for role in ROLE_COLUMNS}
+def _all_operational(options: list[AccessOption], value: str) -> dict[str, str]:
+    return _defaults(
+        options,
+        value,
+        _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER, Role.PURCHASE, Role.SALES, Role.AUDITOR),
+    )
 
 
 def _admin(options: list[AccessOption], value: str) -> dict[str, str]:
@@ -118,8 +123,8 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
             title="Pages shown in navigation",
             context_heading="Where",
             rows=[
-                AccessRowDefinition("page_dashboard", "Dashboard", "Top navigation", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_batches", "Batches", "Top navigation menu", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_dashboard", "Dashboard", "Top navigation", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_batches", "Batches", "Top navigation menu", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition(
                     "page_warehouse",
                     "Warehouse",
@@ -131,8 +136,14 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     ),
                     PAGE_OPTIONS,
                 ),
-                AccessRowDefinition("page_serials", "Serials", "Top navigation", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_reports", "Reports", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_serials", "Serials", "Top navigation", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_reports",
+                    "Reports",
+                    "Top navigation",
+                    _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.DIRECTORS)),
+                    PAGE_OPTIONS,
+                ),
                 AccessRowDefinition(
                     "page_stock_movement",
                     "Stock movement",
@@ -233,11 +244,11 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
             title="Data access and modification",
             context_heading="Data area",
             rows=[
-                AccessRowDefinition("dashboard_data", "Dashboard data", "Counts, charts, recent scans and batches", _all(DATA_OPTIONS, "view"), DATA_OPTIONS),
-                AccessRowDefinition("product_master", "Product master", "View product list/search", _all(DATA_OPTIONS, "view"), DATA_OPTIONS, "Only users with Product action access can create products or generate serials."),
-                AccessRowDefinition("serial_data", "Serial data", "View serial list, details, scan history", _all(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition("dashboard_data", "Dashboard data", "Counts, charts, recent scans and batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition("product_master", "Product master", "View product list/search", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Only users with Product action access can create products or generate serials."),
+                AccessRowDefinition("serial_data", "Serial data", "View serial list, details, scan history", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
                 AccessRowDefinition("label_files", "Label files", "Download serial XLSX or admin label PDF", _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES, Role.AUDITOR)), DATA_OPTIONS),
-                AccessRowDefinition("batch_list", "Batch list", "View all recent batches", _all(DATA_OPTIONS, "view"), DATA_OPTIONS, "Batch detail pages still follow batch-type permissions."),
+                AccessRowDefinition("batch_list", "Batch list", "View all recent batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Batch detail pages still follow batch-type permissions."),
                 AccessRowDefinition("purchase_data", "Purchase data", "Purchase and purchase-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.PURCHASE)), DATA_OPTIONS),
                 AccessRowDefinition("sales_data", "Sales data", "Sale and sales-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.SALES)), DATA_OPTIONS),
                 AccessRowDefinition("audit_data", "Audit data", "Audit batches and findings", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.AUDITOR)), DATA_OPTIONS),
@@ -253,7 +264,13 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     ),
                     DATA_OPTIONS,
                 ),
-                AccessRowDefinition("reports_data", "Reports data", "Scan logs and inventory transactions", _admin(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition(
+                    "reports_data",
+                    "Reports data",
+                    "Scan logs, inventory transactions, and Directors reports",
+                    _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.DIRECTORS)),
+                    DATA_OPTIONS,
+                ),
                 AccessRowDefinition(
                     "stock_movement_data",
                     "Stock movement data",

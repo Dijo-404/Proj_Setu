@@ -12,6 +12,7 @@ from app.auth import require_permission
 from app.database import get_db
 from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType
 from app.services.charts import bar_chart, donut_chart
+from app.services.director_reports import director_audit_batch_report, director_report
 from app.services.expiry import expiry_summary
 from app.services.exports import safe_row, scans_xlsx, transactions_xlsx
 from app.services.losses import loss_summary
@@ -132,6 +133,17 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
 @router.get("")
 def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
     user = require_permission(request, db, "reports_data")
+    if user.role == Role.DIRECTORS.value:
+        return templates.TemplateResponse(
+            request,
+            "director_reports.html",
+            {
+                "request": request,
+                "user": user,
+                "report": director_report(db),
+            },
+        )
+
     start_dt = parse_filter_date(start, "start")
     end_dt = parse_filter_date(end, "end")
     if end_dt:
@@ -180,6 +192,23 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,
+        },
+    )
+
+
+@router.get("/audit-batches/{batch_id}")
+def director_audit_batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db)):
+    user = require_permission(request, db, "reports_data")
+    report = director_audit_batch_report(db, batch_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit batch not found")
+    return templates.TemplateResponse(
+        request,
+        "director_audit_batch.html",
+        {
+            "request": request,
+            "user": user,
+            "report": report,
         },
     )
 

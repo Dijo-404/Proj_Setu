@@ -1,14 +1,19 @@
+from datetime import datetime, timedelta, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
 from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.routers.reports import director_audit_batch_detail, reports as reports_route
 from app.security import create_session_token
 from app.services.access_control import save_role_access_config
+from app.services.expiry import today
 
 
 def test_reports_page_renders_scan_and_transaction_rows():
@@ -160,6 +165,155 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "MISS100-000001" in response.text
     assert "Missing masala" in response.text
     assert "AUD-001" in response.text
+
+
+def test_directors_role_gets_report_only_summary_and_audit_detail():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    audit_at = datetime(2026, 6, 28, 10, 30, tzinfo=timezone.utc)
+    old_at = datetime.now(timezone.utc) - timedelta(days=140)
+    with Session() as db:
+        auditor = User(id=1, username="auditor", password_hash="x", role="admin", active=True)
+        director = User(id=2, username="director", password_hash="x", role="directors", active=True)
+        missing_product = Product(
+            product_code="DIR-MISS",
+            product_name="Director missing product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Director missing product",
+        )
+        risk_product = Product(
+            product_code="DIR-RISK",
+            product_name="Director expiry risk product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=80,
+            tally_stock_item_name="Director expiry risk product",
+        )
+        dead_product = Product(
+            product_code="DIR-DEAD",
+            product_name="Director dead stock product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=60,
+            tally_stock_item_name="Director dead stock product",
+            created_at=old_at,
+        )
+        db.add_all([auditor, director, missing_product, risk_product, dead_product])
+        db.flush()
+        missing_serial = Serial(
+            serial_number="DIR-MISS-001",
+            product_id=missing_product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        extra_serial = Serial(
+            serial_number="DIR-MISS-EXTRA",
+            product_id=missing_product.id,
+            status=SerialStatus.SOLD.value,
+        )
+        risk_serial = Serial(
+            serial_number="DIR-RISK-001",
+            product_id=risk_product.id,
+            status=SerialStatus.IN_STOCK.value,
+            product_batch_number="RISK-B1",
+            expiry_date=today() + timedelta(days=20),
+        )
+        dead_serial = Serial(
+            serial_number="DIR-DEAD-001",
+            product_id=dead_product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        db.add_all([missing_serial, extra_serial, risk_serial, dead_serial])
+        db.flush()
+        batch = Batch(
+            batch_number="AUD-DIR-001",
+            batch_type=BatchType.AUDIT.value,
+            user_id=auditor.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=audit_at,
+        )
+        db.add(batch)
+        db.flush()
+        batch_id = batch.id
+        db.add_all(
+            [
+                AuditFinding(
+                    batch_id=batch.id,
+                    serial_id=missing_serial.id,
+                    serial_number=missing_serial.serial_number,
+                    product_code=missing_product.product_code,
+                    product_name=missing_product.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
+                AuditFinding(
+                    batch_id=batch.id,
+                    serial_id=extra_serial.id,
+                    serial_number=extra_serial.serial_number,
+                    product_code=missing_product.product_code,
+                    product_name=missing_product.product_name,
+                    finding_type="EXTRA",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    scanned_status=SerialStatus.SOLD.value,
+                ),
+            ]
+        )
+        db.commit()
+
+    def signed_request(path: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": path,
+                "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(2)}".encode())],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
+
+    with Session() as db:
+        report_response = reports_route(signed_request("/reports"), db=db)
+        detail_response = director_audit_batch_detail(
+            signed_request(f"/reports/audit-batches/{batch_id}"),
+            batch_id,
+            db=db,
+        )
+        report_text = report_response.body.decode()
+        detail_text = detail_response.body.decode()
+    engine.dispose()
+
+    assert report_response.status_code == 200
+    assert report_response.template.name == "director_reports.html"
+    assert "Directors Report" in report_text
+    assert "Reports only" in report_text
+    assert "AUD-DIR-001" in report_text
+    assert "Missing in last audit" in report_text
+    assert "Director expiry risk product" in report_text
+    assert "Director dead stock product" in report_text
+    assert "Transactions CSV" not in report_text
+    assert "<h2>Transactions</h2>" not in report_text
+    assert 'href="/reports"' in report_text
+    assert ">Dashboard</a>" not in report_text
+    assert ">Serials</a>" not in report_text
+
+    assert detail_response.status_code == 200
+    assert detail_response.template.name == "director_audit_batch.html"
+    assert "Product-wise missing and extra" in detail_text
+    assert "Director missing product" in detail_text
+    assert "DIR-MISS-001" in detail_text
+    assert "DIR-MISS-EXTRA" in detail_text
 
 
 def test_loss_report_shows_factor_values_for_admin_and_super_admin():

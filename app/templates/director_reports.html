@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% block title %}Directors Report - Setu{% endblock %}
+{% block content %}
+<section class="page-head director-head">
+  <div>
+    <p class="eyebrow">Reports only</p>
+    <h1>Directors Report</h1>
+  </div>
+</section>
+
+{% set latest_url = '/reports/audit-batches/' ~ report.latest_audit.id if report.latest_audit else '#audit-batches' %}
+
+<section class="metric-grid director-metric-grid">
+  <a class="metric director-metric-link" href="#audit-batches">
+    <span>Audit batches</span>
+    <strong>{{ report.audit_batch_count }}</strong>
+  </a>
+  <a class="metric director-metric-link danger" href="{{ latest_url }}">
+    <span>Missing in last audit</span>
+    <strong>{{ report.latest_missing }}</strong>
+  </a>
+  <a class="metric director-metric-link warn" href="{{ latest_url }}">
+    <span>Extra in last audit</span>
+    <strong>{{ report.latest_extra }}</strong>
+  </a>
+  <a class="metric director-metric-link danger" href="#expiry-risk">
+    <span>Expiry risk</span>
+    <strong>{{ report.expiry.widgets.high_risk }}</strong>
+  </a>
+  <a class="metric director-metric-link danger" href="#dead-stock">
+    <span>Dead stock</span>
+    <strong>{{ report.dead_stock_rows|length }}</strong>
+  </a>
+  <div class="metric director-date-metric">
+    <span>Last audit date and time</span>
+    {% if report.latest_audit %}
+    <strong>{{ report.latest_audit.audit_at.strftime('%d %b %Y, %I:%M %p') }}</strong>
+    {% else %}
+    <strong>No audit</strong>
+    {% endif %}
+  </div>
+  <a class="metric director-metric-link" href="#products">
+    <span>Products</span>
+    <strong>{{ report.products.total_products }}</strong>
+  </a>
+  <a class="metric director-metric-link" href="#products">
+    <span>Stock items</span>
+    <strong>{{ report.products.total_stock }}</strong>
+  </a>
+</section>
+
+<section class="panel director-panel" id="audit-batches">
+  <div class="section-title">
+    <h2>Audit batches</h2>
+    <span>Latest audits first</span>
+  </div>
+  <div class="table-scroll director-table-scroll">
+    <table class="director-table">
+      <thead>
+        <tr>
+          <th>Open</th>
+          <th>Audit batch</th>
+          <th>Date and time</th>
+          <th>Audited by</th>
+          <th>Products</th>
+          <th>Missing</th>
+          <th>Extra</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in report.audit_batches %}
+        <tr>
+          <td><a class="button primary director-open" href="/reports/audit-batches/{{ row.id }}">Open</a></td>
+          <td><strong>{{ row.batch_number }}</strong></td>
+          <td>{{ row.audit_at.strftime('%d %b %Y, %I:%M %p') }}</td>
+          <td>{{ row.audited_by }}</td>
+          <td>{{ row.products }}</td>
+          <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
+          <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No audit batches found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="split director-split">
+  <div class="panel director-panel" id="expiry-risk">
+    <div class="section-title">
+      <h2>Expiry risk</h2>
+      <span>High risk first</span>
+    </div>
+    <div class="table-scroll director-table-scroll">
+      <table class="director-table">
+        <thead><tr><th>Product</th><th>Batch</th><th>Stock</th><th>Unsold</th><th>Risk</th></tr></thead>
+        <tbody>
+          {% for row in report.expiry.risk_rows[:12] %}
+          <tr>
+            <td><strong>{{ row.product_name }}</strong><small>{{ row.product_code }} · {{ row.warehouse }}</small></td>
+            <td>{{ row.batch }}</td>
+            <td>{{ row.stock }}</td>
+            <td>{{ row.unsold_stock }}</td>
+            <td><span class="status {{ row.risk_class }}">{{ row.risk }}</span></td>
+          </tr>
+          {% else %}
+          <tr><td colspan="5" class="empty">No expiry risk found</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="panel director-panel" id="dead-stock">
+    <div class="section-title">
+      <h2>Dead stock</h2>
+      <span>No sale for 90 days or more</span>
+    </div>
+    <div class="table-scroll director-table-scroll">
+      <table class="director-table">
+        <thead><tr><th>Product</th><th>Stock</th><th>Last sale</th><th>Value</th></tr></thead>
+        <tbody>
+          {% for row in report.dead_stock_rows[:12] %}
+          <tr>
+            <td><strong>{{ row.product_name }}</strong></td>
+            <td>{{ row.stock }}</td>
+            <td>{{ row.last_sale }}</td>
+            <td>Rs {{ '%.0f'|format(row.value) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4" class="empty">No dead stock found</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<section class="panel director-panel" id="products">
+  <div class="section-title">
+    <h2>Products</h2>
+    <span>{{ report.products.products_with_stock }} products currently in stock</span>
+  </div>
+  <div class="table-scroll director-table-scroll">
+    <table class="director-table">
+      <thead><tr><th>Product</th><th>Product code</th><th>Stock</th><th>Nearest expiry</th></tr></thead>
+      <tbody>
+        {% for row in report.product_rows %}
+        <tr>
+          <td><strong>{{ row.product_name }}</strong></td>
+          <td>{{ row.product_code }}</td>
+          <td>{{ row.stock }}</td>
+          <td>{{ row.nearest_expiry.strftime('%d %b %Y') if row.nearest_expiry else '-' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="empty">No products found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

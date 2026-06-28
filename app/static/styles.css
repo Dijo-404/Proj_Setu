@@ -222,8 +222,8 @@ tfoot th, tfoot td {
   vertical-align: top;
 }
 
-.access-table td:nth-child(n+3):nth-child(-n+8),
-.access-table th:nth-child(n+3):nth-child(-n+8) {
+.access-table td:nth-child(n+3):nth-child(-n+9),
+.access-table th:nth-child(n+3):nth-child(-n+9) {
   text-align: center;
   white-space: nowrap;
 }
@@ -937,6 +937,70 @@ tfoot th, tfoot td {
 .expiry-metric-grid .metric strong {
   font-size: 24px;
   letter-spacing: -0.4px;
+}
+
+.director-head {
+  align-items: flex-end;
+}
+
+.director-metric-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.director-detail-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.director-metric-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.director-metric-link:hover {
+  text-decoration: none;
+}
+
+.director-date-metric strong {
+  font-size: 21px;
+  letter-spacing: 0;
+  line-height: 1.18;
+}
+
+.director-panel {
+  overflow-x: hidden;
+}
+
+.director-panel .section-title {
+  margin-top: 0;
+}
+
+.director-table-scroll {
+  max-height: min(560px, calc(100vh - 240px));
+}
+
+.director-table {
+  min-width: 780px;
+}
+
+.director-table th,
+.director-table td {
+  padding: 16px 14px;
+  font-size: 16px;
+}
+
+.director-table th {
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.director-table small {
+  margin-top: 4px;
+  font-size: 13px;
+}
+
+.director-open {
+  min-width: 92px;
+  min-height: 46px;
 }
 
 .chart-grid {
@@ -1955,6 +2019,8 @@ small {
   .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .dashboard-metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .expiry-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .director-metric-grid,
+  .director-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .chart-grid { grid-template-columns: 1fr; }
   .split, .batch-layout { grid-template-columns: 1fr; }
   .grid-form, .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -1992,6 +2058,8 @@ small {
 
   .metric-grid,
   .expiry-metric-grid,
+  .director-metric-grid,
+  .director-detail-grid,
   .chart-grid,
   .grid-form,
   .grid-form.compact,
