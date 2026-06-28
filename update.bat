@@ -29,6 +29,12 @@ function Write-Section {
     Write-Host "== $Title ==" -ForegroundColor Cyan
 }
 
+function Test-AdminShell {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = New-Object Security.Principal.WindowsPrincipal($identity)
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
 Set-Location $ProjectRoot
 
 if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
@@ -54,19 +60,29 @@ if ($originUrl -notmatch "(?i)github\.com[:/]Dijo-404/Proj_Setu(?:\.git)?/?$") {
     throw "The Git remote named 'origin' points to '$originUrl', not https://github.com/Dijo-404/Proj_Setu.git."
 }
 
+$service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+$restartAsService = $null -ne $service
+if ($restartAsService -and -not (Test-AdminShell)) {
+    throw "Setu is installed as a Windows service. Right-click update.bat, choose 'Run as administrator', and try again."
+}
+
 Write-Section "Download Latest Version"
 Write-Host "Updating branch '$branch' from origin..."
-& git pull --ff-only origin $branch
+& git fetch --no-tags origin $branch
 if ($LASTEXITCODE -ne 0) {
-    throw "Git could not fast-forward the project. Your existing files were left intact; resolve the Git message above and run update.bat again."
+    throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run update.bat again."
+}
+
+# Use an explicit fast-forward merge instead of `git pull`. This keeps the
+# updater independent of machine-wide pull.rebase settings and never rebases.
+& git merge --ff-only FETCH_HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "Git could not fast-forward the project. No rebase was attempted and your existing files were left intact. Resolve the Git message above and run update.bat again."
 }
 
 if (-not (Test-Path $StopScript)) {
     throw "The server management helper is missing after the update: '$StopScript'."
 }
-
-$service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-$restartAsService = $null -ne $service
 
 Write-Section "Stop Existing Server"
 & $StopScript -ProjectDir $ProjectRoot -ServiceName $ServiceName

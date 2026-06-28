@@ -51,8 +51,8 @@ update.bat
 ```
 
 Run the updater as Administrator when Setu is installed as a Windows service.
-The updater only accepts a fast-forward Git update, so it will not overwrite
-local code changes.
+The updater fetches and applies only a fast-forward Git update. It never
+rebases and will not overwrite conflicting local code changes.
 
 Pass `-SkipCaddy` to `setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install

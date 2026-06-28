@@ -14,8 +14,16 @@ $stoppedAnything = $false
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service -and $service.Status -ne "Stopped") {
     Write-Host "Stopping the Setu Windows service..."
-    Stop-Service -Name $ServiceName -Force
-    $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+    try {
+        Stop-Service -Name $ServiceName -Force
+        $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+    }
+    catch [System.ServiceProcess.TimeoutException] {
+        throw "The Setu Windows service did not stop within 20 seconds. Check the service in Windows Services, then try again."
+    }
+    catch {
+        throw "Windows could not stop the Setu service. Run this script as Administrator. $($_.Exception.Message)"
+    }
     $stoppedAnything = $true
 }
 

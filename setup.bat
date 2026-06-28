@@ -633,10 +633,25 @@ Set-Location $ProjectRoot
 New-Item -ItemType Directory -Force -Path $DataDir, $LogsDir | Out-Null
 
 Write-Section "Stop Existing Server"
-if (-not (Test-Path $StopScript)) {
-    throw "The server management helper is missing: '$StopScript'."
+if (Test-Path $VenvPython) {
+    if (-not (Test-Path $StopScript)) {
+        throw "The server management helper is missing: '$StopScript'."
+    }
+
+    $existingSetuService = Get-Service -Name "SetuQrTallyBridge" -ErrorAction SilentlyContinue
+    if (
+        $existingSetuService -and
+        $existingSetuService.Status -ne "Stopped" -and
+        -not (Test-AdminShell)
+    ) {
+        throw "Setu is running as a Windows service. Right-click setup.bat, choose 'Run as administrator', and try again."
+    }
+
+    & $StopScript -ProjectDir $ProjectRoot
 }
-& $StopScript -ProjectDir $ProjectRoot
+else {
+    Write-Host "Fresh installation; there is no existing Setu server to stop."
+}
 
 Write-Section "Python"
 $python = Ensure-Python
