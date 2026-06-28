@@ -19,7 +19,6 @@ COMPANY_SETTING_KEYS = [
     "sgst_ledger_name",
     "sales_gst_ledger_mappings",
     "round_off_ledger_name",
-    "default_party_name",
 ]
 
 
@@ -36,7 +35,6 @@ DEFAULT_SETTINGS = {
     "sgst_ledger_name": "",
     "sales_gst_ledger_mappings": "",
     "round_off_ledger_name": "",
-    "default_party_name": "",
     "retry_interval_seconds": "180",
     "movement_analysis_days": "90",
     "movement_dead_below_pct": "10",
@@ -56,7 +54,6 @@ LEGACY_PLACEHOLDER_SETTINGS = {
     "sgst_ledger_name": "Input SGST@2.5%",
     "sales_gst_ledger_mappings": "",
     "round_off_ledger_name": "ROUND OFF",
-    "default_party_name": "Cash",
 }
 
 
@@ -77,14 +74,16 @@ def parse_sales_gst_ledger_mappings(raw: str | None) -> dict[str, dict[str, str]
         if not line or line.startswith("#"):
             continue
         parts = [part.strip() for part in line.split("|")]
-        if len(parts) != 4:
+        if len(parts) not in {4, 5}:
             raise ValueError(
                 f"Sales GST ledger mapping line {line_number} must contain: "
-                "GST rate | Sales ledger | CGST ledger | SGST ledger."
+                "GST rate | Sales ledger | CGST ledger | SGST ledger | IGST ledger."
             )
-        rate, sales_ledger, cgst_ledger, sgst_ledger = parts
+        rate, sales_ledger, cgst_ledger, sgst_ledger = parts[:4]
+        igst_ledger = parts[4] if len(parts) == 5 else ""
         key = gst_rate_key(rate)
-        if not all((sales_ledger, cgst_ledger, sgst_ledger)):
+        required_ledgers = (sales_ledger, cgst_ledger, sgst_ledger)
+        if not all(required_ledgers) or (len(parts) == 5 and not igst_ledger):
             raise ValueError(f"Sales GST ledger mapping line {line_number} has an empty ledger name.")
         if key in mappings:
             raise ValueError(f"GST rate {key}% is listed more than once.")
@@ -92,6 +91,7 @@ def parse_sales_gst_ledger_mappings(raw: str | None) -> dict[str, dict[str, str]
             "sales": sales_ledger,
             "cgst": cgst_ledger,
             "sgst": sgst_ledger,
+            "igst": igst_ledger,
         }
     return mappings
 

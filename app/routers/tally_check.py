@@ -99,7 +99,6 @@ def save_company(
     sgst_ledger_name: str = Form(...),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
-    default_party_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "settings_edit")
@@ -116,7 +115,6 @@ def save_company(
         "sgst_ledger_name": sgst_ledger_name,
         "sales_gst_ledger_mappings": sales_gst_ledger_mappings,
         "round_off_ledger_name": round_off_ledger_name,
-        "default_party_name": default_party_name,
     }
     try:
         company = update_company(db, company_id, name, config, commit=False)

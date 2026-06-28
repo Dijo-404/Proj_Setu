@@ -96,7 +96,6 @@ def test_crash_after_tally_success_reuses_frozen_payload_and_remote_id(db_sessio
         "cgst_ledger_name": "CGST",
         "sgst_ledger_name": "SGST",
         "round_off_ledger_name": "Round Off",
-        "default_party_name": "Cash",
     }
     db_session.add_all(Setting(key=key, value=value) for key, value in settings.items())
     db_session.commit()

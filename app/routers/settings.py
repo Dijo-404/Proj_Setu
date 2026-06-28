@@ -136,7 +136,6 @@ def save_settings(
     sgst_ledger_name: str = Form(...),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
-    default_party_name: str = Form(...),
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -155,7 +154,6 @@ def save_settings(
         "sgst_ledger_name": sgst_ledger_name.strip(),
         "sales_gst_ledger_mappings": sales_gst_ledger_mappings.strip(),
         "round_off_ledger_name": round_off_ledger_name.strip(),
-        "default_party_name": default_party_name.strip(),
         "retry_interval_seconds": retry_interval_seconds.strip(),
     }
 
@@ -219,7 +217,6 @@ def autosave_settings(
     sgst_ledger_name: str = Form(...),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
-    default_party_name: str = Form(...),
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
@@ -237,7 +234,6 @@ def autosave_settings(
         "sgst_ledger_name": sgst_ledger_name.strip(),
         "sales_gst_ledger_mappings": sales_gst_ledger_mappings.strip(),
         "round_off_ledger_name": round_off_ledger_name.strip(),
-        "default_party_name": default_party_name.strip(),
         "retry_interval_seconds": retry_interval_seconds.strip(),
     }
     error = validate_settings(requested)
@@ -268,31 +264,24 @@ def create_company(
     company_name: str = Form(...),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
-    sales_voucher_type: str = Form(...),
-    purchase_voucher_type: str = Form(...),
-    sales_ledger_name: str = Form(...),
-    purchase_ledger_name: str = Form(...),
-    cgst_ledger_name: str = Form(...),
-    sgst_ledger_name: str = Form(...),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
-    default_party_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "settings_edit")
+    current_settings = get_all_settings(db)
     config = {
         "company_name": company_name,
         "tally_host": tally_host,
         "tally_port": tally_port,
-        "sales_voucher_type": sales_voucher_type,
-        "purchase_voucher_type": purchase_voucher_type,
-        "sales_ledger_name": sales_ledger_name,
-        "purchase_ledger_name": purchase_ledger_name,
-        "cgst_ledger_name": cgst_ledger_name,
-        "sgst_ledger_name": sgst_ledger_name,
+        "sales_voucher_type": current_settings["sales_voucher_type"],
+        "purchase_voucher_type": current_settings["purchase_voucher_type"],
+        "sales_ledger_name": current_settings["sales_ledger_name"],
+        "purchase_ledger_name": current_settings["purchase_ledger_name"],
+        "cgst_ledger_name": current_settings["cgst_ledger_name"],
+        "sgst_ledger_name": current_settings["sgst_ledger_name"],
         "sales_gst_ledger_mappings": sales_gst_ledger_mappings,
         "round_off_ledger_name": round_off_ledger_name,
-        "default_party_name": default_party_name,
     }
     try:
         company = add_company(db, name, config, commit=False)

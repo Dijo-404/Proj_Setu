@@ -204,9 +204,7 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
     )
 
     company_name = escape((settings.get("company_name") or "Company").strip())
-    reference_name = escape(
-        (batch.party_name or settings.get("default_party_name") or "Cash Customer").strip()
-    )
+    reference_name = escape((batch.party_name or "Customer").strip())
     document_date = _local_datetime(batch.submitted_at or batch.created_at)
 
     story = [

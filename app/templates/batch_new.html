@@ -14,7 +14,12 @@
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
     <label>
       {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
-      <input name="party_name" placeholder="Name">
+      <input
+        name="party_name"
+        placeholder="Name"
+        value="{{ party_name or '' }}"
+        {% if batch_type.value in ['SALE', 'SALES_RETURN', 'PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}required{% endif %}
+      >
     </label>
     {% if batch_type.value == 'SALES_RETURN' %}
     <label>Return condition
@@ -47,7 +52,7 @@
       </select>
     </label>
     {% endif %}
-    <label>Notes<textarea name="notes" rows="3"></textarea></label>
+    <label>Notes<textarea name="notes" rows="3">{{ notes or '' }}</textarea></label>
     <button class="button primary full" type="submit">Start {{ 'purchase' if batch_type.value in ['PURCHASE', 'RECEIVE'] else batch_type.value|lower }} batch</button>
   </form>
 </section>

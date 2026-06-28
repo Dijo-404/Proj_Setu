@@ -28,7 +28,7 @@ Only super admins can delete users. Deleted users with old batches, scans, or re
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, round-off ledger, and default party.
+3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, and round-off ledger.
 4. Keep `Enable Tally sync` off until setup is validated.
 5. Open `Products` and create product masters with exact Tally stock item names.
 6. Open `Tally Check`. Click a company name to edit its Tally settings in the

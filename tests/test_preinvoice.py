@@ -69,7 +69,7 @@ def test_sale_preinvoice_pdf_contains_reference_and_multi_rate_totals(db_session
 
     pdf = sale_preinvoice_pdf(
         batch,
-        {"company_name": "SWARNAGOWRI 26-27", "default_party_name": "Cash"},
+        {"company_name": "SWARNAGOWRI 26-27"},
     )
 
     assert pdf.startswith(b"%PDF")

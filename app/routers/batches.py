@@ -107,7 +107,14 @@ def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: 
     return templates.TemplateResponse(
         request,
         "batch_new.html",
-        {"request": request, "user": user, "batch_type": parsed, "error": None},
+        {
+            "request": request,
+            "user": user,
+            "batch_type": parsed,
+            "party_name": "",
+            "notes": "",
+            "error": None,
+        },
     )
 
 
@@ -122,6 +129,28 @@ def create_batch_route(
 ):
     parsed = parse_batch_type(batch_type)
     user = require_permission(request, db, action_key_for_batch(parsed))
+    party_required = parsed in {
+        BatchType.SALE,
+        BatchType.SALES_RETURN,
+        BatchType.PURCHASE,
+        BatchType.RECEIVE,
+        BatchType.PURCHASE_RETURN,
+    }
+    if party_required and not party_name.strip():
+        party_label = "Customer" if parsed in {BatchType.SALE, BatchType.SALES_RETURN} else "Supplier"
+        return templates.TemplateResponse(
+            request,
+            "batch_new.html",
+            {
+                "request": request,
+                "user": user,
+                "batch_type": parsed,
+                "party_name": party_name,
+                "notes": notes,
+                "error": f"{party_label} is required.",
+            },
+            status_code=400,
+        )
     batch = create_batch(db, user, parsed, party_name, notes, reason_code)
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 

@@ -42,7 +42,6 @@ VALID_SETTINGS = {
     "cgst_ledger_name": "CGST Ledger",
     "sgst_ledger_name": "SGST Ledger",
     "round_off_ledger_name": "Round Off",
-    "default_party_name": "Cash Ledger",
     "retry_interval_seconds": "180",
 }
 
@@ -123,6 +122,54 @@ def test_autosave_route_records_settings_audit():
     engine.dispose()
 
 
+def test_create_company_without_legacy_tally_fields_inherits_current_values():
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        db.add(User(id=1, username="admin", password_hash="x", role="admin", active=True))
+        _seed(db)
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        response = TestClient(app, follow_redirects=False).post(
+            "/settings/companies",
+            data={
+                "name": "Second Profile",
+                "company_name": "Second Tally Company",
+                "tally_host": "192.0.2.10",
+                "tally_port": "9000",
+                "sales_gst_ledger_mappings": "",
+                "round_off_ledger_name": "Round Off",
+            },
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 303
+    with Session() as db:
+        company = db.scalar(select(Company).where(Company.name == "Second Profile"))
+        saved = company_config(company)
+        for key in (
+            "sales_voucher_type",
+            "purchase_voucher_type",
+            "sales_ledger_name",
+            "purchase_ledger_name",
+            "cgst_ledger_name",
+            "sgst_ledger_name",
+        ):
+            assert saved[key] == VALID_SETTINGS[key]
+    engine.dispose()
+
+
 def test_settings_and_active_company_update_can_roll_back_together(db_session):
     _seed(db_session)
     requested = _valid_request(db_session)
@@ -152,19 +199,29 @@ def test_autosave_validation_rejects_bad_port_and_interval(db_session):
 
 def test_sales_gst_ledger_mappings_are_normalized_and_validated(db_session):
     mappings = parse_sales_gst_ledger_mappings(
-        "5.00 | Sales @ 5% | CGST @ 2.5% | SGST @ 2.5%\n"
-        "18 | Sales @ 18% | CGST @ 9% | SGST @ 9%"
+        "5.00 | Sales @ 5% | CGST @ 2.5% | SGST @ 2.5% | IGST @ 5%\n"
+        "18 | Sales @ 18% | CGST @ 9% | SGST @ 9% | IGST @ 18%"
     )
     assert mappings["5"]["sales"] == "Sales @ 5%"
     assert mappings["18"]["cgst"] == "CGST @ 9%"
+    assert mappings["18"]["igst"] == "IGST @ 18%"
+
+    legacy = parse_sales_gst_ledger_mappings(
+        "5 | Sales @ 5% | CGST @ 2.5% | SGST @ 2.5%"
+    )
+    assert legacy["5"]["igst"] == ""
 
     _seed(db_session)
     duplicate = _valid_request(db_session)
     duplicate["sales_gst_ledger_mappings"] = (
-        "5 | Sales A | CGST A | SGST A\n"
-        "5.0 | Sales B | CGST B | SGST B"
+        "5 | Sales A | CGST A | SGST A | IGST A\n"
+        "5.0 | Sales B | CGST B | SGST B | IGST B"
     )
     assert "more than once" in validate_settings(duplicate)
+
+    incomplete = _valid_request(db_session)
+    incomplete["sales_gst_ledger_mappings"] = "5 | Sales | CGST | SGST |"
+    assert "empty ledger name" in validate_settings(incomplete)
 
 
 def test_activating_older_company_profile_clears_gst_ledger_mappings(db_session):

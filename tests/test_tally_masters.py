@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from app.models import Product, User
 from app.services.tally_masters import (
     build_company_list_xml,
@@ -6,6 +8,7 @@ from app.services.tally_masters import (
     confirmation_lookup,
     live_sync_readiness,
     readiness_counts,
+    test_tally_gateway as check_tally_gateway,
 )
 from app.services.settings import update_settings
 
@@ -21,7 +24,6 @@ VALID_SETTINGS = {
     "cgst_ledger_name": "CGST Ledger",
     "sgst_ledger_name": "SGST Ledger",
     "round_off_ledger_name": "Round Off",
-    "default_party_name": "Cash Ledger",
 }
 
 
@@ -31,7 +33,8 @@ def test_collect_master_requirements_includes_products_and_settings(db_session):
         {
             **VALID_SETTINGS,
             "sales_gst_ledger_mappings": (
-                "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5%"
+                "5 | Sales @ 5% | Output CGST @ 2.5% | "
+                "Output SGST @ 2.5% | Output IGST @ 5%"
             ),
         },
     )
@@ -54,6 +57,7 @@ def test_collect_master_requirements_includes_products_and_settings(db_session):
     assert ("Ledger", "Sales @ 5%") in names
     assert ("Ledger", "Output CGST @ 2.5%") in names
     assert ("Ledger", "Output SGST @ 2.5%") in names
+    assert ("Ledger", "Output IGST @ 5%") in names
 
 
 def test_confirmation_updates_readiness_counts(db_session):
@@ -71,8 +75,54 @@ def test_confirmation_updates_readiness_counts(db_session):
 def test_company_list_xml_is_read_only_export_request():
     xml = build_company_list_xml()
     assert "<TALLYREQUEST>Export</TALLYREQUEST>" in xml
+    assert "<TYPE>Collection</TYPE>" in xml
     assert "<ID>List of Companies</ID>" in xml
+    assert '<COLLECTION NAME="List of Companies">' in xml
+    assert "<TYPE>Company</TYPE>" in xml
+    assert "<NATIVEMETHOD>Name</NATIVEMETHOD>" in xml
     assert "VOUCHER" not in xml
+
+
+class _GatewayResponse:
+    def __init__(self, body: str):
+        self.body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return None
+
+    def read(self):
+        return self.body.encode()
+
+
+def test_gateway_check_rejects_tally_line_error():
+    response = """
+        <ENVELOPE>
+          <HEADER><VERSION>1</VERSION><STATUS>0</STATUS></HEADER>
+          <BODY><DATA><LINEERROR>Could not find Report 'List of Companies'!</LINEERROR></DATA></BODY>
+        </ENVELOPE>
+    """
+    with patch("app.services.tally_masters.urlopen", return_value=_GatewayResponse(response)):
+        result = check_tally_gateway({"tally_host": "127.0.0.1", "tally_port": "9000"})
+
+    assert not result.ok
+    assert result.message == "Tally rejected gateway check: Could not find Report 'List of Companies'!"
+
+
+def test_gateway_check_accepts_successful_tally_xml():
+    response = """
+        <ENVELOPE>
+          <HEADER><VERSION>1</VERSION><STATUS>1</STATUS></HEADER>
+          <BODY><DATA><COLLECTION><COMPANY><NAME>Setu Test Company</NAME></COMPANY></COLLECTION></DATA></BODY>
+        </ENVELOPE>
+    """
+    with patch("app.services.tally_masters.urlopen", return_value=_GatewayResponse(response)):
+        result = check_tally_gateway({"tally_host": "127.0.0.1", "tally_port": "9000"})
+
+    assert result.ok
+    assert result.message == "Tally gateway responded"
 
 
 def test_live_sync_readiness_requires_all_confirmations(db_session):

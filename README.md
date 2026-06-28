@@ -172,7 +172,7 @@ Do this in order:
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, round-off ledger, and default party.
+3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, and round-off ledger.
 4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
 5. Open `Products`.
 6. Create products using exact Tally stock item names, HSN, GST rate, unit, default rate, and sales discount if applicable.

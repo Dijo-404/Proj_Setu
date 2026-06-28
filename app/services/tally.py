@@ -34,7 +34,6 @@ REQUIRED_TALLY_SETTING_KEYS = {
     "cgst_ledger_name": "CGST ledger",
     "sgst_ledger_name": "SGST ledger",
     "round_off_ledger_name": "round off ledger",
-    "default_party_name": "default party",
 }
 
 
@@ -100,7 +99,12 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     batch_type = BatchType(batch.batch_type)
     is_sale = batch_type == BatchType.SALE
     voucher_type = settings["sales_voucher_type"] if is_sale else settings["purchase_voucher_type"]
-    party_name = batch.party_name or settings["default_party_name"]
+    party_name = (batch.party_name or "").strip()
+    if not party_name:
+        raise TallySyncError(
+            "Add a customer or supplier to this batch before generating Tally XML.",
+            retryable=False,
+        )
     income_ledger = settings["sales_ledger_name"] if is_sale else settings["purchase_ledger_name"]
     sales_gst_mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
 
@@ -111,6 +115,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
                 "sales": settings["sales_ledger_name"],
                 "cgst": settings["cgst_ledger_name"],
                 "sgst": settings["sgst_ledger_name"],
+                "igst": "",
             },
         )
 
@@ -174,15 +179,26 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
         tax_by_rate: dict[str, dict[str, Decimal]] = {}
         for line in summary.lines:
             key = gst_rate_key(line.gst_rate)
-            totals = tax_by_rate.setdefault(key, {"cgst": Decimal("0"), "sgst": Decimal("0")})
+            totals = tax_by_rate.setdefault(
+                key,
+                {"cgst": Decimal("0"), "sgst": Decimal("0"), "igst": Decimal("0")},
+            )
             totals["cgst"] += line.cgst_amount
             totals["sgst"] += line.sgst_amount
+            totals["igst"] += line.igst_amount
         for key, totals in tax_by_rate.items():
             ledgers = sales_ledgers(Decimal(key))
             if totals["cgst"] > 0:
                 add_ledger(voucher, "LEDGERENTRIES.LIST", ledgers["cgst"], totals["cgst"], credit=True)
             if totals["sgst"] > 0:
                 add_ledger(voucher, "LEDGERENTRIES.LIST", ledgers["sgst"], totals["sgst"], credit=True)
+            if totals["igst"] > 0:
+                if not ledgers["igst"]:
+                    raise TallySyncError(
+                        f"Add an IGST ledger for the {key}% product GST mapping.",
+                        retryable=False,
+                    )
+                add_ledger(voucher, "LEDGERENTRIES.LIST", ledgers["igst"], totals["igst"], credit=True)
     else:
         if summary.cgst_amount > 0:
             add_ledger(

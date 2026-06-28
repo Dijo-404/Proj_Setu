@@ -4,14 +4,15 @@
       .split(/\r?\n/)
       .map(function (line) {
         const parts = line.split("|").map(function (part) { return part.trim(); });
-        while (parts.length < 4) parts.push("");
-        return parts.slice(0, 4);
+        while (parts.length < 5) parts.push("");
+        return parts.slice(0, 5);
       })
       .filter(function (parts) { return parts.some(Boolean); });
   }
 
   function rowField(label, field, value, options) {
     const wrapper = document.createElement("label");
+    wrapper.className = "ledger-mapping-field ledger-mapping-field--" + field;
     wrapper.textContent = label;
     const input = document.createElement("input");
     input.type = options.type || "text";
@@ -48,7 +49,7 @@
 
     function serialize() {
       hidden.value = rows().map(function (row) {
-        return ["rate", "sales", "cgst", "sgst"].map(function (field) {
+        return ["rate", "sales", "cgst", "sgst", "igst"].map(function (field) {
           return row.querySelector('[data-ledger-field="' + field + '"]').value.trim();
         }).join(" | ");
       }).join("\n");
@@ -88,7 +89,8 @@
         }),
         rowField("Sales ledger", "sales", values[1], { placeholder: "e.g. Sales @ 5%" }),
         rowField("CGST ledger", "cgst", values[2], { placeholder: "e.g. Output CGST @ 2.5%" }),
-        rowField("SGST ledger", "sgst", values[3], { placeholder: "e.g. Output SGST @ 2.5%" })
+        rowField("SGST ledger", "sgst", values[3], { placeholder: "e.g. Output SGST @ 2.5%" }),
+        rowField("IGST ledger", "igst", values[4], { placeholder: "e.g. Output IGST @ 5%" })
       );
       grid.querySelectorAll("input").forEach(function (input) {
         input.addEventListener("input", serialize);
@@ -105,7 +107,7 @@
     updateState();
     addButton.addEventListener("click", function () {
       editor.open = true;
-      addRow(["", "", "", ""], true);
+      addRow(["", "", "", "", ""], true);
     });
   }
 

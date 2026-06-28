@@ -1570,6 +1570,8 @@ details.add-company:not([open]) { padding-block: 8px; }
   gap: 10px 12px;
 }
 
+.ledger-mapping-field--igst { grid-column: 1 / -1; }
+
 .ledger-mapping-empty {
   padding: 13px;
   border: 1px dashed var(--hairline);

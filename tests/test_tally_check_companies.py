@@ -23,7 +23,6 @@ COMPANY_CONFIG = {
     "sgst_ledger_name": "SGST Ledger",
     "sales_gst_ledger_mappings": "",
     "round_off_ledger_name": "Round Off",
-    "default_party_name": "Cash",
 }
 
 
@@ -87,6 +86,7 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert 'data-company-open="company-modal-' in page.text
     assert "Original Label" in page.text
     assert "Required Tally masters" not in page.text
+    assert 'name="default_party_name"' not in page.text
     assert update.status_code == 200
     assert update.json()["ok"]
     assert saved_name == "Edited Label"

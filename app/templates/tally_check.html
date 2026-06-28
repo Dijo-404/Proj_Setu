@@ -85,7 +85,6 @@
         <label>Default CGST ledger<input name="cgst_ledger_name" value="{{ row.config.cgst_ledger_name }}" required></label>
         <label>Default SGST ledger<input name="sgst_ledger_name" value="{{ row.config.sgst_ledger_name }}" required></label>
         <label>Round-off ledger<input name="round_off_ledger_name" value="{{ row.config.round_off_ledger_name }}" required></label>
-        <label>Default party<input name="default_party_name" value="{{ row.config.default_party_name }}" required></label>
         {{ sales_ledger_editor(row.config.sales_gst_ledger_mappings) }}
         <div class="product-modal-actions">
           <span class="autosave-status" data-company-save-status aria-live="polite"></span>
@@ -195,7 +194,7 @@
 </dialog>
 {% endfor %}
 
-<script src="/static/ledger-mapping-editor.js?v=20260628-1"></script>
+<script src="/static/ledger-mapping-editor.js?v=20260628-2"></script>
 <script>
   (function () {
     function openDialog(dialog) {

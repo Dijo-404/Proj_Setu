@@ -1,3 +1,4 @@
+from dataclasses import replace
 from decimal import Decimal
 from xml.etree import ElementTree as ET
 
@@ -49,8 +50,17 @@ VALID_SETTINGS = {
     "cgst_ledger_name": "CGST Ledger",
     "sgst_ledger_name": "SGST Ledger",
     "round_off_ledger_name": "Round Off",
-    "default_party_name": "Cash Ledger",
 }
+
+
+def test_tally_xml_requires_party_on_the_batch(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(db_session, user, BatchType.SALE, "", "")
+
+    with pytest.raises(TallySyncError, match="customer or supplier"):
+        build_voucher_xml(batch, VALID_SETTINGS)
 
 
 def test_sale_batch_xml_groups_serials_by_product(db_session):
@@ -175,8 +185,8 @@ def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
     settings = {
         **VALID_SETTINGS,
         "sales_gst_ledger_mappings": (
-            "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5%\n"
-            "18 | Sales @ 18% | Output CGST @ 9% | Output SGST @ 9%"
+            "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5% | Output IGST @ 5%\n"
+            "18 | Sales @ 18% | Output CGST @ 9% | Output SGST @ 9% | Output IGST @ 18%"
         ),
     }
 
@@ -197,6 +207,59 @@ def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
     assert ledger_amounts["Output CGST @ 9%"] == Decimal("18.00")
     assert ledger_amounts["Output SGST @ 9%"] == Decimal("18.00")
     assert VALID_SETTINGS["sales_ledger_name"] not in xml
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
+def test_sale_voucher_uses_mapped_igst_ledger(db_session, monkeypatch):
+    user = User(username="sales-igst", password_hash="x", role="sales")
+    product = Product(
+        product_code="GST-IGST",
+        product_name="Interstate Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Interstate Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Interstate Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    summary = tally_service.calculate_voucher_summary(batch)
+    interstate_line = replace(
+        summary.lines[0],
+        cgst_amount=Decimal("0.00"),
+        sgst_amount=Decimal("0.00"),
+        igst_amount=Decimal("5.00"),
+    )
+    interstate_summary = replace(
+        summary,
+        lines=[interstate_line],
+        cgst_amount=Decimal("0.00"),
+        sgst_amount=Decimal("0.00"),
+        igst_amount=Decimal("5.00"),
+    )
+    monkeypatch.setattr(tally_service, "calculate_voucher_summary", lambda _batch: interstate_summary)
+    settings = {
+        **VALID_SETTINGS,
+        "sales_gst_ledger_mappings": (
+            "5 | Sales @ 5% | Output CGST @ 2.5% | "
+            "Output SGST @ 2.5% | Output IGST @ 5%"
+        ),
+    }
+
+    xml = build_voucher_xml(batch, settings)
+    ledger_amounts = {
+        entry.findtext("LEDGERNAME"): Decimal(entry.findtext("AMOUNT"))
+        for entry in ET.fromstring(xml).iter("LEDGERENTRIES.LIST")
+    }
+
+    assert ledger_amounts["Output IGST @ 5%"] == Decimal("5.00")
+    assert "Output CGST @ 2.5%" not in ledger_amounts
+    assert "Output SGST @ 2.5%" not in ledger_amounts
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
