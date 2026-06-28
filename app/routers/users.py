@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission, require_user
 from app.database import get_db
-from app.models import Batch, InventoryTransaction, Role, ScanLog, Serial, StockRelocation, TallyMasterConfirmation, User, utc_now
+from app.models import Batch, InventoryTransaction, Role, ScanLog, Serial, StockRelocation, TallyMasterConfirmation, User, serialize_role_values, utc_now
 from app.security import MIN_PASSWORD_LENGTH, hash_password
 from app.templates import templates
 
@@ -21,6 +21,7 @@ def users_page(request: Request, error: str = "", success: str = "", db: Session
         "password_too_short": f"Password must be at least {MIN_PASSWORD_LENGTH} characters.",
         "password_mismatch": "Password and confirmation do not match.",
         "user_not_found": "User account was not found.",
+        "role_required": "Select at least one role.",
     }.get(error, error)
     success_message = {
         "password_reset": "Password reset successfully.",
@@ -45,11 +46,14 @@ def create_user(
     request: Request,
     username: str = Form(...),
     password: str = Form(...),
-    role: str = Form(...),
+    role: list[str] = Form(default=[]),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "users_manage")
-    db.add(User(username=username.strip().lower(), password_hash=hash_password(password), role=Role(role).value, active=True))
+    role_value = serialize_role_values(role)
+    if not role_value:
+        return RedirectResponse("/users?error=role_required", status_code=303)
+    db.add(User(username=username.strip().lower(), password_hash=hash_password(password), role=role_value, active=True))
     try:
         db.commit()
     except Exception:

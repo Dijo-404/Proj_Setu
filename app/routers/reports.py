@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType
+from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType, has_any_role, has_role
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_report
 from app.services.expiry import expiry_summary
@@ -133,7 +133,7 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
 @router.get("")
 def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
     user = require_permission(request, db, "reports_data")
-    if user.role == Role.DIRECTORS.value:
+    if has_role(user.role, Role.DIRECTORS) and not has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN}):
         return templates.TemplateResponse(
             request,
             "director_reports.html",
@@ -181,7 +181,7 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "expiry": expiry_summary(db),
             "losses": (
                 loss_summary(db, action=action, q=q, start=start_dt, end=end_dt)
-                if user.role in {Role.ADMIN.value, Role.SUPER_ADMIN.value}
+                if has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN})
                 else None
             ),
             "action": action,

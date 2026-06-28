@@ -5,7 +5,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.models import Role
+from app.models import Role, has_role, normalize_role_values
 from app.services.settings import get_setting, update_settings
 
 
@@ -89,6 +89,16 @@ CELL_META = {
     "view": ("View", "generated"),
     "workflow": ("Workflow", "pending_sync"),
     "no": ("No", "failed"),
+}
+
+ACCESS_VALUE_PRIORITY = {
+    "edit": 5,
+    "yes": 4,
+    "workflow": 3,
+    "view": 2,
+    "shown": 1,
+    "no": 0,
+    "hidden": 0,
 }
 
 
@@ -387,15 +397,43 @@ def role_access_sections(db: Session | None = None) -> list[AccessSection]:
     return sections
 
 
+def _configured_access_values(config: dict[str, dict[str, str]], role: Role | str, access_key: str) -> list[str]:
+    values = []
+    for role_value in normalize_role_values(role):
+        if role_value == Role.SUPER_ADMIN.value:
+            values.append("edit")
+        else:
+            values.append(config.get(access_key, {}).get(role_value, "no"))
+    return values
+
+
 def role_access_value(db: Session, role: Role | str, access_key: str) -> str:
-    role_value = role.value if isinstance(role, Role) else str(role)
-    if role_value == Role.SUPER_ADMIN.value:
-        return "edit"
     config = get_role_access_config(db)
-    row = config.get(access_key)
-    if not row:
+    values = _configured_access_values(config, role, access_key)
+    if not values:
         return "no"
-    return row.get(role_value, "no")
+    return max(values, key=lambda value: ACCESS_VALUE_PRIORITY.get(value, 0))
+
+
+def _role_has_access_value(
+    config: dict[str, dict[str, str]],
+    role: Role | str,
+    access_key: str,
+    allowed_values: set[str] | None = None,
+) -> bool:
+    values = _configured_access_values(config, role, access_key)
+    if allowed_values is not None:
+        return any(value not in DENY_VALUES and value in allowed_values for value in values)
+    return any(value not in DENY_VALUES for value in values)
+
+
+def _role_can_open_access_key(config: dict[str, dict[str, str]], role: Role | str, access_key: str) -> bool:
+    values = _configured_access_values(config, role, access_key)
+    return any(value not in DENY_VALUES for value in values)
+
+
+def _role_is_super_admin(role: Role | str) -> bool:
+    return has_role(role, Role.SUPER_ADMIN)
 
 
 def configured_role_has_access(
@@ -404,20 +442,11 @@ def configured_role_has_access(
     access_key: str,
     allowed_values: set[str] | None = None,
 ) -> bool:
-    role_value = role.value if isinstance(role, Role) else str(role)
-    if role_value == Role.SUPER_ADMIN.value:
-        value = "edit"
-    else:
-        value = config.get(access_key, {}).get(role_value, "no")
-    if value in DENY_VALUES:
-        return False
-    if allowed_values is not None:
-        return value in allowed_values
-    return True
+    return _role_has_access_value(config, role, access_key, allowed_values)
 
 
 def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str:
-    can = lambda key: configured_role_has_access(config, role, key)
+    can = lambda key: _role_can_open_access_key(config, role, key)
     destinations = [
         ("page_dashboard", "dashboard_data", "/"),
         ("page_batches", "batch_list", "/batches"),
@@ -441,7 +470,7 @@ def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str
     for page_key, permission_key, path in destinations:
         if can(page_key) and can(permission_key):
             return path
-    if str(role) in {Role.SUPER_ADMIN.value, str(Role.SUPER_ADMIN)}:
+    if _role_is_super_admin(role):
         return "/settings/access"
     return "/account/password"
 

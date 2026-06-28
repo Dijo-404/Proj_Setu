@@ -8,7 +8,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import User
 from app.security import create_session_token
-from app.services.access_control import ROLE_COLUMNS, config_from_form, get_role_access_config, landing_path_for, role_access_sections, save_role_access_config
+from app.services.access_control import ROLE_COLUMNS, config_from_form, configured_role_has_access, get_role_access_config, landing_path_for, role_access_sections, save_role_access_config
 
 
 def test_role_access_catalog_has_cells_for_every_role():
@@ -46,6 +46,25 @@ def test_directors_default_access_is_reports_only():
     assert config["serial_data"]["directors"] == "no"
     assert config["reports_export"]["directors"] == "no"
     assert landing_path_for(config, "directors") == "/reports"
+
+
+def test_multi_role_access_uses_union_of_selected_roles():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        config = get_role_access_config(db)
+
+    engine.dispose()
+
+    assert configured_role_has_access(config, "purchase,sales", "batch_purchase")
+    assert configured_role_has_access(config, "purchase,sales", "batch_sale")
+    assert not configured_role_has_access(config, "purchase,sales", "batch_audit")
 
 
 def test_role_access_partial_save_merges_existing_values_and_ignores_bad_keys():

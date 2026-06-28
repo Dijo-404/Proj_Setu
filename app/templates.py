@@ -1,6 +1,7 @@
 from fastapi.templating import Jinja2Templates
 
 from app.database import SessionLocal
+from app.models import has_any_role
 from app.services.access_control import configured_role_has_access, landing_path_for, role_has_access
 
 templates = Jinja2Templates(directory="app/templates")
@@ -18,6 +19,16 @@ def role_can(subject, access_key: str) -> bool:
 
 
 templates.env.globals["role_can"] = role_can
+
+
+def has_role(subject, *roles) -> bool:
+    if not subject:
+        return False
+    role = getattr(subject, "role", subject)
+    return has_any_role(role, roles)
+
+
+templates.env.globals["has_role"] = has_role
 
 
 def role_can_view_batch(subject, batch_type: str) -> bool:

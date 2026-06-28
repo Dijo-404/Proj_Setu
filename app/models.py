@@ -22,6 +22,57 @@ class Role(str, Enum):
     AUDITOR = "auditor"
 
 
+def normalize_role_values(value) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, Role):
+        items = [value]
+    elif isinstance(value, str):
+        items = [value]
+    else:
+        try:
+            items = list(value)
+        except TypeError:
+            items = [str(value)]
+
+    role_values = {role.value for role in Role}
+    role_names = {role.name: role.value for role in Role}
+    selected: list[str] = []
+    for item in items:
+        parts = [item.value] if isinstance(item, Role) else str(item).split(",")
+        for part in parts:
+            token = part.strip()
+            if token.startswith("Role."):
+                token = token.split(".", 1)[1]
+            if token in role_names:
+                token = role_names[token]
+            if token in role_values and token not in selected:
+                selected.append(token)
+    return tuple(selected)
+
+
+def serialize_role_values(value) -> str:
+    selected = set(normalize_role_values(value))
+    return ",".join(role.value for role in Role if role.value in selected)
+
+
+def role_label(value) -> str:
+    roles = normalize_role_values(value)
+    return ", ".join(roles)
+
+
+def has_role(value, role: Role | str) -> bool:
+    roles = normalize_role_values(value)
+    target = normalize_role_values(role)
+    return bool(target and target[0] in roles)
+
+
+def has_any_role(value, roles) -> bool:
+    values = set(normalize_role_values(value))
+    targets = set(normalize_role_values(roles))
+    return bool(values & targets)
+
+
 class SerialStatus(str, Enum):
     GENERATED = "GENERATED"
     PURCHASED = "PURCHASED"
@@ -85,7 +136,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(40), index=True)
+    role: Mapped[str] = mapped_column(String(255), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -94,6 +145,14 @@ class User(Base):
 
     batches: Mapped[list["Batch"]] = relationship(back_populates="user")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="user")
+
+    @property
+    def role_values(self) -> tuple[str, ...]:
+        return normalize_role_values(self.role)
+
+    @property
+    def role_label(self) -> str:
+        return role_label(self.role)
 
 
 class Product(Base):

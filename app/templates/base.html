@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#000000">
   <title>{% block title %}Setu Barcode Tally Bridge{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20260628-company-grid-2">
+  <link rel="stylesheet" href="/static/styles.css?v=20260628-role-picker-2">
 </head>
 <body>
   {% if user %}
@@ -88,14 +88,14 @@
       {% if role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit') %}
       <a href="/tally-check" class="{{ 'active' if request.url.path.startswith('/tally-check') else '' }}">Tally Check</a>
       {% endif %}
-      {% if role_can(user, 'page_admin_menu') and ((role_can(user, 'page_products') and role_can(user, 'product_master')) or (role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics')) or (role_can(user, 'page_settings') and role_can(user, 'settings_edit')) or user.role == 'super_admin' or (role_can(user, 'page_maintenance') and role_can(user, 'backup_data')) or (role_can(user, 'page_users') and role_can(user, 'users_manage'))) %}
+      {% if role_can(user, 'page_admin_menu') and ((role_can(user, 'page_products') and role_can(user, 'product_master')) or (role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics')) or (role_can(user, 'page_settings') and role_can(user, 'settings_edit')) or has_role(user, 'super_admin') or (role_can(user, 'page_maintenance') and role_can(user, 'backup_data')) or (role_can(user, 'page_users') and role_can(user, 'users_manage'))) %}
       <details class="nav-menu">
         <summary class="{{ 'active' if request.url.path.startswith('/products') or request.url.path.startswith('/expiry') or request.url.path.startswith('/settings') or request.url.path.startswith('/maintenance') or request.url.path.startswith('/users') else '' }}">Admin</summary>
         <div class="nav-menu__panel">
           {% if role_can(user, 'page_products') and role_can(user, 'product_master') %}<a href="/products">Products</a>{% endif %}
           {% if role_can(user, 'page_expiry') and role_can(user, 'expiry_analytics') %}<a href="/expiry">Expiry</a>{% endif %}
           {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}<a href="/settings">Settings</a>{% endif %}
-          {% if user.role == 'super_admin' %}<a href="/settings/access">Role access</a>{% endif %}
+          {% if has_role(user, 'super_admin') %}<a href="/settings/access">Role access</a>{% endif %}
           {% if role_can(user, 'page_maintenance') and role_can(user, 'backup_data') %}<a href="/maintenance">Maintenance</a>{% endif %}
           {% if role_can(user, 'page_users') and role_can(user, 'users_manage') %}<a href="/users">Users</a>{% endif %}
         </div>

@@ -7,7 +7,7 @@
     <p class="eyebrow">System</p>
     <h1>Settings</h1>
   </div>
-  {% if user.role == 'super_admin' %}
+  {% if has_role(user, 'super_admin') %}
   <div class="actions">
     <a class="button" href="/settings/access">Role access</a>
   </div>

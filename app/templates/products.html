@@ -264,7 +264,7 @@
     </section>
     {% endif %}
 
-    {% if user.role == 'super_admin' %}
+    {% if has_role(user, 'super_admin') %}
     <section class="product-modal-section product-danger-zone">
       <div>
         <h3>Delete product</h3>

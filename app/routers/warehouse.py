@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Product, Role, StockRelocation, StorageLocation, WarehouseLevel
+from app.models import Product, Role, StockRelocation, StorageLocation, WarehouseLevel, has_any_role
 from app.services.exports import barcode_png, location_labels_pdf
 from app.services.relocation import (
     MoveItem,
@@ -37,14 +37,14 @@ LOCATION_MANAGER_ROLES = {
 
 def _require_relocator(request: Request, db: Session):
     user = require_permission(request, db, "stock_relocation", {"edit", "yes"})
-    if user.role not in RELOCATION_ROLES:
+    if not has_any_role(user.role, RELOCATION_ROLES):
         raise HTTPException(status_code=403, detail="Not allowed")
     return user
 
 
 def _require_location_manager(request: Request, db: Session):
     user = require_permission(request, db, "location_manage", {"edit", "yes"})
-    if user.role not in LOCATION_MANAGER_ROLES:
+    if not has_any_role(user.role, LOCATION_MANAGER_ROLES):
         raise HTTPException(status_code=403, detail="Not allowed")
     return user
 

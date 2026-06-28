@@ -2,7 +2,7 @@ from fastapi import HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Role, User
+from app.models import Role, User, has_any_role, normalize_role_values
 from app.security import read_session_token
 from app.services.access_control import configured_role_has_access, get_role_access_config
 
@@ -33,11 +33,9 @@ def require_user(request: Request, db: Session, roles: set[Role] | None = None) 
         raise redirect_exception("/login")
     if user.must_change_password and request.url.path not in _PASSWORD_GATE_EXEMPT:
         raise redirect_exception(PASSWORD_CHANGE_PATH)
-    try:
-        role = Role(user.role)
-    except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed") from exc
-    if roles and role not in roles:
+    if not normalize_role_values(user.role):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
+    if roles and not has_any_role(user.role, roles):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     user._access_config = get_role_access_config(db)
     return user

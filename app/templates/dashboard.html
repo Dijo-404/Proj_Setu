@@ -29,7 +29,7 @@
   <div class="metric"><span>Total serials</span><strong data-metric="serials">{{ counts.serials }}</strong></div>
 </section>
 
-{% if user.role in ['super_admin', 'admin'] %}
+{% if has_role(user, 'super_admin', 'admin') %}
 {% include "partials/dashboard_shelf_alerts.html" %}
 {% endif %}
 
