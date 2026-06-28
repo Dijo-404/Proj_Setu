@@ -4,24 +4,40 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission, require_user
 from app.database import get_db
-from app.models import Role
+from app.models import Company, Role
 from app.services.access_control import ROLE_COLUMNS, config_from_form, role_access_sections, save_role_access_config
+from app.services.change_audit import record_change
 from app.services.settings import (
     DEFAULT_SETTINGS,
     activate_company,
     add_company,
+    company_config,
     delete_company,
     get_active_company,
     get_all_settings,
     list_companies,
     parse_sales_gst_ledger_mappings,
-    save_active_company_config,
-    update_settings,
+    persist_settings_and_active_company,
 )
 from app.services.tally_masters import live_sync_readiness
 from app.templates import templates
 
 router = APIRouter(prefix="/settings")
+
+
+def settings_snapshot(values: dict[str, str], keys) -> dict[str, str]:
+    return {key: values.get(key, "") for key in keys}
+
+
+def company_snapshot(company: Company | None) -> dict[str, object] | None:
+    if not company:
+        return None
+    return {
+        "id": company.id,
+        "name": company.name,
+        "is_active": company.is_active,
+        "config": company_config(company),
+    }
 
 
 def validate_settings(requested: dict[str, str]) -> str | None:
@@ -83,9 +99,25 @@ def access_overview(request: Request, db: Session = Depends(get_db)):
 
 @router.post("/access")
 async def save_access_overview(request: Request, db: Session = Depends(get_db)):
-    require_user(request, db, {Role.SUPER_ADMIN})
+    user = require_user(request, db, {Role.SUPER_ADMIN})
     form = await request.form()
-    save_role_access_config(db, config_from_form(form.multi_items()))
+    before = get_all_settings(db).get("role_access_config", "")
+    try:
+        save_role_access_config(db, config_from_form(form.multi_items()), commit=False)
+        after = get_all_settings(db).get("role_access_config", "")
+        record_change(
+            db,
+            user,
+            entity_type="settings",
+            entity_id="role_access_config",
+            action="update",
+            before={"role_access_config": before},
+            after={"role_access_config": after},
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse("/settings/access", status_code=303)
 
 
@@ -108,7 +140,7 @@ def save_settings(
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
     current_settings = get_all_settings(db)
     requested = {
         "company_name": company_name.strip(),
@@ -134,11 +166,16 @@ def save_settings(
         return render_settings(request, db, settings=settings, error=validation_error, status_code=400, open_settings=True)
 
     if requested["tally_enabled"] == "true":
-        update_settings(db, {key: value for key, value in requested.items() if key != "tally_enabled"})
-        save_active_company_config(db, requested)
-        ready, counts = live_sync_readiness(db)
+        try:
+            persist_settings_and_active_company(db, requested, commit=False)
+            db.flush()
+            ready, counts = live_sync_readiness(db)
+        except Exception:
+            db.rollback()
+            raise
         if not ready:
-            settings = get_all_settings(db)
+            db.rollback()
+            settings = {**current_settings, **requested}
             settings["tally_enabled"] = current_settings.get("tally_enabled", "false")
             return render_settings(
                 request,
@@ -149,8 +186,22 @@ def save_settings(
                 open_settings=True,
             )
 
-    update_settings(db, requested)
-    save_active_company_config(db, requested)
+    try:
+        if requested["tally_enabled"] != "true":
+            persist_settings_and_active_company(db, requested, commit=False)
+        record_change(
+            db,
+            user,
+            entity_type="settings",
+            entity_id="global",
+            action="update",
+            before=settings_snapshot(current_settings, requested.keys()),
+            after=settings_snapshot(requested, requested.keys()),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse("/settings", status_code=303)
 
 
@@ -172,7 +223,8 @@ def autosave_settings(
     retry_interval_seconds: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
+    before_settings = get_all_settings(db)
     requested = {
         "company_name": company_name.strip(),
         "tally_host": tally_host.strip(),
@@ -191,8 +243,21 @@ def autosave_settings(
     error = validate_settings(requested)
     if error:
         return JSONResponse({"ok": False, "error": error}, status_code=400)
-    update_settings(db, requested)
-    save_active_company_config(db, requested)
+    try:
+        persist_settings_and_active_company(db, requested, commit=False)
+        record_change(
+            db,
+            user,
+            entity_type="settings",
+            entity_id="global",
+            action="autosave",
+            before=settings_snapshot(before_settings, requested.keys()),
+            after=settings_snapshot(requested, requested.keys()),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return JSONResponse({"ok": True})
 
 
@@ -214,7 +279,7 @@ def create_company(
     default_party_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
     config = {
         "company_name": company_name,
         "tally_host": tally_host,
@@ -230,27 +295,72 @@ def create_company(
         "default_party_name": default_party_name,
     }
     try:
-        add_company(db, name, config)
+        company = add_company(db, name, config, commit=False)
+        record_change(
+            db,
+            user,
+            entity_type="company",
+            entity_id=company.id,
+            action="create",
+            before=None,
+            after=company_snapshot(company),
+        )
+        db.commit()
     except ValueError as exc:
+        db.rollback()
         return render_settings(request, db, error=str(exc), status_code=400)
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/companies/{company_id}/activate")
 def activate(request: Request, company_id: int, db: Session = Depends(get_db)):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
+    before_active = company_snapshot(get_active_company(db))
     try:
-        activate_company(db, company_id)
+        activate_company(db, company_id, commit=False)
+        after_active = company_snapshot(db.get(Company, company_id))
+        record_change(
+            db,
+            user,
+            entity_type="company",
+            entity_id=company_id,
+            action="activate",
+            before={"active_company": before_active},
+            after={"active_company": after_active},
+        )
+        db.commit()
     except ValueError as exc:
+        db.rollback()
         return render_settings(request, db, error=str(exc), status_code=400)
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse("/settings", status_code=303)
 
 
 @router.post("/companies/{company_id}/delete")
 def remove_company(request: Request, company_id: int, db: Session = Depends(get_db)):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
+    before = company_snapshot(db.get(Company, company_id))
     try:
-        delete_company(db, company_id)
+        delete_company(db, company_id, commit=False)
+        record_change(
+            db,
+            user,
+            entity_type="company",
+            entity_id=company_id,
+            action="delete",
+            before=before,
+            after=None,
+        )
+        db.commit()
     except ValueError as exc:
+        db.rollback()
         return render_settings(request, db, error=str(exc), status_code=400)
+    except Exception:
+        db.rollback()
+        raise
     return RedirectResponse("/settings", status_code=303)

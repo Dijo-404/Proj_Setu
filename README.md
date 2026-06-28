@@ -297,9 +297,15 @@ Backup:
 3. Store the downloaded `.db` file safely.
 4. Keep a separate copy of `.env`.
 
-For scheduled server backups such as Cobian Reflector, include the whole
-`data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar files
-such as `setu.db-wal` and `setu.db-shm` while the app is running.
+Automatic verified backups run by default every 24 hours into
+`data/backups/`, retain the latest 14 files, and test each backup with SQLite
+integrity and foreign-key checks before keeping it. Set
+`BACKUP_OFFSITE_DIRECTORY` in `.env` to copy the same verified backup to
+another drive or network share. Keep a separate copy of `.env`.
+
+For an additional server-level backup such as Cobian Reflector, include the
+whole `data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar
+files such as `setu.db-wal` and `setu.db-shm` while the app is running.
 
 Restore:
 

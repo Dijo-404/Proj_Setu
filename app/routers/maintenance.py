@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission
 from app.database import get_db
-from app.services.backup import create_sqlite_backup, sqlite_database_path
+from app.services.backup import backup_status, create_sqlite_backup, sqlite_database_path
 from app.templates import templates
 
 router = APIRouter(prefix="/maintenance")
@@ -16,7 +16,12 @@ def maintenance_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "maintenance.html",
-        {"request": request, "user": user, "database_path": sqlite_database_path()},
+        {
+            "request": request,
+            "user": user,
+            "database_path": sqlite_database_path(),
+            "backup_status": backup_status(),
+        },
     )
 
 

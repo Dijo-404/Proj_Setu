@@ -75,6 +75,10 @@ def test_sale_batch_xml_groups_serials_by_product(db_session):
     assert xml.count("<ALLINVENTORYENTRIES.LIST>") == 1
     assert "2 Pcs" in xml
     assert "Sg Biriyani Masala 100grm" in xml
+    voucher = ET.fromstring(xml).find(".//VOUCHER")
+    assert voucher is not None
+    assert voucher.attrib["REMOTEID"]
+    assert build_voucher_xml(batch, VALID_SETTINGS) == xml
 
 
 def test_sale_batch_xml_includes_sales_discount(db_session):

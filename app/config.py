@@ -71,6 +71,12 @@ class Settings:
     cookie_secure: bool = _flag("SESSION_COOKIE_SECURE")
     login_max_attempts: int = int(os.getenv("LOGIN_MAX_ATTEMPTS", "8"))
     login_lockout_minutes: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
+    automatic_backups_enabled: bool = _flag("AUTOMATIC_BACKUPS_ENABLED", "true")
+    backup_directory: str = os.getenv("BACKUP_DIRECTORY", "./data/backups")
+    backup_offsite_directory: str = os.getenv("BACKUP_OFFSITE_DIRECTORY", "").strip()
+    backup_interval_hours: int = int(os.getenv("BACKUP_INTERVAL_HOURS", "24"))
+    backup_retention_count: int = int(os.getenv("BACKUP_RETENTION_COUNT", "14"))
+    backup_startup_delay_seconds: int = int(os.getenv("BACKUP_STARTUP_DELAY_SECONDS", "60"))
 
     @property
     def using_default_secret(self) -> bool:

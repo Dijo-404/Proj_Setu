@@ -1,9 +1,10 @@
 from io import BytesIO
 
 from openpyxl import Workbook
-from sqlalchemy import select
+from sqlalchemy import func, select
 
-from app.models import BatchStatus, BatchType, InventoryTransaction, Product, SerialStatus, TransactionType, User
+from app.models import Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
+from app.services import assignment as assignment_service
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import serials_xlsx
 
@@ -65,3 +66,32 @@ def test_serials_xlsx_exports_generated_barcodes(db_session):
     data = serials_xlsx([batch.items[0].serial])
 
     assert data.startswith(b"PK")
+
+
+def test_assignment_rolls_back_every_record_when_history_write_fails(db_session, monkeypatch):
+    user = User(username="atomic-admin", password_hash="x", role="admin")
+    first = make_product("SG083")
+    second = make_product("SG084")
+    db_session.add_all([user, first, second])
+    db_session.commit()
+
+    def fail_history(*_args, **_kwargs):
+        raise RuntimeError("simulated history failure")
+
+    monkeypatch.setattr(assignment_service, "log_inventory_transaction", fail_history)
+
+    try:
+        assign_barcodes_to_existing_stock(
+            db_session,
+            user,
+            [AssignmentLine(product=first, quantity=1), AssignmentLine(product=second, quantity=1)],
+        )
+    except RuntimeError:
+        pass
+    else:
+        assert False, "the simulated failure must escape"
+
+    assert db_session.scalar(select(func.count(Batch.id))) == 0
+    assert db_session.scalar(select(func.count(Serial.id))) == 0
+    assert db_session.scalar(select(func.count(BatchItem.id))) == 0
+    assert db_session.scalar(select(func.count(InventoryTransaction.id))) == 0

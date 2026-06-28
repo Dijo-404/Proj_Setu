@@ -318,12 +318,12 @@ def get_role_access_config(db: Session) -> dict[str, dict[str, str]]:
     return normalize_role_access_config(parsed)
 
 
-def save_role_access_config(db: Session, submitted: dict[str, dict[str, str]]) -> None:
+def save_role_access_config(db: Session, submitted: dict[str, dict[str, str]], *, commit: bool = True) -> None:
     config = get_role_access_config(db)
     for row_key, row_values in submitted.items():
         config.setdefault(row_key, {}).update(row_values)
     config = normalize_role_access_config(config)
-    update_settings(db, {SETTING_KEY: json.dumps(config, sort_keys=True)})
+    update_settings(db, {SETTING_KEY: json.dumps(config, sort_keys=True)}, commit=commit)
 
 
 def config_from_form(form_items) -> dict[str, dict[str, str]]:

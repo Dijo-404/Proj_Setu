@@ -71,6 +71,7 @@ class WarehouseLevel(str, Enum):
 class BatchStatus(str, Enum):
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
+    SYNCING = "SYNCING"
     SYNCED = "SYNCED"
     PENDING_SYNC = "PENDING_SYNC"
     FAILED = "FAILED"
@@ -237,6 +238,9 @@ class Batch(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     last_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_remote_id: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True)
+    sync_request_xml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -336,6 +340,22 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class ChangeAudit(Base):
+    __tablename__ = "change_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_username: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    entity_id: Mapped[str] = mapped_column(String(120), index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    actor: Mapped[User | None] = relationship()
 
 
 class Company(Base):

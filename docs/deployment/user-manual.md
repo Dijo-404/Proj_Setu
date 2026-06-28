@@ -153,4 +153,6 @@ Open a serial detail page to see the full scan and transaction history for one s
 3. Click `Download backup`.
 4. Store the downloaded `.db` file safely.
 
-Scheduled server backups should include the whole `data/` folder and a separate copy of `.env`.
+Setu also creates verified automatic backups into `data/backups/` by default,
+keeps the latest 14 files, and can copy them to another drive or network share
+when `BACKUP_OFFSITE_DIRECTORY` is configured. Keep a separate copy of `.env`.

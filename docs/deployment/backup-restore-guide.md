@@ -9,10 +9,24 @@
 
 The backup uses SQLite's backup API, so WAL data is included.
 
-For scheduled server backups such as Cobian Reflector, include the whole project
-`data/` folder. Do not back up only `data/setu.db` while the app is running,
-because SQLite may also have active `setu.db-wal` and `setu.db-shm` sidecar
-files.
+Automatic verified backups run by default every 24 hours into `data/backups/`.
+The app keeps the latest 14 backup files and opens every new backup for SQLite
+integrity and foreign-key checks before retaining it. Configure these `.env`
+values when needed:
+
+```text
+AUTOMATIC_BACKUPS_ENABLED=true
+BACKUP_DIRECTORY=./data/backups
+BACKUP_OFFSITE_DIRECTORY=
+BACKUP_INTERVAL_HOURS=24
+BACKUP_RETENTION_COUNT=14
+```
+
+Set `BACKUP_OFFSITE_DIRECTORY` to another drive or network share for a verified
+off-machine copy. For an additional server-level backup such as Cobian
+Reflector, include the whole project `data/` folder. Do not back up only
+`data/setu.db` while the app is running, because SQLite may also have active
+`setu.db-wal` and `setu.db-shm` sidecar files.
 
 Also keep a separate copy of:
 

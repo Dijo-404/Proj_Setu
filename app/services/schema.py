@@ -1,13 +1,18 @@
-from sqlalchemy import inspect, text
+from datetime import datetime, timezone
+from pathlib import Path
+import sqlite3
+
+from sqlalchemy import Engine, inspect, text
 
 from app.database import engine
 
 
-def ensure_runtime_schema() -> None:
-    inspector = inspect(engine)
+def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
+    target = target_engine or engine
+    inspector = inspect(target)
     if "batches" not in inspector.get_table_names():
         return
-    with engine.begin() as connection:
+    with target.begin() as connection:
         columns = {column["name"] for column in inspector.get_columns("batches")}
         if "retry_count" not in columns:
             connection.execute(text("ALTER TABLE batches ADD COLUMN retry_count INTEGER DEFAULT 0"))
@@ -15,6 +20,18 @@ def ensure_runtime_schema() -> None:
             connection.execute(text("ALTER TABLE batches ADD COLUMN last_retry_at DATETIME"))
         if "reason_code" not in columns:
             connection.execute(text("ALTER TABLE batches ADD COLUMN reason_code VARCHAR(80)"))
+        if "sync_remote_id" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN sync_remote_id VARCHAR(80)"))
+            connection.execute(
+                text("CREATE UNIQUE INDEX IF NOT EXISTS ix_batches_sync_remote_id ON batches (sync_remote_id)")
+            )
+        if "sync_request_xml" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN sync_request_xml TEXT"))
+        if "sync_started_at" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN sync_started_at DATETIME"))
+            connection.execute(
+                text("CREATE INDEX IF NOT EXISTS ix_batches_sync_started_at ON batches (sync_started_at)")
+            )
 
         if "serials" in inspector.get_table_names():
             serial_columns = {column["name"] for column in inspector.get_columns("serials")}
@@ -99,7 +116,7 @@ def ensure_runtime_schema() -> None:
                     )
                 )
 
-        if engine.dialect.name == "sqlite" and "stock_relocations" in inspector.get_table_names():
+        if target.dialect.name == "sqlite" and "stock_relocations" in inspector.get_table_names():
             for table_name in ("stock_relocations", "relocation_serials"):
                 connection.execute(
                     text(
@@ -123,3 +140,175 @@ def ensure_runtime_schema() -> None:
                         """
                     )
                 )
+
+    if target.dialect.name == "sqlite" and _missing_inventory_foreign_keys(target):
+        _backup_before_schema_rebuild(target)
+        _rebuild_sqlite_inventory_tables(target)
+
+
+def _missing_inventory_foreign_keys(target: Engine) -> bool:
+    inspector = inspect(target)
+    expected = {
+        "serials": {"label_printed_by_id", "location_id"},
+        "batch_items": {"shelf_location_id", "shelf_verified_by_id"},
+    }
+    required_for_rebuild = {
+        "serials": {
+            "id",
+            "serial_number",
+            "product_id",
+            "status",
+            "active",
+            "created_at",
+            "replaced_by_id",
+            "label_printed_at",
+            "label_printed_by_id",
+            "product_batch_number",
+            "mfg_date",
+            "expiry_date",
+            "warehouse",
+            "warehouse_level",
+            "location_id",
+        },
+        "batch_items": {
+            "id",
+            "batch_id",
+            "serial_id",
+            "quantity",
+            "rate",
+            "remarks",
+            "fefo_picked",
+            "shelf_location_id",
+            "shelf_verified_by_id",
+            "shelf_verified_at",
+            "created_at",
+        },
+    }
+    for table_name, columns in expected.items():
+        if table_name not in inspector.get_table_names():
+            continue
+        table_columns = {column["name"] for column in inspector.get_columns(table_name)}
+        if not required_for_rebuild[table_name].issubset(table_columns):
+            continue
+        constrained = {
+            column
+            for foreign_key in inspector.get_foreign_keys(table_name)
+            for column in foreign_key["constrained_columns"]
+        }
+        if not columns.issubset(constrained):
+            return True
+    return False
+
+
+def _backup_before_schema_rebuild(target: Engine) -> Path | None:
+    database = target.url.database
+    if not database or database == ":memory:":
+        return None
+    source_path = Path(database).resolve()
+    if not source_path.exists():
+        return None
+    backup_dir = source_path.parent / "schema-backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    destination = backup_dir / f"{source_path.stem}-before-inventory-fk-{stamp}.db"
+    source = sqlite3.connect(source_path)
+    try:
+        backup = sqlite3.connect(destination)
+        try:
+            source.backup(backup)
+        finally:
+            backup.close()
+    finally:
+        source.close()
+    return destination
+
+
+def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
+    connection = target.raw_connection()
+    cursor = connection.cursor()
+    try:
+        connection.commit()
+        cursor.execute("PRAGMA foreign_keys=OFF")
+        cursor.executescript(
+            """
+            BEGIN IMMEDIATE;
+
+            CREATE TABLE serials__setu_new (
+                id INTEGER NOT NULL PRIMARY KEY,
+                serial_number VARCHAR(140) NOT NULL,
+                product_id INTEGER NOT NULL REFERENCES products(id),
+                status VARCHAR(40) NOT NULL,
+                active BOOLEAN NOT NULL,
+                created_at DATETIME NOT NULL,
+                replaced_by_id INTEGER REFERENCES serials__setu_new(id),
+                label_printed_at DATETIME,
+                label_printed_by_id INTEGER REFERENCES users(id),
+                product_batch_number VARCHAR(80),
+                mfg_date DATE,
+                expiry_date DATE,
+                warehouse VARCHAR(80),
+                warehouse_level VARCHAR(40) NOT NULL DEFAULT 'Company Warehouse',
+                location_id INTEGER REFERENCES storage_locations(id)
+            );
+
+            CREATE TABLE batch_items__setu_new (
+                id INTEGER NOT NULL PRIMARY KEY,
+                batch_id INTEGER NOT NULL REFERENCES batches(id),
+                serial_id INTEGER NOT NULL REFERENCES serials__setu_new(id),
+                quantity INTEGER NOT NULL,
+                rate FLOAT,
+                remarks TEXT,
+                fefo_picked BOOLEAN NOT NULL DEFAULT 0,
+                shelf_location_id INTEGER REFERENCES storage_locations(id),
+                shelf_verified_by_id INTEGER REFERENCES users(id),
+                shelf_verified_at DATETIME,
+                created_at DATETIME NOT NULL,
+                CONSTRAINT uq_batch_serial UNIQUE (batch_id, serial_id)
+            );
+
+            INSERT INTO serials__setu_new (
+                id, serial_number, product_id, status, active, created_at, replaced_by_id,
+                label_printed_at, label_printed_by_id, product_batch_number, mfg_date,
+                expiry_date, warehouse, warehouse_level, location_id
+            )
+            SELECT
+                id, serial_number, product_id, status, active, created_at, replaced_by_id,
+                label_printed_at, label_printed_by_id, product_batch_number, mfg_date,
+                expiry_date, warehouse, COALESCE(warehouse_level, 'Company Warehouse'), location_id
+            FROM serials;
+
+            INSERT INTO batch_items__setu_new (
+                id, batch_id, serial_id, quantity, rate, remarks, fefo_picked,
+                shelf_location_id, shelf_verified_by_id, shelf_verified_at, created_at
+            )
+            SELECT
+                id, batch_id, serial_id, quantity, rate, remarks, COALESCE(fefo_picked, 0),
+                shelf_location_id, shelf_verified_by_id, shelf_verified_at, created_at
+            FROM batch_items;
+
+            DROP TABLE batch_items;
+            DROP TABLE serials;
+            ALTER TABLE serials__setu_new RENAME TO serials;
+            ALTER TABLE batch_items__setu_new RENAME TO batch_items;
+
+            CREATE UNIQUE INDEX ix_serials_serial_number ON serials (serial_number);
+            CREATE INDEX ix_serials_status ON serials (status);
+            CREATE INDEX ix_serials_product_batch_number ON serials (product_batch_number);
+            CREATE INDEX ix_serials_expiry_date ON serials (expiry_date);
+            CREATE INDEX ix_serials_warehouse ON serials (warehouse);
+            CREATE INDEX ix_serials_warehouse_level ON serials (warehouse_level);
+            CREATE INDEX ix_serials_location_id ON serials (location_id);
+            CREATE INDEX ix_batch_items_shelf_location_id ON batch_items (shelf_location_id);
+            """
+        )
+        violations = cursor.execute("PRAGMA foreign_key_check").fetchall()
+        if violations:
+            raise RuntimeError(f"Foreign-key violations after schema migration: {violations[:5]}")
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+        connection.close()

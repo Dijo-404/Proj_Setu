@@ -13,7 +13,8 @@ from sqlalchemy.orm import Session
 from app.auth import require_permission
 from app.database import get_db
 from app.models import Product, Serial
-from app.services.settings import update_settings
+from app.services.change_audit import record_change
+from app.services.settings import get_all_settings, update_settings
 from app.services.stock_movement import (
     FRANCHISE_LEVELS,
     MOVEMENT_EXPORT_HEADERS,
@@ -196,7 +197,8 @@ def save_stock_movement_settings(
     medium_up_to_pct: float = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
+    before = get_all_settings(db)
     config = MovementConfig(
         analysis_days=analysis_days,
         dead_below_pct=dead_below_pct,
@@ -210,15 +212,23 @@ def save_stock_movement_settings(
             f"/stock-movement?{urlencode({'config_error': str(exc)})}",
             status_code=303,
         )
-    update_settings(
+    values = {
+        "movement_analysis_days": str(config.analysis_days),
+        "movement_dead_below_pct": str(config.dead_below_pct),
+        "movement_slow_below_pct": str(config.slow_below_pct),
+        "movement_medium_up_to_pct": str(config.medium_up_to_pct),
+    }
+    update_settings(db, values, commit=False)
+    record_change(
         db,
-        {
-            "movement_analysis_days": str(config.analysis_days),
-            "movement_dead_below_pct": str(config.dead_below_pct),
-            "movement_slow_below_pct": str(config.slow_below_pct),
-            "movement_medium_up_to_pct": str(config.medium_up_to_pct),
-        },
+        user,
+        entity_type="settings",
+        entity_id="stock_movement",
+        action="update",
+        before={key: before.get(key, "") for key in values},
+        after=values,
     )
+    db.commit()
     return RedirectResponse("/stock-movement?saved=1", status_code=303)
 
 

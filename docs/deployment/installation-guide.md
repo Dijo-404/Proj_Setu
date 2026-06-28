@@ -136,7 +136,12 @@ Expected response:
 
 ## Backup Reminder
 
-Configure the server backup software to include the whole project `data/`
+Setu creates verified automatic backups into `data/backups/` by default. For
+off-machine protection, set `BACKUP_OFFSITE_DIRECTORY` in `.env` to another
+drive or network share and confirm the Maintenance page shows the latest copied
+backup.
+
+If server backup software is also used, include the whole project `data/`
 folder, a separate copy of `.env`, and `deployment/caddy/state` when Caddy is
 used. The Caddy state contains private keys and must not be distributed. The
 app's Maintenance page also provides a SQLite-safe database download for manual

@@ -121,65 +121,71 @@ def assign_barcodes_to_existing_stock(
     if total > MAX_ASSIGNMENT_QUANTITY:
         raise InventoryError(f"Assign {MAX_ASSIGNMENT_QUANTITY} barcodes or fewer at a time")
 
-    batch = create_batch(
-        db,
-        user,
-        BatchType.QR_ASSIGNMENT,
-        party_name="Existing Tally stock",
-        notes=notes,
-        reason_code=source,
-    )
-    created_serials: list[Serial] = []
-    for line in lines:
-        created_serials.extend(
-            generate_serials(
-                db,
-                line.product,
-                line.quantity,
-                prefix=line.prefix or line.product.product_code,
-                initial_status=initial_status,
-                product_batch_number=line.product_batch_number,
-                mfg_date=line.mfg_date,
-                expiry_date=line.expiry_date,
-                warehouse=line.warehouse,
-                warehouse_level=line.warehouse_level,
-            )
-        )
-
-    message = (
-        "Barcode assigned to existing Tally stock"
-        if initial_status == SerialStatus.IN_STOCK
-        else "Barcode generated for future stock movement"
-    )
-    for serial in created_serials:
-        db.add(BatchItem(batch_id=batch.id, serial_id=serial.id))
-        db.add(
-            ScanLog(
-                serial_id=serial.id,
-                serial_number_raw=serial.serial_number,
-                user_id=user.id,
-                action=TransactionType.QR_ASSIGNMENT.value,
-                batch_id=batch.id,
-                status=initial_status.value,
-                message=message,
-            )
-        )
-        log_inventory_transaction(
+    try:
+        batch = create_batch(
             db,
             user,
-            TransactionType.QR_ASSIGNMENT,
-            serial=serial,
-            product=serial.product,
-            batch=batch,
-            status_from=None,
-            status_to=initial_status.value,
+            BatchType.QR_ASSIGNMENT,
+            party_name="Existing Tally stock",
+            notes=notes,
             reason_code=source,
-            notes=notes or message,
+            commit=False,
         )
-    batch.status = BatchStatus.CLOSED.value
-    batch.submitted_at = batch.created_at
-    batch.synced_at = batch.created_at
-    db.commit()
+        created_serials: list[Serial] = []
+        for line in lines:
+            created_serials.extend(
+                generate_serials(
+                    db,
+                    line.product,
+                    line.quantity,
+                    prefix=line.prefix or line.product.product_code,
+                    initial_status=initial_status,
+                    product_batch_number=line.product_batch_number,
+                    mfg_date=line.mfg_date,
+                    expiry_date=line.expiry_date,
+                    warehouse=line.warehouse,
+                    warehouse_level=line.warehouse_level,
+                    commit=False,
+                )
+            )
+
+        message = (
+            "Barcode assigned to existing Tally stock"
+            if initial_status == SerialStatus.IN_STOCK
+            else "Barcode generated for future stock movement"
+        )
+        for serial in created_serials:
+            db.add(BatchItem(batch_id=batch.id, serial_id=serial.id))
+            db.add(
+                ScanLog(
+                    serial_id=serial.id,
+                    serial_number_raw=serial.serial_number,
+                    user_id=user.id,
+                    action=TransactionType.QR_ASSIGNMENT.value,
+                    batch_id=batch.id,
+                    status=initial_status.value,
+                    message=message,
+                )
+            )
+            log_inventory_transaction(
+                db,
+                user,
+                TransactionType.QR_ASSIGNMENT,
+                serial=serial,
+                product=serial.product,
+                batch=batch,
+                status_from=None,
+                status_to=initial_status.value,
+                reason_code=source,
+                notes=notes or message,
+            )
+        batch.status = BatchStatus.CLOSED.value
+        batch.submitted_at = batch.created_at
+        batch.synced_at = batch.created_at
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(batch)
     return batch
 

@@ -16,9 +16,19 @@
   <dl class="details">
     <dt>Database</dt><dd>{{ database_path }}</dd>
     <dt>Format</dt><dd>SQLite database copy</dd>
+    <dt>Automatic backups</dt><dd>{{ 'Enabled' if backup_status.enabled else 'Disabled' }}</dd>
+    <dt>Backup folder</dt><dd>{{ backup_status.directory }}</dd>
+    <dt>Schedule</dt><dd>Every {{ backup_status.interval_hours }} hour{{ '' if backup_status.interval_hours == 1 else 's' }}</dd>
+    <dt>Retention</dt><dd>Last {{ backup_status.retention_count }} verified backup{{ '' if backup_status.retention_count == 1 else 's' }}</dd>
+    <dt>Latest backup</dt><dd>{{ backup_status.latest_backup or 'Not created yet' }}</dd>
+    <dt>Off-machine copy</dt><dd>{{ backup_status.offsite_directory or 'Not configured' }}</dd>
+    {% if backup_status.offsite_directory %}
+    <dt>Latest off-machine backup</dt><dd>{{ backup_status.offsite_latest_backup or 'Not copied yet' }}</dd>
+    {% endif %}
   </dl>
   <p class="muted">The backup uses SQLite's backup API, so pending WAL changes are included in the downloaded file.</p>
-  <p class="muted">For scheduled server backups, include the whole data folder and a separate copy of .env.</p>
+  <p class="muted">Each automatic backup is opened and checked with SQLite integrity and foreign-key verification before it is kept.</p>
+  <p class="muted">Configure BACKUP_OFFSITE_DIRECTORY for a verified copy on another drive or network share. Keep a separate copy of .env.</p>
 </section>
 
 <section class="panel">

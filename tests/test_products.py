@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Product, Serial, SerialStatus, User
+from app.models import ChangeAudit, Product, Serial, SerialStatus, User
 from app.security import create_session_token
 
 
@@ -68,6 +68,11 @@ def test_product_master_saves_and_updates_sales_discount_rate():
         assert saved.default_rate == 525
         assert saved.sales_discount_rate == 12
         assert saved.shelf_verification_interval == 1
+        audits = db.scalars(
+            select(ChangeAudit).where(ChangeAudit.entity_type == "product").order_by(ChangeAudit.id)
+        ).all()
+        assert [row.action for row in audits] == ["create", "update"]
+        assert audits[-1].before_json and audits[-1].after_json
     engine.dispose()
 
     assert page.status_code == 200

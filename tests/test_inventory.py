@@ -1,6 +1,6 @@
 from sqlalchemy import select, update
 
-from app.models import BatchType, InventoryTransaction, Product, Serial, SerialStatus, StorageLocation, TransactionType, User
+from app.models import BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, StorageLocation, TransactionType, User
 from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 from app.services.shelf_verification import verify_pending_items_on_shelf
 
@@ -101,6 +101,15 @@ def test_sale_rejects_generated_serial(db_session):
         assert True
     else:
         assert False
+    rejected = db_session.scalar(
+        select(ScanLog).where(
+            ScanLog.batch_id == batch.id,
+            ScanLog.serial_id == serial.id,
+            ScanLog.status == "REJECTED",
+        )
+    )
+    assert rejected is not None
+    assert "not available for sale" in rejected.message
 
 
 def test_purchase_batch_logs_purchase_transaction(db_session):

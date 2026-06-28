@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission
 from app.database import get_db
+from app.models import Company
 from app.services.access_control import role_has_access
+from app.services.change_audit import record_change
 from app.services.settings import (
     company_config,
     get_active_company,
@@ -23,6 +25,17 @@ from app.services.tally_masters import (
 from app.templates import templates
 
 router = APIRouter(prefix="/tally-check")
+
+
+def company_snapshot(company: Company | None) -> dict[str, object] | None:
+    if not company:
+        return None
+    return {
+        "id": company.id,
+        "name": company.name,
+        "is_active": company.is_active,
+        "config": company_config(company),
+    }
 
 
 def render_check_page(
@@ -89,7 +102,8 @@ def save_company(
     default_party_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "settings_edit")
+    user = require_permission(request, db, "settings_edit")
+    before = company_snapshot(db.get(Company, company_id))
     config = {
         "company_name": company_name,
         "tally_host": tally_host,
@@ -105,9 +119,23 @@ def save_company(
         "default_party_name": default_party_name,
     }
     try:
-        company = update_company(db, company_id, name, config)
+        company = update_company(db, company_id, name, config, commit=False)
+        record_change(
+            db,
+            user,
+            entity_type="company",
+            entity_id=company.id,
+            action="update",
+            before=before,
+            after=company_snapshot(company),
+        )
+        db.commit()
     except ValueError as exc:
+        db.rollback()
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception:
+        db.rollback()
+        raise
     return JSONResponse(
         {
             "ok": True,

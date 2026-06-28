@@ -30,7 +30,14 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
             db.rollback()
             raise InventoryError("Replacement serial already exists") from exc
     else:
-        replacement = generate_serials(db, old_serial.product, 1, old_serial.product.product_code, original_status)[0]
+        replacement = generate_serials(
+            db,
+            old_serial.product,
+            1,
+            old_serial.product.product_code,
+            original_status,
+            commit=False,
+        )[0]
 
     # A label replacement is the same physical unit, so retain every stock-analysis dimension.
     replacement.product_batch_number = old_serial.product_batch_number
@@ -80,7 +87,11 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
         status_to=replacement.status,
         notes=f"Replaces: {old_serial.serial_number}. {reason or ''}".strip(),
     )
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     db.refresh(replacement)
     return replacement
 

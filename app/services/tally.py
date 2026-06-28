@@ -6,9 +6,10 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+from uuid import NAMESPACE_URL, uuid5
 from xml.etree import ElementTree as ET
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.models import Batch, BatchStatus, BatchType, SyncAttempt, utc_now
@@ -23,6 +24,7 @@ from app.services.voucher import calculate_voucher_summary
 
 
 TALLY_XML_SUPPORTED_BATCH_TYPES = {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}
+SYNC_LEASE_MINUTES = 10
 REQUIRED_TALLY_SETTING_KEYS = {
     "company_name": "company name",
     "sales_voucher_type": "sales voucher type",
@@ -86,6 +88,13 @@ def _voucher_date(batch: Batch) -> str:
     return moment.astimezone(_IST).strftime("%Y%m%d")
 
 
+def tally_remote_id(batch: Batch, settings: dict[str, str]) -> str:
+    if batch.sync_remote_id:
+        return batch.sync_remote_id
+    company = settings.get("company_name", "").strip().casefold()
+    return str(uuid5(NAMESPACE_URL, f"setu:tally:{company}:{batch.batch_number}"))
+
+
 def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     require_tally_settings(settings)
     batch_type = BatchType(batch.batch_type)
@@ -116,7 +125,16 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     _text(static_variables, "SVCURRENTCOMPANY", settings["company_name"])
     request_data = ET.SubElement(import_data, "REQUESTDATA")
     message = ET.SubElement(request_data, "TALLYMESSAGE", {"xmlns:UDF": "TallyUDF"})
-    voucher = ET.SubElement(message, "VOUCHER", {"VCHTYPE": voucher_type, "ACTION": "Create", "OBJVIEW": "Accounting Voucher View"})
+    voucher = ET.SubElement(
+        message,
+        "VOUCHER",
+        {
+            "REMOTEID": tally_remote_id(batch, settings),
+            "VCHTYPE": voucher_type,
+            "ACTION": "Create",
+            "OBJVIEW": "Accounting Voucher View",
+        },
+    )
     _text(voucher, "DATE", _voucher_date(batch))
     _text(voucher, "VOUCHERTYPENAME", voucher_type)
     _text(voucher, "VOUCHERNUMBER", batch.batch_number)
@@ -241,17 +259,35 @@ def sync_batch(db: Session, batch: Batch) -> None:
         current_status = db.scalar(select(Batch.status).where(Batch.id == batch.id))
         if current_status in {BatchStatus.SYNCED.value, BatchStatus.CLOSED.value}:
             return
+        if current_status != batch.status:
+            db.refresh(batch)
         _sync_batch_locked(db, batch)
 
 
 def _sync_batch_locked(db: Session, batch: Batch) -> None:
-    is_retry = batch.status in {BatchStatus.PENDING_SYNC.value, BatchStatus.FAILED.value}
+    now = utc_now()
+    stale_before = now - timedelta(minutes=SYNC_LEASE_MINUTES)
+    sync_started_at = batch.sync_started_at
+    if sync_started_at is not None and sync_started_at.tzinfo is None:
+        sync_started_at = sync_started_at.replace(tzinfo=timezone.utc)
+    if (
+        batch.status == BatchStatus.SYNCING.value
+        and sync_started_at is not None
+        and sync_started_at > stale_before
+    ):
+        return
+
+    is_retry = batch.status in {
+        BatchStatus.PENDING_SYNC.value,
+        BatchStatus.FAILED.value,
+        BatchStatus.SYNCING.value,
+    }
     if is_retry:
         batch.retry_count = (batch.retry_count or 0) + 1
-        batch.last_retry_at = utc_now()
+        batch.last_retry_at = now
     if BatchType(batch.batch_type) in {BatchType.AUDIT, BatchType.QR_ASSIGNMENT}:
         batch.status = BatchStatus.CLOSED.value
-        batch.synced_at = utc_now()
+        batch.synced_at = now
         db.commit()
         return
     settings = get_all_settings(db)
@@ -261,8 +297,9 @@ def _sync_batch_locked(db: Session, batch: Batch) -> None:
         db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, error=batch.last_error))
         db.commit()
         return
+    batch.sync_remote_id = tally_remote_id(batch, settings)
     try:
-        xml = build_voucher_xml(batch, settings)
+        xml = batch.sync_request_xml or build_voucher_xml(batch, settings)
     except TallySyncError as exc:
         batch.status = BatchStatus.PENDING_SYNC.value
         batch.last_error = str(exc)
@@ -271,37 +308,63 @@ def _sync_batch_locked(db: Session, batch: Batch) -> None:
         return
     if not is_tally_enabled(db):
         batch.status = BatchStatus.PENDING_SYNC.value
+        batch.sync_request_xml = xml
         batch.last_error = "Tally sync is disabled in settings"
         db.add(SyncAttempt(batch_id=batch.id, status=BatchStatus.PENDING_SYNC.value, request_xml=xml, error=batch.last_error))
         db.commit()
         return
+
+    claim_status = batch.status
+    claim_query = update(Batch).where(Batch.id == batch.id, Batch.status == claim_status)
+    if claim_status == BatchStatus.SYNCING.value:
+        if batch.sync_started_at is None:
+            claim_query = claim_query.where(Batch.sync_started_at.is_(None))
+        else:
+            claim_query = claim_query.where(Batch.sync_started_at == batch.sync_started_at)
+    claim = db.execute(
+        claim_query
+        .values(
+            status=BatchStatus.SYNCING.value,
+            sync_remote_id=batch.sync_remote_id,
+            sync_request_xml=xml,
+            sync_started_at=now,
+            retry_count=batch.retry_count,
+            last_retry_at=batch.last_retry_at,
+            last_error=None,
+        )
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    if claim != 1:
+        db.rollback()
+        return
+    attempt = SyncAttempt(
+        batch_id=batch.id,
+        status=BatchStatus.SYNCING.value,
+        request_xml=xml,
+    )
+    db.add(attempt)
+    db.commit()
+    db.refresh(batch)
+
     try:
         result = post_to_tally(xml, settings)
     except TallySyncError as exc:
         batch.status = BatchStatus.PENDING_SYNC.value if exc.retryable else BatchStatus.FAILED.value
         batch.last_error = str(exc)
-        db.add(
-            SyncAttempt(
-                batch_id=batch.id,
-                status=batch.status,
-                request_xml=exc.request_xml,
-                response_xml=exc.response_xml,
-                error=str(exc),
-            )
-        )
+        batch.sync_started_at = None
+        attempt.status = batch.status
+        attempt.request_xml = exc.request_xml or xml
+        attempt.response_xml = exc.response_xml
+        attempt.error = str(exc)
         db.commit()
         return
     batch.status = BatchStatus.SYNCED.value
     batch.tally_reference = result.reference
     batch.last_error = None
     batch.synced_at = utc_now()
+    batch.sync_started_at = None
     update_batch_transaction_references(db, batch)
-    db.add(
-        SyncAttempt(
-            batch_id=batch.id,
-            status=BatchStatus.SYNCED.value,
-            request_xml=result.request_xml,
-            response_xml=result.response_xml,
-        )
-    )
+    attempt.status = BatchStatus.SYNCED.value
+    attempt.request_xml = result.request_xml
+    attempt.response_xml = result.response_xml
     db.commit()

@@ -1,7 +1,17 @@
 import inspect
 import json
 
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.auth import SESSION_COOKIE
+from app.database import Base, get_db
+from app.main import app
+from app.models import ChangeAudit, Company, User
 from app.routers.settings import autosave_settings, validate_settings
+from app.security import create_session_token
 from app.services.settings import (
     COMPANY_SETTING_KEYS,
     LEGACY_PLACEHOLDER_SETTINGS,
@@ -14,11 +24,11 @@ from app.services.settings import (
     get_active_company,
     get_all_settings,
     parse_sales_gst_ledger_mappings,
+    persist_settings_and_active_company,
     save_active_company_config,
     update_company,
     update_settings,
 )
-from app.models import Company
 
 
 VALID_SETTINGS = {
@@ -74,6 +84,59 @@ def test_autosave_persists_fields_and_mirrors_active_company(db_session):
 
     active = get_active_company(db_session)
     assert json.loads(active.config)["sales_ledger_name"] == "Sales @ 12%"
+
+
+def test_autosave_route_records_settings_audit():
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        db.add(User(id=1, username="admin", password_hash="x", role="admin", active=True))
+        _seed(db)
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        with Session() as db:
+            requested = _valid_request(db)
+        requested["sales_ledger_name"] = "Audited Sales Ledger"
+        response = TestClient(app, follow_redirects=False).post(
+            "/settings/autosave",
+            data=requested,
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    with Session() as db:
+        audit = db.scalar(select(ChangeAudit).where(ChangeAudit.entity_type == "settings"))
+        assert audit is not None
+        assert audit.action == "autosave"
+        assert "Audited Sales Ledger" in (audit.after_json or "")
+    engine.dispose()
+
+
+def test_settings_and_active_company_update_can_roll_back_together(db_session):
+    _seed(db_session)
+    requested = _valid_request(db_session)
+    requested["sales_ledger_name"] = "Uncommitted Sales"
+    requested["retry_interval_seconds"] = "240"
+
+    persist_settings_and_active_company(db_session, requested, commit=False)
+    db_session.rollback()
+
+    saved = get_all_settings(db_session)
+    assert saved["sales_ledger_name"] == VALID_SETTINGS["sales_ledger_name"]
+    assert saved["retry_interval_seconds"] == VALID_SETTINGS["retry_interval_seconds"]
+    active = get_active_company(db_session)
+    assert json.loads(active.config)["sales_ledger_name"] == VALID_SETTINGS["sales_ledger_name"]
 
 
 def test_autosave_validation_rejects_bad_port_and_interval(db_session):

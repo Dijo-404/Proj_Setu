@@ -7,6 +7,7 @@ from app.auth import require_permission, require_user
 from app.database import get_db
 from app.models import InventoryTransaction, Product, Role, Serial, SerialStatus, User, WarehouseLevel
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
+from app.services.change_audit import record_change
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
 from app.services.stock_movement import (
@@ -21,6 +22,24 @@ router = APIRouter(prefix="/products")
 
 def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
+
+
+def product_snapshot(product: Product) -> dict[str, object]:
+    return {
+        "id": product.id,
+        "product_code": product.product_code,
+        "product_name": product.product_name,
+        "category": product.category,
+        "brand": product.brand,
+        "hsn": product.hsn,
+        "gst_rate": product.gst_rate,
+        "unit": product.unit,
+        "default_rate": product.default_rate,
+        "sales_discount_rate": product.sales_discount_rate,
+        "shelf_verification_interval": product.shelf_verification_interval,
+        "tally_stock_item_name": product.tally_stock_item_name,
+        "active": product.active,
+    }
 
 
 def product_page_context(db: Session, user: User, rows: list[Product], q: str, error: str | None = None) -> dict:
@@ -141,6 +160,16 @@ def create_product(
     )
     db.add(product)
     try:
+        db.flush()
+        record_change(
+            db,
+            user,
+            entity_type="product",
+            entity_id=product.id,
+            action="create",
+            before=None,
+            after=product_snapshot(product),
+        )
         db.commit()
     except Exception:
         db.rollback()
@@ -157,7 +186,8 @@ def create_product(
     return RedirectResponse("/products", status_code=303)
 
 
-@router.api_route("/{product_id}/name", methods=["GET", "POST"])
+@router.get("/{product_id}/name", operation_id="product_name_legacy_redirect_get")
+@router.post("/{product_id}/name", operation_id="product_name_legacy_redirect_post")
 def product_name_legacy_redirect(request: Request, product_id: int, db: Session = Depends(get_db)):
     require_permission(request, db, "product_master")
     return RedirectResponse("/products", status_code=303)
@@ -169,7 +199,7 @@ def delete_product(
     product_id: int,
     db: Session = Depends(get_db),
 ):
-    require_user(request, db, {Role.SUPER_ADMIN})
+    user = require_user(request, db, {Role.SUPER_ADMIN})
     product = db.get(Product, product_id)
     if not product:
         return RedirectResponse("/products", status_code=303)
@@ -179,6 +209,16 @@ def delete_product(
     if serial_count or transaction_count:
         return RedirectResponse("/products?error=product_delete_blocked", status_code=303)
 
+    before = product_snapshot(product)
+    record_change(
+        db,
+        user,
+        entity_type="product",
+        entity_id=product.id,
+        action="delete",
+        before=before,
+        after=None,
+    )
     db.delete(product)
     db.commit()
     return RedirectResponse("/products", status_code=303)
@@ -195,7 +235,7 @@ def update_product_pricing(
     brand: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "product_create")
+    user = require_permission(request, db, "product_create")
     product = db.get(Product, product_id)
     if not product:
         if wants_json(request):
@@ -218,6 +258,7 @@ def update_product_pricing(
                 status_code=400,
             )
         return RedirectResponse("/products?error=shelf_interval_invalid", status_code=303)
+    before = product_snapshot(product)
     product.default_rate = default_rate
     product.sales_discount_rate = sales_discount_rate
     if shelf_verification_interval is not None:
@@ -228,6 +269,15 @@ def update_product_pricing(
         product.category = category.strip() or None
     if brand is not None:
         product.brand = brand.strip() or None
+    record_change(
+        db,
+        user,
+        entity_type="product",
+        entity_id=product.id,
+        action="update",
+        before=before,
+        after=product_snapshot(product),
+    )
     db.commit()
     db.refresh(product)
     if wants_json(request):

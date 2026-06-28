@@ -117,14 +117,23 @@ def get_all_settings(db: Session) -> dict[str, str]:
     return values
 
 
-def update_settings(db: Session, values: dict[str, str]) -> None:
+def _apply_settings(db: Session, values: dict[str, str]) -> None:
     for key, value in values.items():
         row = db.get(Setting, key)
         if row:
             row.value = value
         else:
             db.add(Setting(key=key, value=value))
-    db.commit()
+
+
+def update_settings(db: Session, values: dict[str, str], *, commit: bool = True) -> None:
+    _apply_settings(db, values)
+    if commit:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
 
 def clear_legacy_placeholder_settings(db: Session) -> None:
@@ -206,7 +215,7 @@ def validate_company_fields(config: dict[str, str]) -> str | None:
     return None
 
 
-def add_company(db: Session, name: str, config: dict[str, str]) -> Company:
+def add_company(db: Session, name: str, config: dict[str, str], *, commit: bool = True) -> Company:
     clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
     label = (name or clean["company_name"]).strip()
     if not label:
@@ -219,13 +228,21 @@ def add_company(db: Session, name: str, config: dict[str, str]) -> Company:
     is_first = db.scalar(select(Company.id).limit(1)) is None
     company = Company(name=label, config=json.dumps(clean), is_active=is_first)
     db.add(company)
-    db.commit()
     if is_first:
-        update_settings(db, clean)
+        _apply_settings(db, clean)
+    try:
+        db.flush()
+        if commit:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if commit:
+        db.refresh(company)
     return company
 
 
-def update_company(db: Session, company_id: int, name: str, config: dict[str, str]) -> Company:
+def update_company(db: Session, company_id: int, name: str, config: dict[str, str], *, commit: bool = True) -> Company:
     company = db.get(Company, company_id)
     if not company:
         return _raise("Company not found.")
@@ -243,25 +260,38 @@ def update_company(db: Session, company_id: int, name: str, config: dict[str, st
         return _raise(error)
     company.name = label
     company.config = json.dumps(clean)
-    db.commit()
     if company.is_active:
-        update_settings(db, clean)
-    db.refresh(company)
+        _apply_settings(db, clean)
+    try:
+        db.flush()
+        if commit:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    if commit:
+        db.refresh(company)
     return company
 
 
-def activate_company(db: Session, company_id: int) -> None:
+def activate_company(db: Session, company_id: int, *, commit: bool = True) -> None:
     company = db.get(Company, company_id)
     if not company:
         return _raise("Company not found.")
     for other in list_companies(db):
         other.is_active = other.id == company.id
-    db.commit()
     config = company_config(company)
-    update_settings(db, {**config, "tally_enabled": "false"})
+    _apply_settings(db, {**config, "tally_enabled": "false"})
+    try:
+        db.flush()
+        if commit:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
-def delete_company(db: Session, company_id: int) -> None:
+def delete_company(db: Session, company_id: int, *, commit: bool = True) -> None:
     company = db.get(Company, company_id)
     if not company:
         return _raise("Company not found.")
@@ -270,16 +300,38 @@ def delete_company(db: Session, company_id: int) -> None:
     if company.is_active:
         return _raise("Activate another company before deleting this one.")
     db.delete(company)
-    db.commit()
+    try:
+        db.flush()
+        if commit:
+            db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
 
-def save_active_company_config(db: Session, config: dict[str, str]) -> None:
+def save_active_company_config(db: Session, config: dict[str, str], *, commit: bool = True) -> None:
     company = get_active_company(db)
     if not company:
         return
     clean = {key: (config.get(key, "") or "").strip() for key in COMPANY_SETTING_KEYS}
     company.config = json.dumps(clean)
-    db.commit()
+    if commit:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
+
+
+def persist_settings_and_active_company(db: Session, values: dict[str, str], *, commit: bool = True) -> None:
+    _apply_settings(db, values)
+    save_active_company_config(db, values, commit=False)
+    if commit:
+        try:
+            db.commit()
+        except Exception:
+            db.rollback()
+            raise
 
 
 def _raise(message: str):

@@ -8,6 +8,7 @@ from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.middleware import CSRFOriginMiddleware
 from app.routers import account, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, stock_movement, tally_check, users, warehouse
+from app.services.backup_worker import start_backup_worker, stop_backup_worker
 from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
 from app.services.sync_worker import start_retry_worker, stop_retry_worker
@@ -48,10 +49,12 @@ def create_app() -> FastAPI:
         with SessionLocal() as db:
             bootstrap(db)
         start_retry_worker(app)
+        start_backup_worker(app)
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
         await stop_retry_worker(app)
+        await stop_backup_worker(app)
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:
