@@ -229,13 +229,13 @@ tfoot th, tfoot td {
 }
 
 .access-select {
-  width: 124px;
-  min-width: 124px;
-  height: 38px;
-  min-height: 38px;
-  padding: 5px 30px 5px 16px;
+  width: 96px;
+  min-width: 96px;
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 24px 4px 10px;
   border-radius: var(--r-pill);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   text-align: center;
   text-align-last: center;
@@ -259,8 +259,8 @@ tfoot th, tfoot td {
   position: relative;
   display: inline-flex;
   justify-content: center;
-  width: 124px;
-  min-width: 124px;
+  width: 96px;
+  min-width: 96px;
 }
 
 .access-picker__button {
@@ -268,14 +268,14 @@ tfoot th, tfoot td {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 124px;
-  min-width: 124px;
-  height: 38px;
-  min-height: 38px;
+  width: 96px;
+  min-width: 96px;
+  height: 32px;
+  min-height: 32px;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: var(--r-pill);
-  padding: 5px 34px 5px 16px;
-  font-size: 13px;
+  padding: 4px 26px 4px 10px;
+  font-size: 12px;
   font-weight: 700;
   line-height: 1;
   cursor: pointer;
@@ -287,9 +287,9 @@ tfoot th, tfoot td {
 .access-picker__button::after {
   content: "";
   position: absolute;
-  right: 16px;
-  width: 8px;
-  height: 8px;
+  right: 12px;
+  width: 7px;
+  height: 7px;
   border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: translateY(-2px) rotate(45deg);
@@ -315,8 +315,8 @@ tfoot th, tfoot td {
   left: 50%;
   z-index: 12;
   display: none;
-  width: 124px;
-  padding: 5px;
+  width: 104px;
+  padding: 4px;
   border: 1px solid var(--hairline-soft);
   border-radius: 18px;
   background: rgba(255, 255, 255, 0.96);
@@ -331,18 +331,23 @@ tfoot th, tfoot td {
   gap: 3px;
 }
 
+.access-picker.opens-up .access-picker__menu {
+  top: auto;
+  bottom: calc(100% + 7px);
+}
+
 .access-picker__option {
   display: flex;
   align-items: center;
   justify-content: center;
   width: 100%;
-  min-height: 34px;
+  min-height: 30px;
   border: 0;
   border-radius: var(--r-pill);
-  padding: 6px 10px;
+  padding: 5px 8px;
   background: transparent;
   color: var(--ink-80);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -359,12 +364,12 @@ tfoot th, tfoot td {
 
 .access-table .status {
   justify-content: center;
-  width: 124px;
-  min-width: 124px;
-  height: 38px;
-  min-height: 38px;
-  padding: 5px 16px;
-  font-size: 13px;
+  width: 96px;
+  min-width: 96px;
+  height: 32px;
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
   font-weight: 700;
 }
 
