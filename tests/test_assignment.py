@@ -3,7 +3,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from sqlalchemy import func, select
 
-from app.models import Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
+from app.models import Batch, BatchItem, BatchStatus, BatchType, ChangeAudit, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
 from app.services import assignment as assignment_service
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import serials_xlsx
@@ -54,6 +54,71 @@ def test_bulk_assignment_xlsx_uses_existing_product_codes(db_session):
     assert len(lines) == 1
     assert lines[0].product.id == product.id
     assert lines[0].quantity == 2
+
+
+def test_bulk_assignment_xlsx_can_create_product_from_imported_name_and_tax(db_session):
+    user = User(username="import-admin", password_hash="x", role="admin")
+    db_session.add(user)
+    db_session.commit()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Product Name", "HSN", "GST", "SGST", "IGST", "Quantity"])
+    sheet.append(["SG Omega Softgel 500mg", "2106", "5", "2.5", "", 3])
+    stream = BytesIO()
+    workbook.save(stream)
+
+    lines = parse_bulk_assignment_xlsx(db_session, stream.getvalue(), user=user)
+
+    assert len(lines) == 1
+    assert lines[0].quantity == 3
+    assert lines[0].product.product_name == "SG Omega Softgel 500mg"
+    assert lines[0].product.hsn == "2106"
+    assert lines[0].product.gst_rate == 5
+    assert lines[0].product.tally_stock_item_name == "SG Omega Softgel 500mg"
+    audit = db_session.scalar(select(ChangeAudit).where(ChangeAudit.entity_type == "product"))
+    assert audit is not None
+    assert audit.actor_username == "import-admin"
+
+
+def test_tally_invoice_export_import_generates_assignment_labels(db_session):
+    user = User(username="tally-import-admin", password_hash="x", role="admin")
+    db_session.add(user)
+    db_session.commit()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "INVOICE"
+
+    def append_row(values):
+        row = [None] * 18
+        for col, value in values.items():
+            row[col - 1] = value
+        sheet.append(row)
+
+    append_row({6: "INVOICE"})
+    append_row({1: "SWARNAGOWRI 26-27", 10: "Invoice No.", 13: "Dated"})
+    append_row({1: "Supplier (Bill from)"})
+    append_row({1: "KAI HERBALS"})
+    append_row({1: "Sl", 2: "Description of Goods", 11: "Quantity", 12: "Rate", 13: "per", 15: "Amount"})
+    append_row({})
+    append_row({1: 1, 2: "SG OMEGA 3SOFT GEL 500 MG(60 CAP)", 11: 3, 12: 95.24, 13: "Pac", 15: 285.72})
+    append_row({1: 2, 2: "SG OMEGA SOFTGELCAPSULE 1000MG(30 CAP)", 11: 4, 12: 114.29, 13: "Pac", 15: 457.16})
+    append_row({15: 742.88})
+    append_row({3: "OUTPUT IGST @ 5 %", 12: 5, 13: "%", 15: 37.14})
+    append_row({3: "ROUND OFF", 15: -0.02})
+    append_row({2: "Total", 11: 7, 15: 780})
+    stream = BytesIO()
+    workbook.save(stream)
+
+    lines = parse_bulk_assignment_xlsx(db_session, stream.getvalue(), user=user)
+    batch = assign_barcodes_to_existing_stock(db_session, user, lines, source="BULK_EXCEL")
+
+    assert [line.quantity for line in lines] == [3, 4]
+    assert {line.product.gst_rate for line in lines} == {5}
+    assert {line.product.unit for line in lines} == {"Pac"}
+    assert len(batch.items) == 7
+    assert db_session.scalar(select(func.count(Product.id))) == 2
+    assert db_session.scalar(select(func.count(Serial.id))) == 7
+    assert db_session.scalar(select(func.count(BatchItem.id))) == 7
 
 
 def test_serials_xlsx_exports_generated_barcodes(db_session):

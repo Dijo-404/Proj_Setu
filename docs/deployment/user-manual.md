@@ -65,8 +65,12 @@ Single-product assignment:
 Bulk assignment accepts `.xlsx` files up to 5 MB with these columns:
 
 ```text
-Product Code, Quantity, Batch, Mfg Date, Expiry Date, Warehouse
+Product Code or Product Name, Quantity, HSN, GST, SGST, IGST, Batch, Mfg Date, Expiry Date, Warehouse
 ```
+
+Tally purchase/invoice exports are also accepted when the item table has `Description of Goods` and `Quantity`.
+Rows such as totals, GST ledger rows, and round-off are ignored.
+If a Tally product name is not already in Setu, Setu creates a minimal product from the imported name, HSN, GST rate, and unit before generating labels.
 
 Download the assignment's label PDF and serial XLSX after generation.
 

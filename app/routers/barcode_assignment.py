@@ -109,9 +109,10 @@ def bulk_assignment(
         data = upload.file.read(MAX_BULK_ASSIGNMENT_UPLOAD_BYTES + 1)
         if len(data) > MAX_BULK_ASSIGNMENT_UPLOAD_BYTES:
             raise InventoryError("Upload an Excel file up to 5 MB")
-        lines = parse_bulk_assignment_xlsx(db, data)
+        lines = parse_bulk_assignment_xlsx(db, data, user=user)
         batch = assign_barcodes_to_existing_stock(db, user, lines, notes=notes, source="BULK_EXCEL")
     except InventoryError as exc:
+        db.rollback()
         return _assignment_error(request, db, user, str(exc))
     return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)
 

@@ -220,7 +220,7 @@ QR label assignment:
 
 1. Open `Barcodes` -> `Assignment`.
 2. Select an existing product and quantity, or upload an Excel file.
-3. Optional Excel columns are `Product Code`, `Quantity`, `Batch`, `Mfg Date`, `Expiry Date`, and `Warehouse`.
+3. Excel can use `Product Code` or `Product Name` with `Quantity`; optional columns include `HSN`, `GST`, `SGST`, `IGST`, `Batch`, `Mfg Date`, `Expiry Date`, and `Warehouse`. Tally invoice exports with `Description of Goods` and `Quantity` are also accepted.
 4. Download the generated Excel file and labels PDF.
 
 Barcode replacement:
