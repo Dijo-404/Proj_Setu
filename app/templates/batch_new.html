@@ -1,6 +1,47 @@
 {% extends "base.html" %}
 {% block title %}New batch - Setu{% endblock %}
 {% block content %}
+{% set sale_state_options = state_options|default([
+  'Andaman and Nicobar Islands',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chandigarh',
+  'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jammu and Kashmir',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Ladakh',
+  'Lakshadweep',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Puducherry',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal'
+], true) %}
+{% set selected_gst_treatment = gst_treatment|default('INTRA_STATE', true) %}
+{% set selected_gst_registration = party_gst_registration_type|default('Unregistered/Consumer', true) %}
+{% set gst_number_visible = selected_gst_registration in ['Composition', 'Regular'] %}
 <section class="page-head">
   <div>
     <p class="eyebrow">{{ batch_type.value }}</p>
@@ -13,14 +54,68 @@
   <form method="post" action="/batches" class="stack" data-draft="setu:newbatch:{{ batch_type.value }}">
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
     <label>
-      {% if batch_type.value in ['SALE', 'SALES_RETURN'] %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
+      {% if batch_type.value == 'SALE' %}Debtor ledger name{% elif batch_type.value == 'SALES_RETURN' %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
       <input
         name="party_name"
-        placeholder="Name"
+        placeholder="{% if batch_type.value == 'SALE' %}Exact Tally debtor ledger name{% else %}Name{% endif %}"
         value="{{ party_name or '' }}"
         {% if batch_type.value in ['SALE', 'SALES_RETURN', 'PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}required{% endif %}
       >
     </label>
+    {% if batch_type.value == 'SALE' %}
+    <div class="two-col">
+      <label>GST registration type
+        <select name="party_gst_registration_type">
+          {% for value, label in gst_registration_options|default([
+            ('Unknown', 'Unknown'),
+            ('Composition', 'Composition'),
+            ('Regular', 'Registered'),
+            ('Unregistered/Consumer', 'Unregistered/Consumer')
+          ], true) %}
+          <option value="{{ value }}" {% if selected_gst_registration == value %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>GST name
+        <input
+          name="party_gst_name"
+          placeholder="Buyer name in GST"
+          value="{{ party_gst_name or '' }}"
+        >
+      </label>
+      <label data-gst-number-field {% if not gst_number_visible %}hidden{% endif %}>GST number
+        <input
+          name="party_gstin"
+          maxlength="15"
+          pattern="[0-9A-Za-z]{15}"
+          placeholder="15-character GSTIN"
+          value="{{ party_gstin or '' }}"
+          {% if not gst_number_visible %}disabled{% endif %}
+        >
+      </label>
+      <label>Customer state
+        <input name="party_state" list="sale-state-options" placeholder="State" value="{{ party_state or '' }}">
+        <datalist id="sale-state-options">
+          {% for state in sale_state_options %}
+          <option value="{{ state }}"></option>
+          {% endfor %}
+        </datalist>
+      </label>
+    </div>
+    <div class="two-col">
+      <label data-gst-local-rate>CGST %
+        <input name="gst_cgst_rate" type="number" min="0" max="100" step="0.01" placeholder="2.5" value="{{ gst_cgst_rate or '' }}">
+      </label>
+      <label data-gst-local-rate>SGST %
+        <input name="gst_sgst_rate" type="number" min="0" max="100" step="0.01" placeholder="2.5" value="{{ gst_sgst_rate or '' }}">
+      </label>
+    </div>
+    <div class="two-col">
+      <label data-gst-interstate-rate>IGST % (optional)
+        <input name="gst_igst_rate" type="number" min="0" max="100" step="0.01" placeholder="5" value="{{ gst_igst_rate or '' }}">
+      </label>
+    </div>
+    {% endif %}
     {% if batch_type.value == 'SALES_RETURN' %}
     <label>Return condition
       <select name="reason_code">
@@ -56,4 +151,36 @@
     <button class="button primary full" type="submit">Start {{ 'purchase' if batch_type.value in ['PURCHASE', 'RECEIVE'] else batch_type.value|lower }} batch</button>
   </form>
 </section>
+{% if batch_type.value == 'SALE' %}
+<script>
+  (function () {
+    function initGstRegistrationFields() {
+      const select = document.querySelector('select[name="party_gst_registration_type"]');
+      if (!select) return;
+      const registeredTypes = new Set(["Composition", "Regular"]);
+      const fields = document.querySelectorAll("[data-gst-number-field]");
+
+      function syncFields() {
+        const show = registeredTypes.has(select.value);
+        fields.forEach(function (field) {
+          field.hidden = !show;
+          field.querySelectorAll("input, select, textarea").forEach(function (input) {
+            input.disabled = !show;
+          });
+        });
+      }
+
+      select.addEventListener("change", syncFields);
+      syncFields();
+      requestAnimationFrame(syncFields);
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initGstRegistrationFields);
+    } else {
+      initGstRegistrationFields();
+    }
+  })();
+</script>
+{% endif %}
 {% endblock %}

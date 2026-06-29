@@ -10,11 +10,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, TransactionType, has_any_role, has_role
+from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_report
 from app.services.expiry import expiry_summary
-from app.services.exports import safe_row, scans_xlsx, transactions_xlsx
+from app.services.exports import missing_stock_xlsx, safe_row, scans_xlsx, transactions_xlsx
 from app.services.losses import loss_summary
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
@@ -125,7 +125,7 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
         .limit(500)
         .options(
             selectinload(AuditFinding.batch).selectinload(Batch.user),
-            selectinload(AuditFinding.serial),
+            selectinload(AuditFinding.serial).selectinload(Serial.location),
         )
     )
 
@@ -192,6 +192,42 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,
+        },
+    )
+
+
+@router.get("/missing-stock")
+def missing_stock_report(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    user = require_permission(request, db, "reports_data")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    return templates.TemplateResponse(
+        request,
+        "missing_stock_report.html",
+        {
+            "request": request,
+            "user": user,
+            "findings": findings,
+            "summary": {
+                "total": len(findings),
+                "products": len({finding.product_code for finding in findings if finding.product_code}),
+                "audit_batches": len({finding.batch_id for finding in findings}),
+                "warehouses": len(
+                    {
+                        finding.serial.warehouse
+                        for finding in findings
+                        if finding.serial and finding.serial.warehouse
+                    }
+                ),
+            },
+            "q": q,
+            "start": start,
+            "end": end,
         },
     )
 
@@ -317,4 +353,77 @@ def transactions_excel(request: Request, action: str = "", q: str = "", start: s
         transactions_xlsx(transactions),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-transactions.xlsx"},
+    )
+
+
+@router.get("/missing-stock.csv")
+def missing_stock_csv(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_export")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    stream = StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(
+        [
+            "Audit Date",
+            "Audited By",
+            "Audit Batch",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Product Batch",
+            "Warehouse",
+            "Storage Location",
+            "Mfg Date",
+            "Expiry Date",
+            "Expected Status",
+        ]
+    )
+    for finding in findings:
+        serial = finding.serial
+        writer.writerow(
+            safe_row(
+                [
+                    finding.created_at.isoformat(),
+                    finding.batch.user.username,
+                    finding.batch.batch_number,
+                    finding.serial_number,
+                    finding.product_code or "",
+                    finding.product_name or "",
+                    serial.product_batch_number if serial else "",
+                    serial.warehouse if serial else "",
+                    serial.location.full_path if serial and serial.location else "",
+                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
+                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
+                    finding.expected_status or "",
+                ]
+            )
+        )
+    stream.seek(0)
+    return StreamingResponse(
+        iter([stream.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.csv"},
+    )
+
+
+@router.get("/missing-stock.xlsx")
+def missing_stock_excel(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_export")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    return Response(
+        missing_stock_xlsx(findings),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.xlsx"},
     )

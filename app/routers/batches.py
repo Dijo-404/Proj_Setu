@@ -5,7 +5,18 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, Product, Serial, SyncAttempt
+from app.models import (
+    AuditFinding,
+    Batch,
+    BatchItem,
+    BatchStatus,
+    BatchType,
+    GstRegistrationType,
+    GstTreatment,
+    Product,
+    Serial,
+    SyncAttempt,
+)
 from app.services.audit import reconcile_audit_batch, summarize_audit_findings
 from app.services.exports import audit_report_pdf
 from app.services.expiry import add_fefo_serials_to_batch
@@ -14,6 +25,9 @@ from app.services.inventory import (
     add_serial_to_batch,
     apply_batch_statuses,
     create_batch,
+    gst_registration_requires_gstin,
+    normalize_gst_registration_type,
+    normalize_gstin,
     remove_batch_item,
     update_batch_item_rate,
     update_product_rate_in_batch,
@@ -33,6 +47,81 @@ from app.services.voucher import calculate_voucher_summary, validate_priced_batc
 from app.templates import templates
 
 router = APIRouter(prefix="/batches")
+
+
+INDIAN_STATE_OPTIONS = (
+    "Andaman and Nicobar Islands",
+    "Andhra Pradesh",
+    "Arunachal Pradesh",
+    "Assam",
+    "Bihar",
+    "Chandigarh",
+    "Chhattisgarh",
+    "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi",
+    "Goa",
+    "Gujarat",
+    "Haryana",
+    "Himachal Pradesh",
+    "Jammu and Kashmir",
+    "Jharkhand",
+    "Karnataka",
+    "Kerala",
+    "Ladakh",
+    "Lakshadweep",
+    "Madhya Pradesh",
+    "Maharashtra",
+    "Manipur",
+    "Meghalaya",
+    "Mizoram",
+    "Nagaland",
+    "Odisha",
+    "Puducherry",
+    "Punjab",
+    "Rajasthan",
+    "Sikkim",
+    "Tamil Nadu",
+    "Telangana",
+    "Tripura",
+    "Uttar Pradesh",
+    "Uttarakhand",
+    "West Bengal",
+)
+GST_TREATMENT_OPTIONS = (
+    (GstTreatment.INTRA_STATE.value, "CGST + SGST"),
+    (GstTreatment.INTER_STATE.value, "IGST"),
+)
+GST_REGISTRATION_OPTIONS = tuple(
+    (
+        registration_type.value,
+        "Registered" if registration_type == GstRegistrationType.REGULAR else registration_type.value,
+    )
+    for registration_type in GstRegistrationType
+)
+
+BATCH_LIST_SCOPES = {
+    "all": {
+        "title": "Batches",
+        "eyebrow": "Transactions",
+        "permission": "batch_list",
+        "types": None,
+        "empty_message": "No batches yet",
+    },
+    "purchase": {
+        "title": "Purchase batches",
+        "eyebrow": "Incoming stock",
+        "permission": "purchase_data",
+        "types": (BatchType.PURCHASE.value, BatchType.RECEIVE.value),
+        "empty_message": "No purchase batches yet",
+    },
+    "sales": {
+        "title": "Sales batches",
+        "eyebrow": "Outgoing stock",
+        "permission": "sales_data",
+        "types": (BatchType.SALE.value,),
+        "empty_message": "No sales batches yet",
+    },
+}
 
 
 def wants_json(request: Request) -> bool:
@@ -93,11 +182,97 @@ def parse_batch_type(value: str) -> BatchType:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid batch type") from exc
 
 
+def batch_form_context(
+    request: Request,
+    user,
+    batch_type: BatchType,
+    *,
+    party_name: str = "",
+    party_state: str = "",
+    party_gst_registration_type: str | None = None,
+    party_gst_name: str = "",
+    party_gstin: str = "",
+    gst_treatment: str | None = None,
+    gst_cgst_rate: str = "",
+    gst_sgst_rate: str = "",
+    gst_igst_rate: str = "",
+    notes: str = "",
+    error: str | None = None,
+) -> dict[str, object]:
+    return {
+        "request": request,
+        "user": user,
+        "batch_type": batch_type,
+        "party_name": party_name,
+        "party_state": party_state,
+        "party_gst_registration_type": (
+            party_gst_registration_type or GstRegistrationType.UNREGISTERED_CONSUMER.value
+        ),
+        "party_gst_name": party_gst_name,
+        "party_gstin": party_gstin,
+        "gst_registration_options": GST_REGISTRATION_OPTIONS,
+        "gst_treatment": gst_treatment or GstTreatment.INTRA_STATE.value,
+        "gst_cgst_rate": gst_cgst_rate,
+        "gst_sgst_rate": gst_sgst_rate,
+        "gst_igst_rate": gst_igst_rate,
+        "gst_treatment_options": GST_TREATMENT_OPTIONS,
+        "state_options": INDIAN_STATE_OPTIONS,
+        "notes": notes,
+        "error": error,
+    }
+
+
+def parse_optional_gst_rate(value: str, label: str) -> float | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        rate = float(raw)
+    except ValueError as exc:
+        raise ValueError(f"{label} must be a number.") from exc
+    if rate < 0 or rate > 100:
+        raise ValueError(f"{label} must be between 0 and 100%.")
+    return rate
+
+
+def batch_list_rows(db: Session, batch_types: tuple[str, ...] | None = None) -> list[Batch]:
+    query = select(Batch).options(selectinload(Batch.items))
+    if batch_types:
+        query = query.where(Batch.batch_type.in_(batch_types))
+    return db.scalars(query.order_by(desc(Batch.created_at)).limit(80)).all()
+
+
+def batch_list_response(request: Request, db: Session, scope: str):
+    config = BATCH_LIST_SCOPES[scope]
+    user = require_permission(request, db, config["permission"])
+    return templates.TemplateResponse(
+        request,
+        "batches.html",
+        {
+            "request": request,
+            "user": user,
+            "batches": batch_list_rows(db, config["types"]),
+            "batch_scope": scope,
+            "page_title": config["title"],
+            "page_eyebrow": config["eyebrow"],
+            "empty_message": config["empty_message"],
+        },
+    )
+
+
 @router.get("")
 def batches(request: Request, db: Session = Depends(get_db)):
-    user = require_permission(request, db, "batch_list")
-    rows = db.scalars(select(Batch).order_by(desc(Batch.created_at)).limit(80)).all()
-    return templates.TemplateResponse(request, "batches.html", {"request": request, "user": user, "batches": rows})
+    return batch_list_response(request, db, "all")
+
+
+@router.get("/purchase")
+def purchase_batches(request: Request, db: Session = Depends(get_db)):
+    return batch_list_response(request, db, "purchase")
+
+
+@router.get("/sales")
+def sales_batches(request: Request, db: Session = Depends(get_db)):
+    return batch_list_response(request, db, "sales")
 
 
 @router.get("/new")
@@ -107,14 +282,7 @@ def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: 
     return templates.TemplateResponse(
         request,
         "batch_new.html",
-        {
-            "request": request,
-            "user": user,
-            "batch_type": parsed,
-            "party_name": "",
-            "notes": "",
-            "error": None,
-        },
+        batch_form_context(request, user, parsed),
     )
 
 
@@ -123,12 +291,68 @@ def create_batch_route(
     request: Request,
     batch_type: str = Form(...),
     party_name: str = Form(""),
+    party_state: str = Form(""),
+    party_gst_registration_type: str = Form(""),
+    party_gst_name: str = Form(""),
+    party_gstin: str = Form(""),
+    gst_cgst_rate: str = Form(""),
+    gst_sgst_rate: str = Form(""),
+    gst_igst_rate: str = Form(""),
     reason_code: str = Form(""),
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
     parsed = parse_batch_type(batch_type)
     user = require_permission(request, db, action_key_for_batch(parsed))
+    party_state = party_state.strip() if parsed == BatchType.SALE else ""
+    selected_gst_registration_type = ""
+    selected_gst_treatment = ""
+    cgst_rate = sgst_rate = igst_rate = None
+    if parsed == BatchType.SALE:
+        try:
+            selected_gst_registration_type = normalize_gst_registration_type(
+                party_gst_registration_type,
+                parsed,
+            ) or ""
+            if gst_registration_requires_gstin(selected_gst_registration_type):
+                normalize_gstin(party_gstin)
+            cgst_rate = parse_optional_gst_rate(gst_cgst_rate, "CGST")
+            sgst_rate = parse_optional_gst_rate(gst_sgst_rate, "SGST")
+            igst_rate = parse_optional_gst_rate(gst_igst_rate, "IGST")
+            if igst_rate is not None:
+                if cgst_rate is not None or sgst_rate is not None:
+                    raise ValueError("Enter either IGST, or CGST and SGST. Do not enter both.")
+                cgst_rate = None
+                sgst_rate = None
+                selected_gst_treatment = GstTreatment.INTER_STATE.value
+            else:
+                if (cgst_rate is None) != (sgst_rate is None):
+                    raise ValueError("Enter both CGST and SGST values, or leave both blank.")
+                selected_gst_treatment = GstTreatment.INTRA_STATE.value
+        except ValueError as exc:
+            return templates.TemplateResponse(
+                request,
+                "batch_new.html",
+                batch_form_context(
+                    request,
+                    user,
+                    parsed,
+                    party_name=party_name,
+                    party_state=party_state,
+                    party_gst_registration_type=(
+                        selected_gst_registration_type or party_gst_registration_type
+                    ),
+                    party_gst_name=party_gst_name,
+                    party_gstin=party_gstin,
+                    gst_treatment=selected_gst_treatment,
+                    gst_cgst_rate=gst_cgst_rate,
+                    gst_sgst_rate=gst_sgst_rate,
+                    gst_igst_rate=gst_igst_rate,
+                    notes=notes,
+                    error=str(exc),
+                ),
+                status_code=400,
+            )
     party_required = parsed in {
         BatchType.SALE,
         BatchType.SALES_RETURN,
@@ -141,17 +365,44 @@ def create_batch_route(
         return templates.TemplateResponse(
             request,
             "batch_new.html",
-            {
-                "request": request,
-                "user": user,
-                "batch_type": parsed,
-                "party_name": party_name,
-                "notes": notes,
-                "error": f"{party_label} is required.",
-            },
+            batch_form_context(
+                request,
+                user,
+                parsed,
+                party_name=party_name,
+                party_state=party_state,
+                party_gst_registration_type=(
+                    selected_gst_registration_type or party_gst_registration_type
+                ),
+                party_gst_name=party_gst_name,
+                party_gstin=party_gstin,
+                gst_treatment=selected_gst_treatment,
+                gst_cgst_rate=gst_cgst_rate,
+                gst_sgst_rate=gst_sgst_rate,
+                gst_igst_rate=gst_igst_rate,
+                notes=notes,
+                error=f"{party_label} is required.",
+            ),
             status_code=400,
         )
-    batch = create_batch(db, user, parsed, party_name, notes, reason_code)
+    batch = create_batch(
+        db,
+        user,
+        parsed,
+        party_name,
+        notes,
+        reason_code,
+        party_state=party_state if parsed == BatchType.SALE else None,
+        party_gst_registration_type=(
+            selected_gst_registration_type if parsed == BatchType.SALE else None
+        ),
+        party_gst_name=party_gst_name if parsed == BatchType.SALE else None,
+        party_gstin=party_gstin if parsed == BatchType.SALE else None,
+        gst_treatment=selected_gst_treatment if parsed == BatchType.SALE else None,
+        gst_cgst_rate=cgst_rate,
+        gst_sgst_rate=sgst_rate,
+        gst_igst_rate=igst_rate,
+    )
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 
 

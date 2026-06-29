@@ -3,7 +3,39 @@ from sqlalchemy.orm import sessionmaker
 
 from app.database import Base
 from app.models import Batch, BatchItem, Product, Serial, StorageLocation, User
-from app.services.schema import _rebuild_sqlite_inventory_tables
+from app.services.schema import _rebuild_sqlite_inventory_tables, ensure_runtime_schema
+
+
+def test_runtime_schema_adds_sale_gst_columns_to_batches(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-gst.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE batches (
+                    id INTEGER PRIMARY KEY,
+                    batch_number VARCHAR(80),
+                    batch_type VARCHAR(40),
+                    party_name VARCHAR(180),
+                    user_id INTEGER
+                )
+                """
+            )
+        )
+
+    ensure_runtime_schema(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("batches")}
+    assert {
+        "party_state",
+        "party_gst_registration_type",
+        "party_gst_name",
+        "party_gstin",
+        "gst_treatment",
+        "gst_cgst_rate",
+        "gst_sgst_rate",
+        "gst_igst_rate",
+    } <= columns
 
 
 def test_inventory_table_rebuild_preserves_rows_and_adds_all_foreign_keys(tmp_path):

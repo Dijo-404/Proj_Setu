@@ -53,11 +53,36 @@ def test_collect_master_requirements_includes_products_and_settings(db_session):
     names = {(item.master_type, item.master_name) for item in requirements}
     assert ("Stock Item", "Sg Pepper 100grm") in names
     assert ("Unit", "Pcs") in names
-    assert ("Voucher Type", "Sales") in names
+    assert ("Voucher Type", "Sales") not in names
+    assert ("Ledger", "Sales Ledger") not in names
     assert ("Ledger", "Sales @ 5%") in names
     assert ("Ledger", "Output CGST @ 2.5%") in names
     assert ("Ledger", "Output SGST @ 2.5%") in names
     assert ("Ledger", "Output IGST @ 5%") in names
+
+
+def test_removed_legacy_fields_do_not_create_missing_requirements(db_session):
+    update_settings(
+        db_session,
+        {
+            **VALID_SETTINGS,
+            "sales_voucher_type": "",
+            "purchase_voucher_type": "",
+            "sales_ledger_name": "",
+            "purchase_ledger_name": "",
+            "cgst_ledger_name": "",
+            "sgst_ledger_name": "",
+        },
+    )
+
+    requirements = collect_master_requirements(db_session)
+
+    assert all(item.master_name for item in requirements)
+    assert {item.master_type for item in requirements} == {"Company", "Ledger"}
+    assert {(item.master_type, item.master_name) for item in requirements} == {
+        ("Company", VALID_SETTINGS["company_name"]),
+        ("Ledger", VALID_SETTINGS["round_off_ledger_name"]),
+    }
 
 
 def test_confirmation_updates_readiness_counts(db_session):

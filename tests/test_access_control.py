@@ -149,7 +149,7 @@ def test_role_access_page_is_super_admin_only():
         ">Warehouse</summary>",
         ">Barcodes</summary>",
         ">Serials</a>",
-        ">Reports</a>",
+        ">Reports</summary>",
         ">Tally Check</a>",
         ">Admin</summary>",
     ]

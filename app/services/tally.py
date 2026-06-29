@@ -12,7 +12,7 @@ from xml.etree import ElementTree as ET
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
-from app.models import Batch, BatchStatus, BatchType, SyncAttempt, utc_now
+from app.models import Batch, BatchStatus, BatchType, GstRegistrationType, SyncAttempt, utc_now
 from app.services.inventory import update_batch_transaction_references
 from app.services.settings import (
     get_all_settings,
@@ -27,14 +27,10 @@ TALLY_XML_SUPPORTED_BATCH_TYPES = {BatchType.PURCHASE.value, BatchType.RECEIVE.v
 SYNC_LEASE_MINUTES = 10
 REQUIRED_TALLY_SETTING_KEYS = {
     "company_name": "company name",
-    "sales_voucher_type": "sales voucher type",
-    "purchase_voucher_type": "purchase voucher type",
-    "sales_ledger_name": "sales ledger",
-    "purchase_ledger_name": "purchase ledger",
-    "cgst_ledger_name": "CGST ledger",
-    "sgst_ledger_name": "SGST ledger",
     "round_off_ledger_name": "round off ledger",
 }
+DEFAULT_SALES_VOUCHER_TYPE = "Sales"
+DEFAULT_PURCHASE_VOUCHER_TYPE = "Purchase"
 
 
 class TallySyncError(RuntimeError):
@@ -64,6 +60,56 @@ def require_tally_settings(settings: dict[str, str]) -> None:
         parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
     except ValueError as exc:
         raise TallySyncError(str(exc), retryable=False) from exc
+
+
+def _voucher_type(settings: dict[str, str], is_sale: bool) -> str:
+    if is_sale:
+        return settings.get("sales_voucher_type", "").strip() or DEFAULT_SALES_VOUCHER_TYPE
+    return settings.get("purchase_voucher_type", "").strip() or DEFAULT_PURCHASE_VOUCHER_TYPE
+
+
+def _required_value(settings: dict[str, str], key: str, label: str) -> str:
+    value = settings.get(key, "").strip()
+    if not value:
+        raise TallySyncError(f"Complete Tally settings before generating XML: {label}", retryable=False)
+    return value
+
+
+def _require_sales_gst_mappings_for_batch(
+    sales_gst_mappings: dict[str, dict[str, str]],
+    lines,
+) -> None:
+    missing_rates = sorted(
+        {gst_rate_key(line.gst_rate) for line in lines if gst_rate_key(line.gst_rate) not in sales_gst_mappings},
+        key=lambda value: Decimal(value),
+    )
+    if missing_rates:
+        rates = ", ".join(f"{rate}%" for rate in missing_rates)
+        raise TallySyncError(
+            f"Add product GST ledger mappings for these GST rates before generating XML: {rates}.",
+            retryable=False,
+        )
+
+
+def _purchase_ledgers(settings: dict[str, str], summary) -> dict[str, str]:
+    missing: list[str] = []
+    ledgers = {
+        "purchase": settings.get("purchase_ledger_name", "").strip(),
+        "cgst": settings.get("cgst_ledger_name", "").strip(),
+        "sgst": settings.get("sgst_ledger_name", "").strip(),
+    }
+    if not ledgers["purchase"]:
+        missing.append("purchase ledger")
+    if summary.cgst_amount > 0 and not ledgers["cgst"]:
+        missing.append("CGST ledger")
+    if summary.sgst_amount > 0 and not ledgers["sgst"]:
+        missing.append("SGST ledger")
+    if missing:
+        raise TallySyncError(
+            f"Complete purchase Tally settings before generating XML: {', '.join(missing)}.",
+            retryable=False,
+        )
+    return ledgers
 
 
 def _text(parent: ET.Element, tag: str, value: object | None) -> ET.Element:
@@ -98,26 +144,23 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     require_tally_settings(settings)
     batch_type = BatchType(batch.batch_type)
     is_sale = batch_type == BatchType.SALE
-    voucher_type = settings["sales_voucher_type"] if is_sale else settings["purchase_voucher_type"]
+    voucher_type = _voucher_type(settings, is_sale)
     party_name = (batch.party_name or "").strip()
     if not party_name:
         raise TallySyncError(
             "Add a customer or supplier to this batch before generating Tally XML.",
             retryable=False,
         )
-    income_ledger = settings["sales_ledger_name"] if is_sale else settings["purchase_ledger_name"]
     sales_gst_mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
 
     def sales_ledgers(gst_rate: Decimal) -> dict[str, str]:
-        return sales_gst_mappings.get(
-            gst_rate_key(gst_rate),
-            {
-                "sales": settings["sales_ledger_name"],
-                "cgst": settings["cgst_ledger_name"],
-                "sgst": settings["sgst_ledger_name"],
-                "igst": "",
-            },
-        )
+        key = gst_rate_key(gst_rate)
+        if key not in sales_gst_mappings:
+            raise TallySyncError(
+                f"Add a product GST ledger mapping for {key}% before generating Tally XML.",
+                retryable=False,
+            )
+        return sales_gst_mappings[key]
 
     envelope = ET.Element("ENVELOPE")
     header = ET.SubElement(envelope, "HEADER")
@@ -144,10 +187,28 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
     _text(voucher, "VOUCHERTYPENAME", voucher_type)
     _text(voucher, "VOUCHERNUMBER", batch.batch_number)
     _text(voucher, "PARTYLEDGERNAME", party_name)
+    if is_sale:
+        gst_registration_type = (
+            batch.party_gst_registration_type or GstRegistrationType.UNREGISTERED_CONSUMER.value
+        ).strip()
+        party_gst_name = (batch.party_gst_name or party_name).strip()
+        _text(voucher, "BASICBASEPARTYNAME", party_name)
+        _text(voucher, "BASICBUYERNAME", party_gst_name)
+        _text(voucher, "GSTREGISTRATIONTYPE", gst_registration_type)
+        if batch.party_gstin:
+            _text(voucher, "PARTYGSTIN", batch.party_gstin)
+    if is_sale and batch.party_state:
+        _text(voucher, "STATENAME", batch.party_state)
+        _text(voucher, "PLACEOFSUPPLY", batch.party_state)
+        _text(voucher, "COUNTRYOFRESIDENCE", "India")
     _text(voucher, "PERSISTEDVIEW", "Accounting Voucher View")
     _text(voucher, "NARRATION", f"Setu barcode batch {batch.batch_number}")
 
     summary = calculate_voucher_summary(batch)
+    if is_sale:
+        _require_sales_gst_mappings_for_batch(sales_gst_mappings, summary.lines)
+    else:
+        purchase_ledgers = _purchase_ledgers(settings, summary)
 
     # Tally uses negative amounts for debits and positive amounts for credits.
     income_is_credit = is_sale
@@ -170,7 +231,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
         _text(inventory, "ACTUALQTY", f"{line.quantity} {line.unit}")
         _text(inventory, "BILLEDQTY", f"{line.quantity} {line.unit}")
         allocations = ET.SubElement(inventory, "ACCOUNTINGALLOCATIONS.LIST")
-        line_income_ledger = sales_ledgers(line.gst_rate)["sales"] if is_sale else income_ledger
+        line_income_ledger = sales_ledgers(line.gst_rate)["sales"] if is_sale else purchase_ledgers["purchase"]
         _text(allocations, "LEDGERNAME", line_income_ledger)
         _text(allocations, "ISDEEMEDPOSITIVE", "No" if income_is_credit else "Yes")
         _text(allocations, "AMOUNT", _money(signed_line))
@@ -204,7 +265,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
             add_ledger(
                 voucher,
                 "LEDGERENTRIES.LIST",
-                settings["cgst_ledger_name"],
+                purchase_ledgers["cgst"],
                 summary.cgst_amount,
                 credit=False,
             )
@@ -212,12 +273,18 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
             add_ledger(
                 voucher,
                 "LEDGERENTRIES.LIST",
-                settings["sgst_ledger_name"],
+                purchase_ledgers["sgst"],
                 summary.sgst_amount,
                 credit=False,
             )
     if summary.round_off != 0:
-        add_ledger(voucher, "LEDGERENTRIES.LIST", settings["round_off_ledger_name"], summary.round_off, credit=income_is_credit)
+        add_ledger(
+            voucher,
+            "LEDGERENTRIES.LIST",
+            _required_value(settings, "round_off_ledger_name", "round off ledger"),
+            summary.round_off,
+            credit=income_is_credit,
+        )
 
     add_ledger(voucher, "LEDGERENTRIES.LIST", party_name, summary.final_value, credit=not is_sale)
 

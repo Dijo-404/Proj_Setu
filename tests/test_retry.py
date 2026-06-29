@@ -95,6 +95,7 @@ def test_crash_after_tally_success_reuses_frozen_payload_and_remote_id(db_sessio
         "purchase_ledger_name": "Purchase",
         "cgst_ledger_name": "CGST",
         "sgst_ledger_name": "SGST",
+        "sales_gst_ledger_mappings": "5 | Sales | CGST | SGST | IGST",
         "round_off_ledger_name": "Round Off",
     }
     db_session.add_all(Setting(key=key, value=value) for key, value in settings.items())

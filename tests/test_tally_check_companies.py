@@ -61,15 +61,26 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
         client = TestClient(app, follow_redirects=False)
         cookies = {SESSION_COOKIE: create_session_token(1)}
         page = client.get("/tally-check", cookies=cookies)
+        visible_config = {
+            key: value
+            for key, value in COMPANY_CONFIG.items()
+            if key not in {
+                "sales_voucher_type",
+                "purchase_voucher_type",
+                "sales_ledger_name",
+                "purchase_ledger_name",
+                "cgst_ledger_name",
+                "sgst_ledger_name",
+            }
+        }
         update = client.post(
             f"/tally-check/companies/{company_id}",
             cookies=cookies,
             headers={"Accept": "application/json"},
             data={
-                **COMPANY_CONFIG,
+                **visible_config,
                 "name": "Edited Label",
                 "company_name": "Edited Tally Company",
-                "sales_ledger_name": "Sales @ 5%",
             },
         )
     finally:
@@ -87,8 +98,11 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert "Original Label" in page.text
     assert "Required Tally masters" not in page.text
     assert 'name="default_party_name"' not in page.text
+    assert "Mark checked" not in page.text
+    assert "Unmark" not in page.text
+    assert "tally-check-toggle" in page.text
     assert update.status_code == 200
     assert update.json()["ok"]
     assert saved_name == "Edited Label"
     assert saved_tally_name == "Edited Tally Company"
-    assert settings["sales_ledger_name"] == "Sales @ 5%"
+    assert settings["sales_ledger_name"] == COMPANY_CONFIG["sales_ledger_name"]

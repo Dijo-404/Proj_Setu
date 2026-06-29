@@ -122,6 +122,55 @@ def test_autosave_route_records_settings_audit():
     engine.dispose()
 
 
+def test_settings_routes_preserve_removed_fields_when_omitted():
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    with Session() as db:
+        db.add(User(id=1, username="admin", password_hash="x", role="admin", active=True))
+        _seed(db)
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    visible_fields = {
+        "company_name": "Updated Tally Company",
+        "tally_host": "127.0.0.1",
+        "tally_port": "9000",
+        "sales_gst_ledger_mappings": "",
+        "round_off_ledger_name": "Round Off",
+        "retry_interval_seconds": "180",
+    }
+    cookies = {SESSION_COOKIE: create_session_token(1)}
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        autosave = client.post("/settings/autosave", data=visible_fields, cookies=cookies)
+        save = client.post("/settings", data=visible_fields, cookies=cookies)
+    finally:
+        app.dependency_overrides.clear()
+
+    assert autosave.status_code == 200
+    assert autosave.json()["ok"]
+    assert save.status_code == 303
+    with Session() as db:
+        saved = get_all_settings(db)
+        for key in (
+            "sales_voucher_type",
+            "purchase_voucher_type",
+            "sales_ledger_name",
+            "purchase_ledger_name",
+            "cgst_ledger_name",
+            "sgst_ledger_name",
+        ):
+            assert saved[key] == VALID_SETTINGS[key]
+    engine.dispose()
+
+
 def test_create_company_without_legacy_tally_fields_inherits_current_values():
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     Base.metadata.create_all(engine)

@@ -60,6 +60,8 @@ Setu requires these fields before it can generate supported Tally XML:
 
 Product masters must also have exact Tally stock item names and units.
 Enter the exact customer or supplier ledger on each sale, purchase, or receive batch.
+For sales, enter the debtor ledger as the party name and add the buyer GST
+registration type, GST name, and GST number when available.
 
 For sale vouchers, Setu selects the Sales, CGST, SGST, and IGST ledgers from each
 product's GST rate. A single voucher can therefore contain products at multiple

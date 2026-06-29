@@ -29,6 +29,19 @@
     return form.querySelectorAll("input, select, textarea");
   }
 
+  function restoreDraftField(field, value) {
+    if (!field || field.type === "hidden") return;
+    if (field.tagName === "SELECT") {
+      const savedValue = value == null ? "" : String(value);
+      const hasOption = Array.prototype.some.call(field.options, function (option) {
+        return option.value === savedValue;
+      });
+      if (hasOption) field.value = savedValue;
+      return;
+    }
+    field.value = value;
+  }
+
   function initDbAutosave(form) {
     const url = form.getAttribute("data-autosave");
     const status = statusNode(form);
@@ -57,8 +70,7 @@
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { saved = {}; }
     Object.keys(saved).forEach(function (name) {
-      const field = form.elements[name];
-      if (field && !field.value) field.value = saved[name];
+      restoreDraftField(form.elements[name], saved[name]);
     });
     const status = statusNode(form);
     const save = debounce(function () {

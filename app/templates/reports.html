@@ -8,10 +8,15 @@
   </div>
   {% if role_can(user, 'reports_export') %}
   <div class="actions">
+    {% if action == 'MISSING' %}
+    <a class="button" href="/reports/missing-stock.csv?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock CSV</a>
+    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock XLSX</a>
+    {% else %}
     <a class="button" href="/reports/transactions.csv?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions CSV</a>
     <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions XLSX</a>
     <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Scans CSV</a>
     <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Scans XLSX</a>
+    {% endif %}
   </div>
   {% endif %}
 </section>

@@ -205,6 +205,15 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
 
     company_name = escape((settings.get("company_name") or "Company").strip())
     reference_name = escape((batch.party_name or "Customer").strip())
+    customer_state = escape((getattr(batch, "party_state", None) or "-").strip())
+    gst_registration_type = escape(
+        (getattr(batch, "party_gst_registration_type", None) or "Unregistered/Consumer").strip()
+    )
+    party_gst_name = escape(
+        (getattr(batch, "party_gst_name", None) or batch.party_name or "Customer").strip()
+    )
+    party_gstin = escape((getattr(batch, "party_gstin", None) or "-").strip())
+    gst_type = "IGST" if getattr(batch, "gst_treatment", None) == "INTER_STATE" else "CGST + SGST"
     document_date = _local_datetime(batch.submitted_at or batch.created_at)
 
     story = [
@@ -218,6 +227,7 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
             [Paragraph("Pre-Invoice No.", label), Paragraph(escape(batch.batch_number), value)],
             [Paragraph("Date", label), Paragraph(document_date.strftime("%d-%b-%Y"), value)],
             [Paragraph("Sale Status", label), Paragraph(escape(batch.status), value)],
+            [Paragraph("GST Type", label), Paragraph(gst_type, value)],
         ],
         colWidths=[27 * mm, 43 * mm],
     )
@@ -270,10 +280,16 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
                 [
                     Paragraph("Consignee / Reference Name", label),
                     Paragraph(reference_name, value),
+                    Paragraph("Customer State", label),
+                    Paragraph(customer_state, body),
                 ],
                 [
                     Paragraph("Buyer / Bill To", label),
-                    Paragraph(reference_name, value),
+                    Paragraph(party_gst_name, value),
+                    Paragraph("GST Registration", label),
+                    Paragraph(gst_registration_type, body),
+                    Paragraph("GST Number", label),
+                    Paragraph(party_gstin, body),
                 ],
             ]
         ],
@@ -358,39 +374,68 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
         rate = gst_rate_key(item.gst_rate)
         amounts = tax_by_rate.setdefault(
             rate,
-            {"taxable": Decimal("0"), "cgst": Decimal("0"), "sgst": Decimal("0")},
+            {
+                "taxable": Decimal("0"),
+                "cgst_rate": item.cgst_rate,
+                "sgst_rate": item.sgst_rate,
+                "igst_rate": item.igst_rate,
+                "cgst": Decimal("0"),
+                "sgst": Decimal("0"),
+                "igst": Decimal("0"),
+            },
         )
         amounts["taxable"] += item.taxable_value
         amounts["cgst"] += item.cgst_amount
         amounts["sgst"] += item.sgst_amount
+        amounts["igst"] += item.igst_amount
 
     if tax_by_rate:
-        tax_rows = [
-            [
-                Paragraph("GST Rate", table_header),
-                Paragraph("Taxable Value", table_header),
-                Paragraph("CGST Rate", table_header),
-                Paragraph("CGST Amount", table_header),
-                Paragraph("SGST Rate", table_header),
-                Paragraph("SGST Amount", table_header),
-            ]
-        ]
-        for rate, amounts in sorted(tax_by_rate.items(), key=lambda pair: Decimal(pair[0])):
-            half_rate = Decimal(rate) / 2
-            tax_rows.append(
+        if summary.igst_amount > 0:
+            tax_rows = [
                 [
-                    Paragraph(f"{rate}%", body_right),
-                    Paragraph(_money(amounts["taxable"]), body_right),
-                    Paragraph(f"{gst_rate_key(half_rate)}%", body_right),
-                    Paragraph(_money(amounts["cgst"]), body_right),
-                    Paragraph(f"{gst_rate_key(half_rate)}%", body_right),
-                    Paragraph(_money(amounts["sgst"]), body_right),
+                    Paragraph("GST Rate", table_header),
+                    Paragraph("Taxable Value", table_header),
+                    Paragraph("IGST Rate", table_header),
+                    Paragraph("IGST Amount", table_header),
                 ]
-            )
+            ]
+            for rate, amounts in sorted(tax_by_rate.items(), key=lambda pair: Decimal(pair[0])):
+                tax_rows.append(
+                    [
+                        Paragraph(f"{rate}%", body_right),
+                        Paragraph(_money(amounts["taxable"]), body_right),
+                        Paragraph(f"{gst_rate_key(amounts['igst_rate'])}%", body_right),
+                        Paragraph(_money(amounts["igst"]), body_right),
+                    ]
+                )
+            col_widths = [32 * mm, 48 * mm, 40 * mm, 60 * mm]
+        else:
+            tax_rows = [
+                [
+                    Paragraph("GST Rate", table_header),
+                    Paragraph("Taxable Value", table_header),
+                    Paragraph("CGST Rate", table_header),
+                    Paragraph("CGST Amount", table_header),
+                    Paragraph("SGST Rate", table_header),
+                    Paragraph("SGST Amount", table_header),
+                ]
+            ]
+            for rate, amounts in sorted(tax_by_rate.items(), key=lambda pair: Decimal(pair[0])):
+                tax_rows.append(
+                    [
+                        Paragraph(f"{rate}%", body_right),
+                        Paragraph(_money(amounts["taxable"]), body_right),
+                        Paragraph(f"{gst_rate_key(amounts['cgst_rate'])}%", body_right),
+                        Paragraph(_money(amounts["cgst"]), body_right),
+                        Paragraph(f"{gst_rate_key(amounts['sgst_rate'])}%", body_right),
+                        Paragraph(_money(amounts["sgst"]), body_right),
+                    ]
+                )
+            col_widths = [22 * mm, 34 * mm, 25 * mm, 34 * mm, 25 * mm, 40 * mm]
         tax_table = Table(
             tax_rows,
             repeatRows=1,
-            colWidths=[22 * mm, 34 * mm, 25 * mm, 34 * mm, 25 * mm, 40 * mm],
+            colWidths=col_widths,
         )
         tax_table.setStyle(
             TableStyle(
@@ -412,6 +457,7 @@ def sale_preinvoice_pdf(batch: Batch, settings: dict[str, str]) -> bytes:
             [Paragraph("Taxable Value", body), Paragraph(_money(summary.taxable_value), body_right)],
             [Paragraph("CGST", body), Paragraph(_money(summary.cgst_amount), body_right)],
             [Paragraph("SGST", body), Paragraph(_money(summary.sgst_amount), body_right)],
+            [Paragraph("IGST", body), Paragraph(_money(summary.igst_amount), body_right)],
             [Paragraph("Round Off", body), Paragraph(_money(summary.round_off), body_right)],
             [Paragraph("Pre-Invoice Total (INR)", body_bold), Paragraph(_money(summary.final_value), body_bold)],
         ],

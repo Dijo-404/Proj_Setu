@@ -55,8 +55,7 @@
     <div class="product-summary-grid company-summary-grid">
       <div><span>Tally company</span><strong>{{ row.config.company_name or '-' }}</strong></div>
       <div><span>Connection</span><strong>{{ row.config.tally_host }}:{{ row.config.tally_port }}</strong></div>
-      <div><span>Sales voucher</span><strong>{{ row.config.sales_voucher_type or '-' }}</strong></div>
-      <div><span>Purchase voucher</span><strong>{{ row.config.purchase_voucher_type or '-' }}</strong></div>
+      <div><span>Round-off ledger</span><strong>{{ row.config.round_off_ledger_name or '-' }}</strong></div>
     </div>
 
     {% if can_edit_companies %}
@@ -64,7 +63,7 @@
       <div class="product-modal-section__head">
         <div>
           <h3>Company settings</h3>
-          <p>Connection, voucher types, default ledgers, and product GST ledgers.</p>
+          <p>Connection and product GST ledgers.</p>
         </div>
       </div>
       <form
@@ -78,12 +77,12 @@
         <label>Tally company name<input name="company_name" value="{{ row.config.company_name }}" required></label>
         <label>Tally host<input name="tally_host" value="{{ row.config.tally_host }}" required></label>
         <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ row.config.tally_port }}" required></label>
-        <label>Sales voucher<input name="sales_voucher_type" value="{{ row.config.sales_voucher_type }}" required></label>
-        <label>Purchase voucher<input name="purchase_voucher_type" value="{{ row.config.purchase_voucher_type }}" required></label>
-        <label>Default sales ledger<input name="sales_ledger_name" value="{{ row.config.sales_ledger_name }}" required></label>
-        <label>Purchase ledger<input name="purchase_ledger_name" value="{{ row.config.purchase_ledger_name }}" required></label>
-        <label>Default CGST ledger<input name="cgst_ledger_name" value="{{ row.config.cgst_ledger_name }}" required></label>
-        <label>Default SGST ledger<input name="sgst_ledger_name" value="{{ row.config.sgst_ledger_name }}" required></label>
+        <input type="hidden" name="sales_voucher_type" value="{{ row.config.sales_voucher_type }}">
+        <input type="hidden" name="purchase_voucher_type" value="{{ row.config.purchase_voucher_type }}">
+        <input type="hidden" name="sales_ledger_name" value="{{ row.config.sales_ledger_name }}">
+        <input type="hidden" name="purchase_ledger_name" value="{{ row.config.purchase_ledger_name }}">
+        <input type="hidden" name="cgst_ledger_name" value="{{ row.config.cgst_ledger_name }}">
+        <input type="hidden" name="sgst_ledger_name" value="{{ row.config.sgst_ledger_name }}">
         <label>Round-off ledger<input name="round_off_ledger_name" value="{{ row.config.round_off_ledger_name }}" required></label>
         {{ sales_ledger_editor(row.config.sales_gst_ledger_mappings) }}
         <div class="product-modal-actions">
@@ -124,14 +123,13 @@
       </section>
 
       <div class="table-scroll company-master-scroll">
-        <table>
+        <table class="company-master-table">
           <thead>
             <tr>
               <th>Type</th>
-              <th>Name</th>
-              <th>Local</th>
-              <th>Confirmation</th>
-              <th></th>
+              <th>Tally master</th>
+              <th>Status</th>
+              <th>Check</th>
             </tr>
           </thead>
           <tbody>
@@ -147,37 +145,43 @@
                 <span class="muted">Missing value</span>
                 {% endif %}
               </td>
-              <td><span class="status {{ 'synced' if item.local_status == 'READY' else 'failed' }}">{{ item.local_status }}</span></td>
               <td>
-                {% if confirmation %}
-                <span class="status synced">CONFIRMED</span>
-                <small>{{ confirmation.confirmed_by.username }} · {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
-                {% else %}
-                <span class="status pending_sync">UNCHECKED</span>
-                {% endif %}
+                <span class="tally-local-state {{ 'is-ready' if item.local_status == 'READY' else 'is-missing' }}">
+                  {{ 'Ready' if item.local_status == 'READY' else 'Missing' }}
+                </span>
               </td>
-              <td>
+              <td class="tally-check-cell">
                 {% if item.local_status == 'READY' and confirmation %}
-                <form method="post" action="/tally-check/unconfirm">
+                <form method="post" action="/tally-check/unconfirm" class="tally-confirm-form">
                   <input type="hidden" name="master_type" value="{{ item.master_type }}">
                   <input type="hidden" name="master_name" value="{{ item.master_name }}">
-                  <button class="button small ghost" type="submit">Unmark</button>
+                  <button
+                    class="tally-check-toggle is-checked"
+                    type="submit"
+                    title="Checked by {{ confirmation.confirmed_by.username }} on {{ confirmation.confirmed_at.strftime('%d %b %Y at %H:%M') }}. Click to undo."
+                    aria-label="Checked. Click to undo."
+                  >
+                    <span class="tally-check-toggle__box" aria-hidden="true">✓</span>
+                    <span>Checked</span>
+                  </button>
                 </form>
                 {% elif item.local_status == 'READY' %}
-                <form method="post" action="/tally-check/confirm" class="inline-form">
+                <form method="post" action="/tally-check/confirm" class="tally-confirm-form">
                   <input type="hidden" name="master_type" value="{{ item.master_type }}">
                   <input type="hidden" name="master_name" value="{{ item.master_name }}">
                   <input type="hidden" name="source" value="{{ item.source }}">
-                  <input name="notes" placeholder="Optional note">
-                  <button class="button small" type="submit">Mark checked</button>
+                  <button class="tally-check-toggle" type="submit">
+                    <span class="tally-check-toggle__box" aria-hidden="true"></span>
+                    <span>Check</span>
+                  </button>
                 </form>
                 {% else %}
-                <span class="muted">Complete settings above</span>
+                <span class="muted">Set up first</span>
                 {% endif %}
               </td>
             </tr>
             {% else %}
-            <tr><td colspan="5" class="empty">No Tally masters found</td></tr>
+            <tr><td colspan="4" class="empty">No Tally masters found</td></tr>
             {% endfor %}
           </tbody>
         </table>

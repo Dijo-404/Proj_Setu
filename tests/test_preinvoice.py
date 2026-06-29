@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import BatchType, Product, SerialStatus, User
+from app.models import BatchType, GstTreatment, Product, SerialStatus, User
 from app.security import create_session_token
 from app.services.inventory import add_serial_to_batch, create_batch, generate_serials
 from app.services.preinvoice import amount_in_words, sale_preinvoice_pdf
@@ -79,6 +79,36 @@ def test_sale_preinvoice_pdf_contains_reference_and_multi_rate_totals(db_session
     assert b"Product GST5" in pdf
     assert b"Product GST18" in pdf
     assert b"Not a Tax Invoice" in pdf
+
+
+def test_sale_preinvoice_pdf_contains_interstate_igst_context(db_session):
+    user = User(username="sales-preinvoice-igst", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    product = _product(db_session, "IGST5", 5, 100)
+    serial = generate_serials(
+        db_session,
+        product,
+        1,
+        initial_status=SerialStatus.IN_STOCK,
+    )[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Interstate Customer",
+        "",
+        party_state="Tamil Nadu",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+        gst_igst_rate=12,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    pdf = sale_preinvoice_pdf(batch, {"company_name": "SWARNAGOWRI 26-27"})
+
+    assert b"IGST" in pdf
+    assert b"Tamil Nadu" in pdf
+    assert b"12.00" in pdf
 
 
 def test_preinvoice_route_is_available_only_for_nonempty_sales():

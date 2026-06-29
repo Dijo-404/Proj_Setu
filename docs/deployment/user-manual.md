@@ -93,11 +93,16 @@ Submitted purchase serials become `IN_STOCK`.
 ## Sale
 
 1. Open `Batches` -> `Sale`.
-2. Enter customer/reference details.
+2. Enter the debtor ledger name, GST registration type, GST name, and customer
+   state. GST number appears for `Composition` and `Registered` buyers only;
+   `Unregistered/Consumer` buyers do not have a GST number field. If the sale
+   needs a specific tax rate, enter either CGST/SGST percentages or an IGST
+   percentage on the batch. Blank tax fields use the product GST rate.
 3. Scan in-stock serials, or use `Pick FEFO` for product and quantity.
-4. Confirm rates, sales discount, GST split, round off, and final invoice value.
+4. Confirm rates, sales discount, GST split/IGST, round off, and final invoice value.
 5. Use `Pre-invoice PDF` to download a provisional sales bill showing the
-   customer reference name, product lines, GST breakup, round off, and total.
+   customer reference name, buyer GST details, product lines, GST breakup,
+   round off, and total.
 6. Submit the batch.
 
 Submitted sale serials become `SOLD`.
@@ -140,6 +145,7 @@ Admins can open `Reports` to review:
 
 - scan history
 - transaction history
+- detailed missing-stock findings from audits, including serial, product, warehouse, storage location, product batch, and expiry
 - pending and failed sync batches
 - expiry summary context
 - CSV/XLSX exports

@@ -1,6 +1,17 @@
 from sqlalchemy import select, update
 
-from app.models import BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, StorageLocation, TransactionType, User
+from app.models import (
+    BatchType,
+    GstRegistrationType,
+    InventoryTransaction,
+    Product,
+    ScanLog,
+    Serial,
+    SerialStatus,
+    StorageLocation,
+    TransactionType,
+    User,
+)
 from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 from app.services.shelf_verification import verify_pending_items_on_shelf
 
@@ -22,6 +33,27 @@ def test_receive_generated_serial(db_session):
     batch = create_batch(db_session, user, BatchType.RECEIVE, "Supplier", "")
     item = add_serial_to_batch(db_session, batch, user, serial.serial_number)
     assert item.serial.status == SerialStatus.GENERATED.value
+
+
+def test_unregistered_sale_ignores_stale_gst_number(db_session):
+    user = User(username="sales-unregistered", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Cash Customer",
+        "",
+        party_gst_registration_type=GstRegistrationType.UNREGISTERED_CONSUMER.value,
+        party_gst_name="Cash Customer GST Name",
+        party_gstin="not-a-gstin",
+    )
+
+    assert batch.party_gst_registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
+    assert batch.party_gst_name == "Cash Customer GST Name"
+    assert batch.party_gstin is None
 
 
 def test_submit_aborts_when_serial_grabbed_concurrently(db_session):

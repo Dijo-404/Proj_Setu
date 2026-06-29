@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 
-from app.models import Batch
+from app.models import Batch, GstTreatment
 from app.services.inventory import group_batch_items
 
 
@@ -29,6 +29,9 @@ class VoucherLine:
     gross_value: Decimal
     discount_amount: Decimal
     taxable_value: Decimal
+    cgst_rate: Decimal
+    sgst_rate: Decimal
+    igst_rate: Decimal
     cgst_amount: Decimal
     sgst_amount: Decimal
     igst_amount: Decimal
@@ -54,6 +57,10 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
     cgst_total = Decimal("0")
     sgst_total = Decimal("0")
     igst_total = Decimal("0")
+    is_interstate_sale = (
+        batch.batch_type == "SALE"
+        and (getattr(batch, "gst_treatment", None) or "").upper() == GstTreatment.INTER_STATE.value
+    )
 
     for group in group_batch_items(batch):
         product = group["product"]
@@ -63,11 +70,35 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         discount_rate = money(product.sales_discount_rate if batch.batch_type == "SALE" else 0)
         discount_amount = money(gross_value * discount_rate / Decimal("100"))
         taxable_value = money(gross_value - discount_amount)
-        gst_rate = money(product.gst_rate)
-        gst_amount = money(taxable_value * gst_rate / Decimal("100"))
-        cgst_amount = money(gst_amount / Decimal("2"))
-        sgst_amount = money(gst_amount - cgst_amount)
-        igst_amount = Decimal("0.00")
+        product_gst_rate = money(product.gst_rate)
+        gst_rate = product_gst_rate
+        batch_cgst_rate = getattr(batch, "gst_cgst_rate", None)
+        batch_sgst_rate = getattr(batch, "gst_sgst_rate", None)
+        batch_igst_rate = getattr(batch, "gst_igst_rate", None)
+        if is_interstate_sale:
+            igst_rate = money(batch_igst_rate if batch_igst_rate is not None else product_gst_rate)
+            gst_rate = igst_rate
+            cgst_amount = Decimal("0.00")
+            sgst_amount = Decimal("0.00")
+            igst_amount = money(taxable_value * igst_rate / Decimal("100"))
+            cgst_rate = Decimal("0.00")
+            sgst_rate = Decimal("0.00")
+        elif batch.batch_type == "SALE" and batch_cgst_rate is not None and batch_sgst_rate is not None:
+            cgst_rate = money(batch_cgst_rate)
+            sgst_rate = money(batch_sgst_rate)
+            igst_rate = Decimal("0.00")
+            gst_rate = money(cgst_rate + sgst_rate)
+            cgst_amount = money(taxable_value * cgst_rate / Decimal("100"))
+            sgst_amount = money(taxable_value * sgst_rate / Decimal("100"))
+            igst_amount = Decimal("0.00")
+        else:
+            gst_amount = money(taxable_value * gst_rate / Decimal("100"))
+            cgst_rate = money(gst_rate / Decimal("2"))
+            sgst_rate = money(gst_rate - cgst_rate)
+            igst_rate = Decimal("0.00")
+            cgst_amount = money(gst_amount / Decimal("2"))
+            sgst_amount = money(gst_amount - cgst_amount)
+            igst_amount = Decimal("0.00")
         line_total = money(taxable_value + cgst_amount + sgst_amount + igst_amount)
         taxable_total += taxable_value
         cgst_total += cgst_amount
@@ -88,6 +119,9 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
                 gross_value=gross_value,
                 discount_amount=discount_amount,
                 taxable_value=taxable_value,
+                cgst_rate=cgst_rate,
+                sgst_rate=sgst_rate,
+                igst_rate=igst_rate,
                 cgst_amount=cgst_amount,
                 sgst_amount=sgst_amount,
                 igst_amount=igst_amount,

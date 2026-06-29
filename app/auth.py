@@ -20,6 +20,7 @@ def current_user(request: Request, db: Session) -> User | None:
     user = db.get(User, user_id)
     if not user or not user.active or user.deleted_at:
         return None
+    request.state.session_user_id = user.id
     return user
 
 

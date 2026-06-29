@@ -11,6 +11,8 @@ from app.models import (
     BatchItem,
     BatchStatus,
     BatchType,
+    GstRegistrationType,
+    GstTreatment,
     InventoryTransaction,
     Product,
     ScanLog,
@@ -27,8 +29,37 @@ class InventoryError(ValueError):
     pass
 
 
+REGISTERED_GST_REGISTRATION_TYPES = {
+    GstRegistrationType.COMPOSITION.value,
+    GstRegistrationType.REGULAR.value,
+}
+
+
 def normalize_serial(serial_number: str) -> str:
     return serial_number.strip().upper()
+
+
+def gst_registration_requires_gstin(value: str | None) -> bool:
+    return (value or "").strip() in REGISTERED_GST_REGISTRATION_TYPES
+
+
+def normalize_gstin(value: str | None) -> str | None:
+    raw = re.sub(r"\s+", "", value or "").upper()
+    if not raw:
+        return None
+    if not re.fullmatch(r"[0-9A-Z]{15}", raw):
+        raise InventoryError("GST number must be a 15-character GSTIN.")
+    return raw
+
+
+def normalize_gst_registration_type(value: str | None, batch_type: BatchType) -> str | None:
+    raw = value.strip() if value else ""
+    if not raw and batch_type == BatchType.SALE:
+        raw = GstRegistrationType.UNREGISTERED_CONSUMER.value
+    valid_types = {registration_type.value for registration_type in GstRegistrationType}
+    if raw and raw not in valid_types:
+        raise InventoryError("Choose a valid GST registration type.")
+    return raw or None
 
 
 def next_batch_number(db: Session, batch_type: BatchType) -> str:
@@ -55,13 +86,38 @@ def create_batch(
     notes: str | None,
     reason_code: str | None = None,
     *,
+    party_state: str | None = None,
+    party_gst_registration_type: str | None = None,
+    party_gst_name: str | None = None,
+    party_gstin: str | None = None,
+    gst_treatment: str | None = None,
+    gst_cgst_rate: float | None = None,
+    gst_sgst_rate: float | None = None,
+    gst_igst_rate: float | None = None,
     commit: bool = True,
 ) -> Batch:
+    treatment = gst_treatment.strip().upper() if gst_treatment else None
+    if treatment and treatment not in {GstTreatment.INTRA_STATE.value, GstTreatment.INTER_STATE.value}:
+        raise InventoryError("Choose either CGST + SGST or IGST for this sale")
+    registration_type = normalize_gst_registration_type(party_gst_registration_type, batch_type)
+    gst_name = party_gst_name.strip() if party_gst_name else None
+    if gst_registration_requires_gstin(registration_type):
+        gstin = normalize_gstin(party_gstin)
+    else:
+        gstin = None
     for attempt in range(5):
         batch = Batch(
             batch_number=next_batch_number(db, batch_type),
             batch_type=batch_type.value,
             party_name=party_name.strip() if party_name else None,
+            party_state=party_state.strip() if party_state else None,
+            party_gst_registration_type=registration_type,
+            party_gst_name=gst_name,
+            party_gstin=gstin,
+            gst_treatment=treatment,
+            gst_cgst_rate=gst_cgst_rate,
+            gst_sgst_rate=gst_sgst_rate,
+            gst_igst_rate=gst_igst_rate,
             reason_code=reason_code.strip().upper() if reason_code else None,
             user_id=user.id,
             notes=notes.strip() if notes else None,

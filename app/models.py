@@ -100,6 +100,18 @@ class BatchType(str, Enum):
     QR_ASSIGNMENT = "QR_ASSIGNMENT"
 
 
+class GstTreatment(str, Enum):
+    INTRA_STATE = "INTRA_STATE"
+    INTER_STATE = "INTER_STATE"
+
+
+class GstRegistrationType(str, Enum):
+    UNKNOWN = "Unknown"
+    COMPOSITION = "Composition"
+    REGULAR = "Regular"
+    UNREGISTERED_CONSUMER = "Unregistered/Consumer"
+
+
 class TransactionType(str, Enum):
     PURCHASE = "PURCHASE"
     SALE = "SALE"
@@ -288,6 +300,14 @@ class Batch(Base):
     batch_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     batch_type: Mapped[str] = mapped_column(String(40), index=True)
     party_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    party_state: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    party_gst_registration_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    party_gst_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    party_gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    gst_treatment: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    gst_cgst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gst_sgst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gst_igst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(40), default=BatchStatus.DRAFT.value, index=True)

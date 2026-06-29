@@ -119,6 +119,10 @@ def test_reports_page_includes_filterable_missing_stock():
             serial_number="MISS100-000001",
             product_id=product.id,
             status=SerialStatus.IN_STOCK.value,
+            product_batch_number="LOT-MISS-01",
+            warehouse="Main warehouse",
+            mfg_date=today() - timedelta(days=30),
+            expiry_date=today() + timedelta(days=120),
         )
         batch = Batch(
             batch_number="AUD-001",
@@ -155,6 +159,18 @@ def test_reports_page_includes_filterable_missing_stock():
             "/reports?action=MISSING",
             cookies={SESSION_COOKIE: create_session_token(1)},
         )
+        detail_response = client.get(
+            "/reports/missing-stock?q=MISS100",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+        csv_response = client.get(
+            "/reports/missing-stock.csv?q=MISS100",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+        xlsx_response = client.get(
+            "/reports/missing-stock.xlsx?q=MISS100",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
     finally:
         app.dependency_overrides.clear()
         engine.dispose()
@@ -165,6 +181,26 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "MISS100-000001" in response.text
     assert "Missing masala" in response.text
     assert "AUD-001" in response.text
+    assert "Missing stock CSV" in response.text
+    assert "Missing stock XLSX" in response.text
+
+    assert detail_response.status_code == 200
+    assert "<h1>Missing stock report</h1>" in detail_response.text
+    assert "<h2>Missing stock details</h2>" in detail_response.text
+    assert "LOT-MISS-01" in detail_response.text
+    assert "Main warehouse" in detail_response.text
+    assert "MISS100-000001" in detail_response.text
+    assert 'href="/reports/missing-stock"' in detail_response.text
+    assert ">Overview</a>" in detail_response.text
+
+    assert csv_response.status_code == 200
+    assert "setu-missing-stock.csv" in csv_response.headers["content-disposition"]
+    assert "Audit Date,Audited By,Audit Batch,Serial" in csv_response.text
+    assert "LOT-MISS-01,Main warehouse" in csv_response.text
+
+    assert xlsx_response.status_code == 200
+    assert xlsx_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert xlsx_response.content.startswith(b"PK")
 
 
 def test_directors_role_gets_report_only_summary_and_audit_detail():

@@ -98,6 +98,19 @@
     </div>
     <dl class="details">
       <dt>Party</dt><dd>{{ batch.party_name or '-' }}</dd>
+      {% if batch.batch_type == 'SALE' %}
+      <dt>GST registration</dt><dd>{{ batch.party_gst_registration_type or 'Unregistered/Consumer' }}</dd>
+      <dt>GST name</dt><dd>{{ batch.party_gst_name or '-' }}</dd>
+      <dt>GST number</dt><dd>{{ batch.party_gstin or '-' }}</dd>
+      <dt>Customer state</dt><dd>{{ batch.party_state or '-' }}</dd>
+      <dt>GST type</dt><dd>{{ 'IGST' if batch.gst_treatment == 'INTER_STATE' else 'CGST + SGST' }}</dd>
+      {% if batch.gst_treatment == 'INTER_STATE' %}
+      <dt>IGST %</dt><dd>{{ '%.2f'|format(batch.gst_igst_rate) if batch.gst_igst_rate is not none else '-' }}</dd>
+      {% else %}
+      <dt>CGST %</dt><dd>{{ '%.2f'|format(batch.gst_cgst_rate) if batch.gst_cgst_rate is not none else '-' }}</dd>
+      <dt>SGST %</dt><dd>{{ '%.2f'|format(batch.gst_sgst_rate) if batch.gst_sgst_rate is not none else '-' }}</dd>
+      {% endif %}
+      {% endif %}
       <dt>Reason</dt><dd>{{ batch.reason_code or '-' }}</dd>
       <dt>Created by</dt><dd>{{ batch.user.username }}</dd>
       <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
@@ -135,6 +148,7 @@
           <th>Taxable</th>
           <th>CGST</th>
           <th>SGST</th>
+          <th>IGST</th>
           <th>Total</th>
         </tr>
       </thead>
@@ -164,19 +178,21 @@
           <td>{{ '%.2f'|format(line.taxable_value) }}</td>
           <td>{{ '%.2f'|format(line.cgst_amount) }}</td>
           <td>{{ '%.2f'|format(line.sgst_amount) }}</td>
+          <td>{{ '%.2f'|format(line.igst_amount) }}</td>
           <td>{{ '%.2f'|format(line.line_total) }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="empty">Scan serials to build the voucher preview</td></tr>
+        <tr><td colspan="10" class="empty">Scan serials to build the voucher preview</td></tr>
         {% endfor %}
       </tbody>
       {% if summary.lines %}
       <tfoot>
-        <tr><th colspan="5">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
-        <tr><th colspan="5">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
-        <tr><th colspan="5">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
-        <tr><th colspan="5">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
-        <tr class="grand-total"><th colspan="5">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
+        <tr><th colspan="6">Taxable value</th><td colspan="4">{{ '%.2f'|format(summary.taxable_value) }}</td></tr>
+        <tr><th colspan="6">CGST</th><td colspan="4">{{ '%.2f'|format(summary.cgst_amount) }}</td></tr>
+        <tr><th colspan="6">SGST</th><td colspan="4">{{ '%.2f'|format(summary.sgst_amount) }}</td></tr>
+        <tr><th colspan="6">IGST</th><td colspan="4">{{ '%.2f'|format(summary.igst_amount) }}</td></tr>
+        <tr><th colspan="6">Round off</th><td colspan="4">{{ '%.2f'|format(summary.round_off) }}</td></tr>
+        <tr class="grand-total"><th colspan="6">Final invoice value</th><td colspan="4">{{ '%.2f'|format(summary.final_value) }}</td></tr>
       </tfoot>
       {% endif %}
     </table>

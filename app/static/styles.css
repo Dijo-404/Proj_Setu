@@ -1450,6 +1450,15 @@ dialog.modal {
   overflow: hidden;
 }
 
+#company-modal {
+  width: min(840px, calc(100vw - 24px));
+  max-height: calc(100vh - 32px);
+}
+
+#company-modal .modal__body {
+  max-height: calc(100vh - 152px);
+}
+
 dialog.modal::backdrop {
   background: rgba(17, 24, 39, 0.45);
   -webkit-backdrop-filter: blur(2px);
@@ -1491,6 +1500,14 @@ dialog.modal[open] { animation: modal-in var(--dur) var(--ease); }
   padding: 22px;
   max-height: calc(100vh - 184px);
   overflow: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.modal__body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .col-actions { width: 1%; white-space: nowrap; }
@@ -1566,7 +1583,7 @@ details.add-company:not([open]) { padding-block: 8px; }
 
 .ledger-mapping-grid {
   display: grid;
-  grid-template-columns: minmax(100px, 0.45fr) minmax(0, 1.55fr);
+  grid-template-columns: minmax(180px, 0.65fr) minmax(0, 1.35fr);
   gap: 10px 12px;
 }
 
@@ -2013,6 +2030,87 @@ dialog.company-config-modal {
 
 .company-master-scroll table {
   min-width: 820px;
+}
+
+.company-master-table th,
+.company-master-table td {
+  padding: 10px 12px;
+}
+
+.company-master-table td:nth-child(1) { width: 16%; }
+.company-master-table td:nth-child(3) { width: 120px; }
+.company-master-table td:nth-child(4) { width: 130px; }
+
+.company-master-table td:nth-child(2) strong,
+.company-master-table td:nth-child(2) small {
+  display: block;
+}
+
+.tally-local-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--ink-48);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tally-local-state::before {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.tally-local-state.is-ready { color: var(--ok-fg); }
+.tally-local-state.is-missing { color: var(--bad-fg); }
+
+.tally-confirm-form {
+  display: inline;
+  margin: 0;
+}
+
+.tally-check-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--ink-48);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tally-check-toggle:hover {
+  background: var(--primary-softer);
+  color: var(--ink);
+}
+
+.tally-check-toggle__box {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-xs);
+  background: var(--canvas);
+  color: var(--on-primary);
+  font-size: 13px;
+  line-height: 1;
+}
+
+.tally-check-toggle.is-checked {
+  color: var(--ok-fg);
+}
+
+.tally-check-toggle.is-checked .tally-check-toggle__box {
+  border-color: var(--ok-fg);
+  background: var(--ok-fg);
 }
 
 @media (max-width: 980px) {

@@ -57,12 +57,6 @@ def collect_master_requirements(db: Session) -> list[MasterRequirement]:
     requirements: dict[tuple[str, str], MasterRequirement] = {}
 
     _add(requirements, "Company", settings["company_name"], "Settings", "Must be the open Tally company")
-    _add(requirements, "Voucher Type", settings["sales_voucher_type"], "Settings", "Used for sale batches")
-    _add(requirements, "Voucher Type", settings["purchase_voucher_type"], "Settings", "Used for receive batches")
-    _add(requirements, "Ledger", settings["sales_ledger_name"], "Settings", "Sales posting ledger")
-    _add(requirements, "Ledger", settings["purchase_ledger_name"], "Settings", "Purchase posting ledger")
-    _add(requirements, "Ledger", settings["cgst_ledger_name"], "Settings", "GST posting ledger")
-    _add(requirements, "Ledger", settings["sgst_ledger_name"], "Settings", "GST posting ledger")
     _add(requirements, "Ledger", settings["round_off_ledger_name"], "Settings", "Round off posting ledger")
     mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
     for gst_rate, ledgers in mappings.items():

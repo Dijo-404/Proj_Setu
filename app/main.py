@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.middleware import CSRFOriginMiddleware
+from app.middleware import CSRFOriginMiddleware, SessionActivityMiddleware
 from app.routers import account, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, stock_movement, tally_check, users, warehouse
 from app.services.backup_worker import start_backup_worker, stop_backup_worker
 from app.services.bootstrap import bootstrap
@@ -18,6 +18,7 @@ logger = logging.getLogger("setu")
 
 def create_app() -> FastAPI:
     app = FastAPI(title=get_settings().app_name)
+    app.add_middleware(SessionActivityMiddleware)
     app.add_middleware(CSRFOriginMiddleware)
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     app.include_router(auth.router)

@@ -11,7 +11,7 @@ from reportlab.platypus import Image, PageBreak, SimpleDocTemplate, Table, Table
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from PIL import Image as PILImage
 
-from app.models import Batch, InventoryTransaction, ScanLog, Serial, StorageLocation
+from app.models import AuditFinding, Batch, InventoryTransaction, ScanLog, Serial, StorageLocation
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 
 LABEL_WIDTH_MM = 48.5
@@ -176,6 +176,54 @@ def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
                     txn.reference_number or "",
                     txn.tally_reference or "",
                     txn.notes or "",
+                ]
+            )
+        )
+    _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def missing_stock_xlsx(findings: list[AuditFinding]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Missing Stock"
+    sheet.append(
+        [
+            "Audit Date",
+            "Audited By",
+            "Audit Batch",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Product Batch",
+            "Warehouse",
+            "Storage Location",
+            "Mfg Date",
+            "Expiry Date",
+            "Expected Status",
+        ]
+    )
+    for finding in findings:
+        serial = finding.serial
+        sheet.append(
+            safe_row(
+                [
+                    finding.created_at.isoformat(),
+                    finding.batch.user.username,
+                    finding.batch.batch_number,
+                    finding.serial_number,
+                    finding.product_code or "",
+                    finding.product_name or "",
+                    serial.product_batch_number if serial else "",
+                    serial.warehouse if serial else "",
+                    serial.location.full_path if serial and serial.location else "",
+                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
+                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
+                    finding.expected_status or "",
                 ]
             )
         )

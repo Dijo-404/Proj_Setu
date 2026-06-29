@@ -91,28 +91,30 @@ def save_company(
     company_name: str = Form(...),
     tally_host: str = Form(...),
     tally_port: str = Form(...),
-    sales_voucher_type: str = Form(...),
-    purchase_voucher_type: str = Form(...),
-    sales_ledger_name: str = Form(...),
-    purchase_ledger_name: str = Form(...),
-    cgst_ledger_name: str = Form(...),
-    sgst_ledger_name: str = Form(...),
+    sales_voucher_type: str | None = Form(None),
+    purchase_voucher_type: str | None = Form(None),
+    sales_ledger_name: str | None = Form(None),
+    purchase_ledger_name: str | None = Form(None),
+    cgst_ledger_name: str | None = Form(None),
+    sgst_ledger_name: str | None = Form(None),
     sales_gst_ledger_mappings: str = Form(""),
     round_off_ledger_name: str = Form(...),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "settings_edit")
-    before = company_snapshot(db.get(Company, company_id))
+    company = db.get(Company, company_id)
+    before = company_snapshot(company)
+    current_config = company_config(company) if company else {}
     config = {
         "company_name": company_name,
         "tally_host": tally_host,
         "tally_port": tally_port,
-        "sales_voucher_type": sales_voucher_type,
-        "purchase_voucher_type": purchase_voucher_type,
-        "sales_ledger_name": sales_ledger_name,
-        "purchase_ledger_name": purchase_ledger_name,
-        "cgst_ledger_name": cgst_ledger_name,
-        "sgst_ledger_name": sgst_ledger_name,
+        "sales_voucher_type": current_config.get("sales_voucher_type", "") if sales_voucher_type is None else sales_voucher_type,
+        "purchase_voucher_type": current_config.get("purchase_voucher_type", "") if purchase_voucher_type is None else purchase_voucher_type,
+        "sales_ledger_name": current_config.get("sales_ledger_name", "") if sales_ledger_name is None else sales_ledger_name,
+        "purchase_ledger_name": current_config.get("purchase_ledger_name", "") if purchase_ledger_name is None else purchase_ledger_name,
+        "cgst_ledger_name": current_config.get("cgst_ledger_name", "") if cgst_ledger_name is None else cgst_ledger_name,
+        "sgst_ledger_name": current_config.get("sgst_ledger_name", "") if sgst_ledger_name is None else sgst_ledger_name,
         "sales_gst_ledger_mappings": sales_gst_ledger_mappings,
         "round_off_ledger_name": round_off_ledger_name,
     }

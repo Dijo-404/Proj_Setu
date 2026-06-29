@@ -20,6 +20,22 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
             connection.execute(text("ALTER TABLE batches ADD COLUMN last_retry_at DATETIME"))
         if "reason_code" not in columns:
             connection.execute(text("ALTER TABLE batches ADD COLUMN reason_code VARCHAR(80)"))
+        if "party_state" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN party_state VARCHAR(80)"))
+        if "party_gst_registration_type" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN party_gst_registration_type VARCHAR(40)"))
+        if "party_gst_name" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN party_gst_name VARCHAR(180)"))
+        if "party_gstin" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN party_gstin VARCHAR(20)"))
+        if "gst_treatment" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN gst_treatment VARCHAR(40)"))
+        if "gst_cgst_rate" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN gst_cgst_rate FLOAT"))
+        if "gst_sgst_rate" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN gst_sgst_rate FLOAT"))
+        if "gst_igst_rate" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN gst_igst_rate FLOAT"))
         if "sync_remote_id" not in columns:
             connection.execute(text("ALTER TABLE batches ADD COLUMN sync_remote_id VARCHAR(80)"))
             connection.execute(
