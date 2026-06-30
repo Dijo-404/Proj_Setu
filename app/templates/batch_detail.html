@@ -73,22 +73,27 @@
     </form>
     {% if can_fefo and batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
     <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form" id="fefo-form">
+      <div class="fefo-form__head">
+        <h3>FEFO picker</h3>
+      </div>
       {% if fefo_error %}<div class="alert error">{{ fefo_error }}</div>{% endif %}
-      <label>Search product
-        <input id="fefo-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
-      </label>
-      <label>FEFO product
-        <select name="product_id" id="fefo-product-select" required>
-          {% for product in products %}
-          <option
-            value="{{ product.id }}"
-            data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
-          >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>Qty<input name="quantity" type="number" min="1" max="500" value="1" required></label>
-      <button class="button secondary" type="submit">Pick FEFO</button>
+      <div class="fefo-form__fields">
+        <label class="fefo-form__search">Search product
+          <input id="fefo-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
+        </label>
+        <label class="fefo-form__product">FEFO product
+          <select name="product_id" id="fefo-product-select" required>
+            {% for product in products %}
+            <option
+              value="{{ product.id }}"
+              data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
+            >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="fefo-form__qty">Qty<input name="quantity" type="number" min="1" max="500" value="1" required></label>
+        <button class="button secondary" type="submit">Pick FEFO</button>
+      </div>
     </form>
     {% endif %}
     {% elif batch.status == 'DRAFT' %}
