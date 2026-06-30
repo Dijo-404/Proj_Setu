@@ -74,10 +74,16 @@
     {% if can_fefo and batch.batch_type in ['SALE', 'ISSUE', 'PURCHASE_RETURN'] %}
     <form method="post" action="/batches/{{ batch.id }}/fefo" class="fefo-form" id="fefo-form">
       {% if fefo_error %}<div class="alert error">{{ fefo_error }}</div>{% endif %}
+      <label>Search product
+        <input id="fefo-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
+      </label>
       <label>FEFO product
-        <select name="product_id" required>
+        <select name="product_id" id="fefo-product-select" required>
           {% for product in products %}
-          <option value="{{ product.id }}">{{ product.product_code }} - {{ product.product_name }}</option>
+          <option
+            value="{{ product.id }}"
+            data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
+          >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %}</option>
           {% endfor %}
         </select>
       </label>
@@ -307,6 +313,30 @@
   document.getElementById('fefo-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 </script>
 {% endif %}
+<script>
+  (function () {
+    const input = document.getElementById("fefo-product-search");
+    const select = document.getElementById("fefo-product-select");
+    if (!input || !select) return;
+    const options = Array.from(select.options);
+
+    function syncProductOptions() {
+      const query = input.value.trim().toLowerCase();
+      let firstVisible = null;
+      options.forEach((option) => {
+        const matches = !query || (option.dataset.search || option.textContent || "").toLowerCase().includes(query);
+        option.hidden = !matches;
+        if (matches && !firstVisible) firstVisible = option;
+      });
+      if (select.selectedOptions[0]?.hidden && firstVisible) {
+        select.value = firstVisible.value;
+      }
+    }
+
+    input.addEventListener("input", syncProductOptions);
+    syncProductOptions();
+  })();
+</script>
 <script src="/static/zxing.min.js"></script>
 <script src="/static/scanner.js?v=20260627-v17" data-batch-id="{{ batch.id }}"></script>
 {% endblock %}

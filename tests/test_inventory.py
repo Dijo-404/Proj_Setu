@@ -54,6 +54,7 @@ def test_unregistered_sale_ignores_stale_gst_number(db_session):
     assert batch.party_gst_registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
     assert batch.party_gst_name == "Cash Customer GST Name"
     assert batch.party_gstin is None
+    assert batch.party_state == "Karnataka"
 
 
 def test_submit_aborts_when_serial_grabbed_concurrently(db_session):

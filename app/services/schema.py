@@ -93,11 +93,16 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
 
         if "products" in inspector.get_table_names():
             product_columns = {column["name"] for column in inspector.get_columns("products")}
+            if "nickname" not in product_columns:
+                connection.execute(text("ALTER TABLE products ADD COLUMN nickname VARCHAR(120)"))
+                connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_nickname ON products (nickname)"))
             if "sales_discount_rate" not in product_columns:
                 connection.execute(text("ALTER TABLE products ADD COLUMN sales_discount_rate FLOAT DEFAULT 0"))
             if "brand" not in product_columns:
                 connection.execute(text("ALTER TABLE products ADD COLUMN brand VARCHAR(120)"))
                 connection.execute(text("CREATE INDEX IF NOT EXISTS ix_products_brand ON products (brand)"))
+            if "alternate_tally_stock_item_name" not in product_columns:
+                connection.execute(text("ALTER TABLE products ADD COLUMN alternate_tally_stock_item_name VARCHAR(180)"))
             if "shelf_verification_interval" not in product_columns:
                 connection.execute(
                     text("ALTER TABLE products ADD COLUMN shelf_verification_interval INTEGER DEFAULT 1")

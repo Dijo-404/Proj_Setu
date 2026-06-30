@@ -355,7 +355,9 @@ def _find_active_product_by_name(db: Session, product_name: str) -> Product | No
     for product in rows:
         if key in {
             _normalize_lookup(product.product_name),
+            _normalize_lookup(product.nickname),
             _normalize_lookup(product.tally_stock_item_name),
+            _normalize_lookup(product.alternate_tally_stock_item_name),
         }:
             return product
     return None
@@ -463,6 +465,7 @@ def _product_snapshot(product: Product) -> dict[str, object]:
         "id": product.id,
         "product_code": product.product_code,
         "product_name": product.product_name,
+        "nickname": product.nickname,
         "category": product.category,
         "brand": product.brand,
         "hsn": product.hsn,
@@ -472,6 +475,7 @@ def _product_snapshot(product: Product) -> dict[str, object]:
         "sales_discount_rate": product.sales_discount_rate,
         "shelf_verification_interval": product.shelf_verification_interval,
         "tally_stock_item_name": product.tally_stock_item_name,
+        "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
         "active": product.active,
     }
 

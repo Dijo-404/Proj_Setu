@@ -8,6 +8,7 @@
   </div>
   {% if role_can(user, 'reports_export') %}
   <div class="actions">
+    <a class="button" href="{{ audit_reconciliation_export_url }}">Audit reconciliation XLSX</a>
     {% if action == 'MISSING' %}
     <a class="button" href="/reports/missing-stock.csv?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock CSV</a>
     <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock XLSX</a>

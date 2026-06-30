@@ -14,6 +14,7 @@ def test_sale_new_batch_has_fallback_state_and_gst_options():
     )
 
     assert 'name="party_state" list="sale-state-options"' in html
+    assert 'name="party_state" list="sale-state-options" placeholder="State" value="Karnataka"' in html
     assert "Debtor ledger name" in html
     assert 'name="party_gst_registration_type"' in html
     assert '<option value="Unregistered/Consumer" selected>Unregistered/Consumer</option>' in html
@@ -44,6 +45,7 @@ def test_registered_sale_new_batch_shows_gst_number():
     )
 
     assert '<option value="Regular" selected>Registered</option>' in html
+    assert 'name="party_state" list="sale-state-options" placeholder="State" value="Karnataka"' not in html
     assert 'data-gst-number-field hidden' not in html
     assert 'name="party_gst_name"' in html
     assert 'name="party_gstin"' in html

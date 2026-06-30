@@ -29,6 +29,7 @@ class InventoryError(ValueError):
     pass
 
 
+DEFAULT_UNREGISTERED_SALE_STATE = "Karnataka"
 REGISTERED_GST_REGISTRATION_TYPES = {
     GstRegistrationType.COMPOSITION.value,
     GstRegistrationType.REGULAR.value,
@@ -100,6 +101,13 @@ def create_batch(
     if treatment and treatment not in {GstTreatment.INTRA_STATE.value, GstTreatment.INTER_STATE.value}:
         raise InventoryError("Choose either CGST + SGST or IGST for this sale")
     registration_type = normalize_gst_registration_type(party_gst_registration_type, batch_type)
+    normalized_party_state = party_state.strip() if party_state else None
+    if (
+        batch_type == BatchType.SALE
+        and registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
+        and not normalized_party_state
+    ):
+        normalized_party_state = DEFAULT_UNREGISTERED_SALE_STATE
     gst_name = party_gst_name.strip() if party_gst_name else None
     if gst_registration_requires_gstin(registration_type):
         gstin = normalize_gstin(party_gstin)
@@ -110,7 +118,7 @@ def create_batch(
             batch_number=next_batch_number(db, batch_type),
             batch_type=batch_type.value,
             party_name=party_name.strip() if party_name else None,
-            party_state=party_state.strip() if party_state else None,
+            party_state=normalized_party_state,
             party_gst_registration_type=registration_type,
             party_gst_name=gst_name,
             party_gstin=gstin,

@@ -21,6 +21,7 @@ from app.services.audit import reconcile_audit_batch, summarize_audit_findings
 from app.services.exports import audit_report_pdf
 from app.services.expiry import add_fefo_serials_to_batch
 from app.services.inventory import (
+    DEFAULT_UNREGISTERED_SALE_STATE,
     InventoryError,
     add_serial_to_batch,
     apply_batch_statuses,
@@ -199,14 +200,18 @@ def batch_form_context(
     notes: str = "",
     error: str | None = None,
 ) -> dict[str, object]:
+    selected_registration = party_gst_registration_type or GstRegistrationType.UNREGISTERED_CONSUMER.value
+    selected_state = party_state
+    if batch_type == BatchType.SALE and not selected_state and selected_registration == GstRegistrationType.UNREGISTERED_CONSUMER.value:
+        selected_state = DEFAULT_UNREGISTERED_SALE_STATE
     return {
         "request": request,
         "user": user,
         "batch_type": batch_type,
         "party_name": party_name,
-        "party_state": party_state,
+        "party_state": selected_state,
         "party_gst_registration_type": (
-            party_gst_registration_type or GstRegistrationType.UNREGISTERED_CONSUMER.value
+            selected_registration
         ),
         "party_gst_name": party_gst_name,
         "party_gstin": party_gstin,
@@ -314,6 +319,11 @@ def create_batch_route(
                 party_gst_registration_type,
                 parsed,
             ) or ""
+            if (
+                selected_gst_registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
+                and not party_state
+            ):
+                party_state = DEFAULT_UNREGISTERED_SALE_STATE
             if gst_registration_requires_gstin(selected_gst_registration_type):
                 normalize_gstin(party_gstin)
             cgst_rate = parse_optional_gst_rate(gst_cgst_rate, "CGST")

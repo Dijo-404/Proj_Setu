@@ -233,6 +233,101 @@ def missing_stock_xlsx(findings: list[AuditFinding]) -> bytes:
     return stream.getvalue()
 
 
+def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "Summary"
+    summary.append(["Period start", _datetime_text(report.get("start_at")) or "All"])
+    summary.append(["Period end before", _datetime_text(report.get("end_at")) or "All"])
+    summary.append(["Audit batches", report.get("audit_batch_count", 0)])
+    summary.append(["Verified", report.get("verified", 0)])
+    summary.append(["Missing", report.get("missing", 0)])
+    summary.append(["Extra", report.get("extra", 0)])
+    summary.append(["Total findings", report.get("total", 0)])
+
+    batches = workbook.create_sheet("Audit Batches")
+    batches.append(["Audit Date", "Audit Batch", "Audited By", "Products", "Verified", "Missing", "Extra", "Total"])
+    for row in report.get("batch_rows", []):
+        batches.append(
+            safe_row(
+                [
+                    _datetime_text(row.get("audit_at")),
+                    row.get("batch_number", ""),
+                    row.get("audited_by", ""),
+                    row.get("products", 0),
+                    row.get("verified", 0),
+                    row.get("missing", 0),
+                    row.get("extra", 0),
+                    row.get("total", 0),
+                ]
+            )
+        )
+
+    products = workbook.create_sheet("Product Reconciliation")
+    products.append(["Product Code", "Product Name", "Audit Batches", "Verified", "Missing", "Extra", "Total"])
+    for row in report.get("product_rows", []):
+        products.append(
+            safe_row(
+                [
+                    row.get("product_code", ""),
+                    row.get("product_name", ""),
+                    row.get("audit_batches", ""),
+                    row.get("verified", 0),
+                    row.get("missing", 0),
+                    row.get("extra", 0),
+                    row.get("total", 0),
+                ]
+            )
+        )
+
+    findings = workbook.create_sheet("Serial Findings")
+    findings.append(
+        [
+            "Audit Date",
+            "Audit Batch",
+            "Audited By",
+            "Finding",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Expected Status",
+            "Scanned Status",
+        ]
+    )
+    for row in report.get("finding_rows", []):
+        findings.append(
+            safe_row(
+                [
+                    _datetime_text(row.get("audit_at")),
+                    row.get("batch_number", ""),
+                    row.get("audited_by", ""),
+                    row.get("type", ""),
+                    row.get("serial_number", ""),
+                    row.get("product_code", ""),
+                    row.get("product_name", ""),
+                    row.get("expected_status", ""),
+                    row.get("scanned_status", ""),
+                ]
+            )
+        )
+
+    for sheet in workbook.worksheets:
+        _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def _datetime_text(value: object) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()  # type: ignore[no-any-return]
+    return str(value)
+
+
 def _autosize(sheet) -> None:
     for column in sheet.columns:
         width = max(len(str(cell.value or "")) for cell in column)

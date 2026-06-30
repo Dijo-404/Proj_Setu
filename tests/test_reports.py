@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 
 from fastapi.testclient import TestClient
+from openpyxl import load_workbook
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -10,7 +12,7 @@ from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
 from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
-from app.routers.reports import director_audit_batch_detail, reports as reports_route
+from app.routers.reports import audit_reconciliation_excel, director_audit_batch_detail, reports as reports_route
 from app.security import create_session_token
 from app.services.access_control import save_role_access_config
 from app.services.expiry import today
@@ -338,6 +340,8 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Missing in last audit" in report_text
     assert "Director expiry risk product" in report_text
     assert "Director dead stock product" in report_text
+    assert "Audit reconciliation XLSX" in report_text
+    assert "Audit reconciliation" in report_text
     assert "Transactions CSV" not in report_text
     assert "<h2>Transactions</h2>" not in report_text
     assert 'href="/reports"' in report_text
@@ -350,6 +354,127 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Director missing product" in detail_text
     assert "DIR-MISS-001" in detail_text
     assert "DIR-MISS-EXTRA" in detail_text
+
+
+def test_audit_reconciliation_xlsx_combines_audit_batches_for_admin_and_director():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        admin = User(id=1, username="admin", password_hash="x", role="admin", active=True)
+        director = User(id=2, username="director", password_hash="x", role="directors", active=True)
+        product = Product(
+            product_code="REC100",
+            product_name="Reconciliation Product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Reconciliation Product",
+        )
+        db.add_all([admin, director, product])
+        db.flush()
+        first = Batch(
+            batch_number="AUD-REC-001",
+            batch_type=BatchType.AUDIT.value,
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=datetime(2026, 6, 29, 10, 10, tzinfo=timezone.utc),
+        )
+        second = Batch(
+            batch_number="AUD-REC-002",
+            batch_type=BatchType.AUDIT.value,
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=datetime(2026, 6, 29, 10, 40, tzinfo=timezone.utc),
+        )
+        outside = Batch(
+            batch_number="AUD-REC-003",
+            batch_type=BatchType.AUDIT.value,
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=datetime(2026, 6, 29, 13, 0, tzinfo=timezone.utc),
+        )
+        db.add_all([first, second, outside])
+        db.flush()
+        db.add_all(
+            [
+                AuditFinding(
+                    batch_id=first.id,
+                    serial_number="REC100-000001",
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
+                AuditFinding(
+                    batch_id=second.id,
+                    serial_number="REC100-000002",
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="EXTRA",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    scanned_status=SerialStatus.SOLD.value,
+                ),
+                AuditFinding(
+                    batch_id=outside.id,
+                    serial_number="REC100-000003",
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
+            ]
+        )
+        db.commit()
+
+    def signed_request(user_id: int) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/reports/audit-reconciliation.xlsx",
+                "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(user_id)}".encode())],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
+
+    with Session() as db:
+        admin_response = audit_reconciliation_excel(
+            signed_request(1),
+            start="2026-06-29T10:00",
+            end="2026-06-29T11:00",
+            db=db,
+        )
+        director_response = audit_reconciliation_excel(
+            signed_request(2),
+            start="2026-06-29T10:00",
+            end="2026-06-29T11:00",
+            db=db,
+        )
+    engine.dispose()
+
+    workbook = load_workbook(BytesIO(admin_response.body))
+    summary = workbook["Summary"]
+    products = workbook["Product Reconciliation"]
+
+    assert admin_response.status_code == 200
+    assert director_response.status_code == 200
+    assert admin_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    assert summary["B3"].value == 2
+    assert summary["B5"].value == 1
+    assert summary["B6"].value == 1
+    assert products["A2"].value == "REC100"
+    assert products["C2"].value == "AUD-REC-001, AUD-REC-002"
+    assert products["E2"].value == 1
+    assert products["F2"].value == 1
 
 
 def test_loss_report_shows_factor_values_for_admin_and_super_admin():

@@ -65,6 +65,10 @@ def test_multi_role_access_uses_union_of_selected_roles():
     assert configured_role_has_access(config, "purchase,sales", "batch_purchase")
     assert configured_role_has_access(config, "purchase,sales", "batch_sale")
     assert not configured_role_has_access(config, "purchase,sales", "batch_audit")
+    assert config["page_barcodes"]["purchase"] == "shown"
+    assert config["barcode_assignment"]["purchase"] == "edit"
+    assert config["product_create"]["purchase"] == "no"
+    assert configured_role_has_access(config, "purchase", "barcode_assignment")
 
 
 def test_role_access_partial_save_merges_existing_values_and_ignores_bad_keys():

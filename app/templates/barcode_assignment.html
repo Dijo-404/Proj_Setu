@@ -14,10 +14,16 @@
   <div class="panel">
     <div class="section-title"><h2>Assign to product</h2></div>
     <form method="post" action="/barcode-assignment/generate" class="stack">
+      <label>Search product
+        <input id="assignment-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
+      </label>
       <label>Existing product
-        <select name="product_id" required>
+        <select name="product_id" id="assignment-product-select" required>
           {% for product in products %}
-          <option value="{{ product.id }}">{{ product.product_code }} - {{ product.product_name }}</option>
+          <option
+            value="{{ product.id }}"
+            data-search="{{ product.product_code }} {{ product.product_name }} {{ product.nickname or '' }} {{ product.tally_stock_item_name }} {{ product.alternate_tally_stock_item_name or '' }}"
+          >{{ product.product_code }} - {{ product.product_name }}{% if product.nickname %} ({{ product.nickname }}){% endif %}</option>
           {% endfor %}
         </select>
       </label>
@@ -75,4 +81,28 @@
     </table>
   </div>
 </section>
+<script>
+  (function () {
+    const input = document.getElementById("assignment-product-search");
+    const select = document.getElementById("assignment-product-select");
+    if (!input || !select) return;
+    const options = Array.from(select.options);
+
+    function syncProductOptions() {
+      const query = input.value.trim().toLowerCase();
+      let firstVisible = null;
+      options.forEach((option) => {
+        const matches = !query || (option.dataset.search || option.textContent || "").toLowerCase().includes(query);
+        option.hidden = !matches;
+        if (matches && !firstVisible) firstVisible = option;
+      });
+      if (select.selectedOptions[0]?.hidden && firstVisible) {
+        select.value = firstVisible.value;
+      }
+    }
+
+    input.addEventListener("input", syncProductOptions);
+    syncProductOptions();
+  })();
+</script>
 {% endblock %}

@@ -6,6 +6,9 @@
     <p class="eyebrow">Reports only</p>
     <h1>Directors Report</h1>
   </div>
+  <div class="actions">
+    <a class="button" href="{{ audit_reconciliation_export_url }}">Audit reconciliation XLSX</a>
+  </div>
 </section>
 
 {% set latest_url = '/reports/audit-batches/' ~ report.latest_audit.id if report.latest_audit else '#audit-batches' %}
@@ -47,6 +50,25 @@
     <span>Stock items</span>
     <strong>{{ report.products.total_stock }}</strong>
   </a>
+</section>
+
+<section class="panel director-panel">
+  <div class="section-title">
+    <h2>Audit reconciliation</h2>
+    <span>{{ report.reconciliation.audit_batch_count }} audit batch{{ '' if report.reconciliation.audit_batch_count == 1 else 'es' }}</span>
+  </div>
+  <form method="get" class="filters">
+    <label>From<input name="audit_start" type="datetime-local" value="{{ audit_start }}"></label>
+    <label>To<input name="audit_end" type="datetime-local" value="{{ audit_end }}"></label>
+    <button class="button" type="submit">Apply</button>
+    <a class="button primary" href="{{ audit_reconciliation_export_url }}">Export Excel</a>
+  </form>
+  <section class="metric-grid director-detail-grid">
+    <div class="metric"><span>Verified</span><strong>{{ report.reconciliation.verified }}</strong></div>
+    <div class="metric danger"><span>Missing</span><strong>{{ report.reconciliation.missing }}</strong></div>
+    <div class="metric warn"><span>Extra</span><strong>{{ report.reconciliation.extra }}</strong></div>
+    <div class="metric"><span>Total checked</span><strong>{{ report.reconciliation.total }}</strong></div>
+  </section>
 </section>
 
 <section class="panel director-panel" id="audit-batches">

@@ -41,6 +41,10 @@
 ], true) %}
 {% set selected_gst_treatment = gst_treatment|default('INTRA_STATE', true) %}
 {% set selected_gst_registration = party_gst_registration_type|default('Unregistered/Consumer', true) %}
+{% set selected_party_state = party_state|default('', true) %}
+{% if batch_type.value == 'SALE' and selected_gst_registration == 'Unregistered/Consumer' and not selected_party_state %}
+  {% set selected_party_state = 'Karnataka' %}
+{% endif %}
 {% set gst_number_visible = selected_gst_registration in ['Composition', 'Regular'] %}
 <section class="page-head">
   <div>
@@ -94,7 +98,7 @@
         >
       </label>
       <label>Customer state
-        <input name="party_state" list="sale-state-options" placeholder="State" value="{{ party_state or '' }}">
+        <input name="party_state" list="sale-state-options" placeholder="State" value="{{ selected_party_state }}">
         <datalist id="sale-state-options">
           {% for state in sale_state_options %}
           <option value="{{ state }}"></option>
@@ -159,9 +163,13 @@
       if (!select) return;
       const registeredTypes = new Set(["Composition", "Regular"]);
       const fields = document.querySelectorAll("[data-gst-number-field]");
+      const stateInput = document.querySelector('input[name="party_state"]');
 
       function syncFields() {
         const show = registeredTypes.has(select.value);
+        if (!show && stateInput && !stateInput.value.trim()) {
+          stateInput.value = "Karnataka";
+        }
         fields.forEach(function (field) {
           field.hidden = !show;
           field.querySelectorAll("input, select, textarea").forEach(function (input) {

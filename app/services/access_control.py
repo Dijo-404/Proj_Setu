@@ -162,7 +162,13 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     PAGE_OPTIONS,
                 ),
                 AccessRowDefinition("page_tally_check", "Tally Check", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_barcodes", "Barcodes", "Top navigation menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_barcodes",
+                    "Barcodes",
+                    "Top navigation menu",
+                    _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.PURCHASE)),
+                    PAGE_OPTIONS,
+                ),
                 AccessRowDefinition("page_admin_menu", "Admin menu", "Top navigation menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition(
                     "page_products",
@@ -219,7 +225,13 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("tally_sync_retry", "Tally sync retry", "Retry pending or failed sync", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("product_create", "Products", "Create products and generate serials", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
-                AccessRowDefinition("barcode_assignment", "Barcode assignment", "Assign labels to existing stock", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "barcode_assignment",
+                    "Barcode assignment",
+                    "Assign labels to existing stock",
+                    _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE)),
+                    ACTION_OPTIONS,
+                ),
                 AccessRowDefinition("barcode_replacement", "Barcode replacement", "Replace damaged serial labels", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition("reports_export", "Reports", "Filter and export scan/transaction reports", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition(

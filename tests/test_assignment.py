@@ -1,4 +1,5 @@
 from io import BytesIO
+from types import SimpleNamespace
 
 from openpyxl import Workbook
 from sqlalchemy import func, select
@@ -7,6 +8,7 @@ from app.models import Batch, BatchItem, BatchStatus, BatchType, ChangeAudit, In
 from app.services import assignment as assignment_service
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import serials_xlsx
+from app.templates import templates
 
 
 def make_product(code="SG080"):
@@ -78,6 +80,50 @@ def test_bulk_assignment_xlsx_can_create_product_from_imported_name_and_tax(db_s
     audit = db_session.scalar(select(ChangeAudit).where(ChangeAudit.entity_type == "product"))
     assert audit is not None
     assert audit.actor_username == "import-admin"
+
+
+def test_bulk_assignment_xlsx_matches_product_alias_names(db_session):
+    product = make_product("SGALIAS")
+    product.nickname = "Customer Friendly Alias"
+    product.alternate_tally_stock_item_name = "Tally Alias Two"
+    db_session.add(product)
+    db_session.commit()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Product Name", "Quantity"])
+    sheet.append(["Tally Alias Two", 2])
+    stream = BytesIO()
+    workbook.save(stream)
+
+    lines = parse_bulk_assignment_xlsx(db_session, stream.getvalue())
+
+    assert len(lines) == 1
+    assert lines[0].product.id == product.id
+    assert lines[0].quantity == 2
+
+
+def test_assignment_page_has_searchable_alias_product_selector():
+    product = SimpleNamespace(
+        id=1,
+        product_code="SGALIAS",
+        product_name="Formal Product",
+        nickname="Friendly Alias",
+        tally_stock_item_name="Primary Tally",
+        alternate_tally_stock_item_name="Second Tally",
+    )
+
+    html = templates.env.get_template("barcode_assignment.html").render(
+        user=None,
+        products=[product],
+        batches=[],
+        warehouse_levels=["Company Warehouse"],
+        error=None,
+    )
+
+    assert 'id="assignment-product-search"' in html
+    assert 'id="assignment-product-select"' in html
+    assert "Friendly Alias" in html
+    assert "Second Tally" in html
 
 
 def test_tally_invoice_export_import_generates_assignment_labels(db_session):

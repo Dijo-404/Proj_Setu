@@ -173,6 +173,7 @@ class Product(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     product_name: Mapped[str] = mapped_column(String(180), index=True)
+    nickname: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
     brand: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     hsn: Mapped[str] = mapped_column(String(40))
@@ -182,6 +183,7 @@ class Product(Base):
     sales_discount_rate: Mapped[float] = mapped_column(Float, default=0)
     shelf_verification_interval: Mapped[int] = mapped_column(Integer, default=1)
     tally_stock_item_name: Mapped[str] = mapped_column(String(180))
+    alternate_tally_stock_item_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 

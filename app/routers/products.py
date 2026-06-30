@@ -29,6 +29,7 @@ def product_snapshot(product: Product) -> dict[str, object]:
         "id": product.id,
         "product_code": product.product_code,
         "product_name": product.product_name,
+        "nickname": product.nickname,
         "category": product.category,
         "brand": product.brand,
         "hsn": product.hsn,
@@ -38,6 +39,7 @@ def product_snapshot(product: Product) -> dict[str, object]:
         "sales_discount_rate": product.sales_discount_rate,
         "shelf_verification_interval": product.shelf_verification_interval,
         "tally_stock_item_name": product.tally_stock_item_name,
+        "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
         "active": product.active,
     }
 
@@ -74,7 +76,17 @@ def products(request: Request, q: str = "", error: str = "", db: Session = Depen
     query = select(Product).order_by(Product.product_code)
     if q:
         like = f"%{q.strip()}%"
-        query = query.where(or_(Product.product_code.ilike(like), Product.product_name.ilike(like)))
+        query = query.where(
+            or_(
+                Product.product_code.ilike(like),
+                Product.product_name.ilike(like),
+                Product.nickname.ilike(like),
+                Product.tally_stock_item_name.ilike(like),
+                Product.alternate_tally_stock_item_name.ilike(like),
+                Product.hsn.ilike(like),
+                Product.brand.ilike(like),
+            )
+        )
     rows = db.scalars(query).all()
     return templates.TemplateResponse(
         request,
@@ -111,6 +123,7 @@ def create_product(
     request: Request,
     product_code: str = Form(...),
     product_name: str = Form(...),
+    nickname: str = Form(""),
     category: str = Form(""),
     brand: str = Form(""),
     hsn: str = Form(...),
@@ -120,6 +133,7 @@ def create_product(
     sales_discount_rate: float = Form(0),
     shelf_verification_interval: int = Form(1),
     tally_stock_item_name: str = Form(""),
+    alternate_tally_stock_item_name: str = Form(""),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "product_create")
@@ -148,6 +162,7 @@ def create_product(
     product = Product(
         product_code=product_code.strip().upper(),
         product_name=product_name.strip(),
+        nickname=nickname.strip() or None,
         category=category.strip() or None,
         brand=brand.strip() or None,
         hsn=hsn.strip(),
@@ -157,6 +172,7 @@ def create_product(
         sales_discount_rate=sales_discount_rate,
         shelf_verification_interval=shelf_verification_interval,
         tally_stock_item_name=tally_stock_item_name.strip() or product_name.strip(),
+        alternate_tally_stock_item_name=alternate_tally_stock_item_name.strip() or None,
     )
     db.add(product)
     try:
@@ -231,8 +247,11 @@ def update_product_pricing(
     default_rate: float = Form(0),
     sales_discount_rate: float = Form(0),
     shelf_verification_interval: int | None = Form(None),
+    nickname: str | None = Form(None),
     category: str | None = Form(None),
     brand: str | None = Form(None),
+    tally_stock_item_name: str | None = Form(None),
+    alternate_tally_stock_item_name: str | None = Form(None),
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "product_create")
@@ -265,10 +284,16 @@ def update_product_pricing(
         product.shelf_verification_interval = shelf_verification_interval
     elif not product.shelf_verification_interval or product.shelf_verification_interval < 1:
         product.shelf_verification_interval = 1
+    if nickname is not None:
+        product.nickname = nickname.strip() or None
     if category is not None:
         product.category = category.strip() or None
     if brand is not None:
         product.brand = brand.strip() or None
+    if tally_stock_item_name is not None:
+        product.tally_stock_item_name = tally_stock_item_name.strip() or product.product_name
+    if alternate_tally_stock_item_name is not None:
+        product.alternate_tally_stock_item_name = alternate_tally_stock_item_name.strip() or None
     record_change(
         db,
         user,
@@ -286,11 +311,14 @@ def update_product_pricing(
                 "ok": True,
                 "product": {
                     "id": product.id,
+                    "nickname": product.nickname or "",
                     "category": product.category or "",
                     "brand": product.brand or "",
                     "default_rate": float(product.default_rate or 0),
                     "sales_discount_rate": float(product.sales_discount_rate or 0),
                     "shelf_verification_interval": int(product.shelf_verification_interval),
+                    "tally_stock_item_name": product.tally_stock_item_name,
+                    "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name or "",
                 },
             }
         )

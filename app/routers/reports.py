@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 import csv
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
@@ -12,9 +13,9 @@ from app.auth import require_permission
 from app.database import get_db
 from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
 from app.services.charts import bar_chart, donut_chart
-from app.services.director_reports import director_audit_batch_report, director_report
+from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
-from app.services.exports import missing_stock_xlsx, safe_row, scans_xlsx, transactions_xlsx
+from app.services.exports import audit_reconciliation_xlsx, missing_stock_xlsx, safe_row, scans_xlsx, transactions_xlsx
 from app.services.losses import loss_summary
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
@@ -33,6 +34,31 @@ def parse_filter_date(value: str, field_name: str) -> datetime | None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid {field_name} date",
         ) from exc
+
+
+def parse_period_datetime(value: str, field_name: str, *, end: bool = False) -> datetime | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} date/time",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    if end and len(raw) == 10:
+        parsed = parsed + timedelta(days=1)
+    return parsed
+
+
+def export_url(path: str, params: dict[str, str]) -> str:
+    filtered = {key: value for key, value in params.items() if value}
+    return f"{path}?{urlencode(filtered)}" if filtered else path
 
 
 def scan_query(action: str = "", start: str = "", end: str = ""):
@@ -131,16 +157,33 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
 
 
 @router.get("")
-def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
+def reports(
+    request: Request,
+    action: str = "",
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    audit_start: str = "",
+    audit_end: str = "",
+    db: Session = Depends(get_db),
+):
     user = require_permission(request, db, "reports_data")
     if has_role(user.role, Role.DIRECTORS) and not has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN}):
+        audit_start_dt = parse_period_datetime(audit_start, "audit start")
+        audit_end_dt = parse_period_datetime(audit_end, "audit end", end=True)
         return templates.TemplateResponse(
             request,
             "director_reports.html",
             {
                 "request": request,
                 "user": user,
-                "report": director_report(db),
+                "report": director_report(db, audit_start_dt, audit_end_dt),
+                "audit_start": audit_start,
+                "audit_end": audit_end,
+                "audit_reconciliation_export_url": export_url(
+                    "/reports/audit-reconciliation.xlsx",
+                    {"start": audit_start, "end": audit_end},
+                ),
             },
         )
 
@@ -192,6 +235,10 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,
+            "audit_reconciliation_export_url": export_url(
+                "/reports/audit-reconciliation.xlsx",
+                {"start": start, "end": end},
+            ),
         },
     )
 
@@ -246,6 +293,29 @@ def director_audit_batch_detail(request: Request, batch_id: int, db: Session = D
             "user": user,
             "report": report,
         },
+    )
+
+
+@router.get("/audit-reconciliation.xlsx")
+def audit_reconciliation_excel(
+    request: Request,
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_data")
+    start_at = parse_period_datetime(start, "audit start")
+    end_at = parse_period_datetime(end, "audit end", end=True)
+    if start_at and end_at and start_at >= end_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Audit start must be before audit end",
+        )
+    report = director_audit_reconciliation_report(db, start_at, end_at)
+    return Response(
+        audit_reconciliation_xlsx(report),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=setu-audit-reconciliation.xlsx"},
     )
 
 

@@ -38,6 +38,45 @@ def test_runtime_schema_adds_sale_gst_columns_to_batches(tmp_path):
     } <= columns
 
 
+def test_runtime_schema_adds_product_alias_columns(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-products.db'}")
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE batches (
+                    id INTEGER PRIMARY KEY,
+                    batch_number VARCHAR(80),
+                    batch_type VARCHAR(40),
+                    user_id INTEGER
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                CREATE TABLE products (
+                    id INTEGER PRIMARY KEY,
+                    product_code VARCHAR(80),
+                    product_name VARCHAR(180),
+                    hsn VARCHAR(40),
+                    gst_rate FLOAT,
+                    unit VARCHAR(40),
+                    default_rate FLOAT,
+                    tally_stock_item_name VARCHAR(180),
+                    active BOOLEAN
+                )
+                """
+            )
+        )
+
+    ensure_runtime_schema(engine)
+
+    columns = {column["name"] for column in inspect(engine).get_columns("products")}
+    assert {"nickname", "alternate_tally_stock_item_name"} <= columns
+
+
 def test_inventory_table_rebuild_preserves_rows_and_adds_all_foreign_keys(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
 
