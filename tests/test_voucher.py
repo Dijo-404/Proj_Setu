@@ -1,4 +1,4 @@
-from app.models import BatchType, Product, SerialStatus, User
+from app.models import BatchType, GstTreatment, Product, SerialStatus, User
 from app.services.inventory import add_serial_to_batch, create_batch, generate_serials, update_batch_item_rate
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 
@@ -32,6 +32,88 @@ def test_voucher_summary_calculates_gst_and_round_off(db_session):
     assert str(summary.cgst_amount) == "25.00"
     assert str(summary.sgst_amount) == "25.00"
     assert str(summary.final_value) == "1050.00"
+
+
+def test_interstate_sale_uses_igst_instead_of_cgst_sgst(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    product = make_product("SGIGST", 500)
+    db_session.add_all([user, product])
+    db_session.commit()
+    serials = generate_serials(db_session, product, 2, initial_status=SerialStatus.IN_STOCK)
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Interstate Customer",
+        "",
+        party_state="Tamil Nadu",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+    )
+    for serial in serials:
+        add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.taxable_value) == "1000.00"
+    assert str(summary.cgst_amount) == "0.00"
+    assert str(summary.sgst_amount) == "0.00"
+    assert str(summary.igst_amount) == "50.00"
+    assert str(summary.final_value) == "1050.00"
+
+
+def test_sale_can_use_entered_cgst_and_sgst_rates(db_session):
+    user = User(username="sales-local-gst", password_hash="x", role="sales")
+    product = make_product("SGLGST", 500)
+    product.gst_rate = 18
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Local Customer",
+        "",
+        gst_treatment=GstTreatment.INTRA_STATE.value,
+        gst_cgst_rate=2,
+        gst_sgst_rate=3,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.lines[0].gst_rate) == "5.00"
+    assert str(summary.lines[0].cgst_rate) == "2.00"
+    assert str(summary.lines[0].sgst_rate) == "3.00"
+    assert str(summary.cgst_amount) == "10.00"
+    assert str(summary.sgst_amount) == "15.00"
+    assert str(summary.final_value) == "525.00"
+
+
+def test_interstate_sale_can_use_entered_igst_rate(db_session):
+    user = User(username="sales-igst-rate", password_hash="x", role="sales")
+    product = make_product("SGIGSTR", 500)
+    product.gst_rate = 5
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Interstate Customer",
+        "",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+        gst_igst_rate=12,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.lines[0].gst_rate) == "12.00"
+    assert str(summary.lines[0].igst_rate) == "12.00"
+    assert str(summary.igst_amount) == "60.00"
+    assert str(summary.final_value) == "560.00"
 
 
 def test_sales_discount_rate_reduces_sales_taxable_value(db_session):

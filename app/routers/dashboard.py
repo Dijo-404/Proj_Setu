@@ -8,10 +8,11 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, ScanLog
+from app.models import Batch, Role, ScanLog, has_any_role
 from app.services.charts import bar_chart, donut_chart
 from app.services.expiry import expiry_summary
 from app.services.inventory import dashboard_counts, status_summary
+from app.services.shelf_verification import pending_shelf_batches
 from app.templates import templates
 
 router = APIRouter()
@@ -57,6 +58,9 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
             "expiry": expiry_summary(db),
             "recent_batches": _recent_batches(db),
             "recent_scans": _recent_scans(db),
+            "shelf_alerts": pending_shelf_batches(db, limit=8)
+            if has_any_role(user.role, {Role.SUPER_ADMIN, Role.ADMIN})
+            else [],
         },
     )
 
@@ -78,6 +82,12 @@ def dashboard_data(request: Request, db: Session = Depends(get_db)):
         expiry=expiry_summary(db),
         user=user,
     )
+    shelf_alerts_html = templates.env.get_template("partials/dashboard_shelf_alerts.html").render(
+        shelf_alerts=pending_shelf_batches(db, limit=8)
+        if has_any_role(user.role, {Role.SUPER_ADMIN, Role.ADMIN})
+        else [],
+        user=user,
+    )
     return JSONResponse(
         {
             "counts": dashboard_counts(db),
@@ -85,5 +95,6 @@ def dashboard_data(request: Request, db: Session = Depends(get_db)):
             "expiry_html": expiry_html,
             "batches_html": batches_html,
             "scans_html": scans_html,
+            "shelf_alerts_html": shelf_alerts_html,
         }
     )

@@ -28,10 +28,12 @@ Only super admins can delete users. Deleted users with old batches, scans, or re
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, round-off ledger, and default party.
+3. Enter exact Tally names for company, voucher types, ledgers, GST ledgers, and round-off ledger.
 4. Keep `Enable Tally sync` off until setup is validated.
 5. Open `Products` and create product masters with exact Tally stock item names.
-6. Open `Tally Check` and confirm each required master only after comparing with Tally.
+6. Open `Tally Check`. Click a company name to edit its Tally settings in the
+   popup. For the active company, use the same popup to test the gateway and
+   confirm each required master only after comparing it with Tally.
 7. Create named users from `Users`.
 
 Settings fields auto-save while editing. The sync checkbox is saved only by the `Save settings` button and is blocked until Tally Check is complete.
@@ -63,8 +65,12 @@ Single-product assignment:
 Bulk assignment accepts `.xlsx` files up to 5 MB with these columns:
 
 ```text
-Product Code, Quantity, Batch, Mfg Date, Expiry Date, Warehouse
+Product Code or Product Name, Quantity, HSN, GST, SGST, IGST, Batch, Mfg Date, Expiry Date, Warehouse
 ```
+
+Tally purchase/invoice exports are also accepted when the item table has `Description of Goods` and `Quantity`.
+Rows such as totals, GST ledger rows, and round-off are ignored.
+If a Tally product name is not already in Setu, Setu creates a minimal product from the imported name, HSN, GST rate, and unit before generating labels.
 
 Download the assignment's label PDF and serial XLSX after generation.
 
@@ -91,12 +97,21 @@ Submitted purchase serials become `IN_STOCK`.
 ## Sale
 
 1. Open `Batches` -> `Sale`.
-2. Enter customer/reference details.
+2. Enter the debtor ledger name, GST registration type, GST name, and customer
+   state. GST number appears for `Composition` and `Registered` buyers only;
+   `Unregistered/Consumer` buyers do not have a GST number field. If the sale
+   needs a specific tax rate, enter either CGST/SGST percentages or an IGST
+   percentage on the batch. Blank tax fields use the product GST rate.
 3. Scan in-stock serials, or use `Pick FEFO` for product and quantity.
-4. Confirm rates, sales discount, GST split, round off, and final invoice value.
-5. Submit the batch.
+4. Confirm rates, sales discount, GST split/IGST, round off, and final invoice value.
+5. Use `Pre-invoice PDF` to download a provisional sales bill showing the
+   customer reference name, buyer GST details, product lines, GST breakup,
+   round off, and total.
+6. Submit the batch.
 
 Submitted sale serials become `SOLD`.
+The pre-invoice is available for every sale after at least one item is added.
+It is clearly marked as provisional and is not the final statutory GST invoice.
 
 ## Audit
 
@@ -134,6 +149,7 @@ Admins can open `Reports` to review:
 
 - scan history
 - transaction history
+- detailed missing-stock findings from audits, including serial, product, warehouse, storage location, product batch, and expiry
 - pending and failed sync batches
 - expiry summary context
 - CSV/XLSX exports
@@ -147,4 +163,6 @@ Open a serial detail page to see the full scan and transaction history for one s
 3. Click `Download backup`.
 4. Store the downloaded `.db` file safely.
 
-Scheduled server backups should include the whole `data/` folder and a separate copy of `.env`.
+Setu also creates verified automatic backups into `data/backups/` by default,
+keeps the latest 14 files, and can copy them to another drive or network share
+when `BACKUP_OFFSITE_DIRECTORY` is configured. Keep a separate copy of `.env`.

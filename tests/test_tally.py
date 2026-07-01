@@ -1,12 +1,27 @@
+from datetime import datetime, timezone
 from decimal import Decimal
+from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 
 import pytest
 
-from app.models import BatchType, Product, SerialStatus, User
+from app.models import (
+    BatchStatus,
+    BatchType,
+    GstRegistrationType,
+    GstTreatment,
+    Product,
+    SerialStatus,
+    StorageLocation,
+    User,
+)
+from app.services.access_control import default_role_access_config
 from app.services import tally as tally_service
 from app.services.inventory import apply_batch_statuses, add_serial_to_batch, create_batch, generate_serials
-from app.services.tally import TallySyncError, build_voucher_xml, post_to_tally
+from app.services.shelf_verification import verify_pending_items_on_shelf
+from app.services.settings import update_settings
+from app.services.tally import TallyResult, TallySyncError, build_voucher_xml, post_to_tally, sync_batch
+from app.templates import templates
 
 
 class _FakeResponse:
@@ -47,9 +62,22 @@ VALID_SETTINGS = {
     "purchase_ledger_name": "Purchase Ledger",
     "cgst_ledger_name": "CGST Ledger",
     "sgst_ledger_name": "SGST Ledger",
+    "sales_gst_ledger_mappings": (
+        "5 | Sales Ledger | CGST Ledger | SGST Ledger | IGST Ledger\n"
+        "18 | Sales Ledger | CGST Ledger | SGST Ledger | IGST Ledger"
+    ),
     "round_off_ledger_name": "Round Off",
-    "default_party_name": "Cash Ledger",
 }
+
+
+def test_tally_xml_requires_party_on_the_batch(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(db_session, user, BatchType.SALE, "", "")
+
+    with pytest.raises(TallySyncError, match="customer or supplier"):
+        build_voucher_xml(batch, VALID_SETTINGS)
 
 
 def test_sale_batch_xml_groups_serials_by_product(db_session):
@@ -74,6 +102,10 @@ def test_sale_batch_xml_groups_serials_by_product(db_session):
     assert xml.count("<ALLINVENTORYENTRIES.LIST>") == 1
     assert "2 Pcs" in xml
     assert "Sg Biriyani Masala 100grm" in xml
+    voucher = ET.fromstring(xml).find(".//VOUCHER")
+    assert voucher is not None
+    assert voucher.attrib["REMOTEID"]
+    assert build_voucher_xml(batch, VALID_SETTINGS) == xml
 
 
 def test_sale_batch_xml_includes_sales_discount(db_session):
@@ -99,6 +131,42 @@ def test_sale_batch_xml_includes_sales_discount(db_session):
 
     assert "<DISCOUNT>10.00</DISCOUNT>" in xml
     assert "<AMOUNT>450.00</AMOUNT>" in xml
+
+
+def test_sale_batch_xml_includes_buyer_gst_details(db_session):
+    user = User(username="sales-gst-buyer", password_hash="x", role="sales")
+    product = Product(
+        product_code="SGGSTBUY",
+        product_name="Buyer GST Product",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Buyer GST Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Buyer Ledger",
+        "",
+        party_state="Karnataka",
+        party_gst_registration_type=GstRegistrationType.REGULAR.value,
+        party_gst_name="Buyer Registered Name",
+        party_gstin="29abcde1234f1z5",
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    xml = build_voucher_xml(batch, VALID_SETTINGS)
+
+    assert "<PARTYLEDGERNAME>Buyer Ledger</PARTYLEDGERNAME>" in xml
+    assert "<BASICBUYERNAME>Buyer Registered Name</BASICBUYERNAME>" in xml
+    assert "<GSTREGISTRATIONTYPE>Regular</GSTREGISTRATIONTYPE>" in xml
+    assert "<PARTYGSTIN>29ABCDE1234F1Z5</PARTYGSTIN>" in xml
 
 
 def _accounting_sum(xml: str) -> Decimal:
@@ -139,6 +207,168 @@ def test_sale_voucher_xml_is_balanced_with_tax_and_party(db_session):
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
+def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
+    user = User(username="sales-multi-gst", password_hash="x", role="sales")
+    product_5 = Product(
+        product_code="GST005",
+        product_name="Five Percent Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Five Percent Product",
+    )
+    product_18 = Product(
+        product_code="GST018",
+        product_name="Eighteen Percent Product",
+        hsn="0902",
+        gst_rate=18,
+        unit="Pcs",
+        default_rate=200,
+        tally_stock_item_name="Eighteen Percent Product",
+    )
+    db_session.add_all([user, product_5, product_18])
+    db_session.commit()
+    serial_5 = generate_serials(db_session, product_5, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    serial_18 = generate_serials(db_session, product_18, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial_5.serial_number)
+    add_serial_to_batch(db_session, batch, user, serial_18.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+    settings = {
+        **VALID_SETTINGS,
+        "sales_gst_ledger_mappings": (
+            "5 | Sales @ 5% | Output CGST @ 2.5% | Output SGST @ 2.5% | Output IGST @ 5%\n"
+            "18 | Sales @ 18% | Output CGST @ 9% | Output SGST @ 9% | Output IGST @ 18%"
+        ),
+    }
+
+    xml = build_voucher_xml(batch, settings)
+    root = ET.fromstring(xml)
+    allocation_names = [
+        entry.findtext("LEDGERNAME")
+        for entry in root.iter("ACCOUNTINGALLOCATIONS.LIST")
+    ]
+    ledger_amounts = {
+        entry.findtext("LEDGERNAME"): Decimal(entry.findtext("AMOUNT"))
+        for entry in root.iter("LEDGERENTRIES.LIST")
+    }
+
+    assert allocation_names == ["Sales @ 5%", "Sales @ 18%"]
+    assert ledger_amounts["Output CGST @ 2.5%"] == Decimal("2.50")
+    assert ledger_amounts["Output SGST @ 2.5%"] == Decimal("2.50")
+    assert ledger_amounts["Output CGST @ 9%"] == Decimal("18.00")
+    assert ledger_amounts["Output SGST @ 9%"] == Decimal("18.00")
+    assert VALID_SETTINGS["sales_ledger_name"] not in xml
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
+def test_sale_voucher_requires_product_gst_rate_mapping(db_session):
+    user = User(username="sales-missing-gst-map", password_hash="x", role="sales")
+    product = Product(
+        product_code="GST012",
+        product_name="Twelve Percent Product",
+        hsn="0901",
+        gst_rate=12,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Twelve Percent Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    with pytest.raises(TallySyncError, match="12%"):
+        build_voucher_xml(batch, VALID_SETTINGS)
+
+
+def test_sale_voucher_uses_mapping_with_removed_legacy_defaults_blank(db_session):
+    user = User(username="sales-blank-legacy", password_hash="x", role="sales")
+    product = Product(
+        product_code="GST005BLANK",
+        product_name="Five Percent Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Five Percent Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+    settings = {
+        **VALID_SETTINGS,
+        "sales_voucher_type": "",
+        "sales_ledger_name": "",
+        "cgst_ledger_name": "",
+        "sgst_ledger_name": "",
+        "sales_gst_ledger_mappings": (
+            "5 | Sales @ 5% | Output CGST @ 2.5% | "
+            "Output SGST @ 2.5% | Output IGST @ 5%"
+        ),
+    }
+
+    xml = build_voucher_xml(batch, settings)
+
+    assert "<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>" in xml
+    assert "Sales @ 5%" in xml
+    assert "Output CGST @ 2.5%" in xml
+    assert "Output SGST @ 2.5%" in xml
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
+def test_interstate_sale_voucher_uses_mapped_igst_ledger(db_session):
+    user = User(username="sales-igst", password_hash="x", role="sales")
+    product = Product(
+        product_code="GST-IGST",
+        product_name="Interstate Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Interstate Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Interstate Customer",
+        "",
+        party_state="Tamil Nadu",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+    settings = {
+        **VALID_SETTINGS,
+        "sales_gst_ledger_mappings": (
+            "5 | Sales @ 5% | Output CGST @ 2.5% | "
+            "Output SGST @ 2.5% | Output IGST @ 5%"
+        ),
+    }
+
+    xml = build_voucher_xml(batch, settings)
+    ledger_amounts = {
+        entry.findtext("LEDGERNAME"): Decimal(entry.findtext("AMOUNT"))
+        for entry in ET.fromstring(xml).iter("LEDGERENTRIES.LIST")
+    }
+
+    assert ledger_amounts["Output IGST @ 5%"] == Decimal("5.00")
+    assert "Output CGST @ 2.5%" not in ledger_amounts
+    assert "Output SGST @ 2.5%" not in ledger_amounts
+    assert "<PLACEOFSUPPLY>Tamil Nadu</PLACEOFSUPPLY>" in xml
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
 def test_purchase_voucher_xml_is_balanced(db_session):
     user = User(username="purch-bal", password_hash="x", role="purchase")
     product = Product(
@@ -150,14 +380,131 @@ def test_purchase_voucher_xml_is_balanced(db_session):
         default_rate=333,
         tally_stock_item_name="Masala",
     )
-    db_session.add_all([user, product])
+    location = StorageLocation(
+        code="TALLY-PURCHASE-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, product, location])
     db_session.commit()
     serials = generate_serials(db_session, product, 3)
     batch = create_batch(db_session, user, BatchType.PURCHASE, "Vendor", "")
     for serial in serials:
         add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
     apply_batch_statuses(db_session, batch, user)
 
     xml = build_voucher_xml(batch, VALID_SETTINGS)
 
     assert _accounting_sum(xml) == Decimal("0.00")
+
+
+def test_batch_list_exposes_purchase_and_sale_tally_xml_exports():
+    user = SimpleNamespace(
+        username="admin",
+        role="admin",
+        _access_config=default_role_access_config(),
+    )
+    request = SimpleNamespace(url=SimpleNamespace(path="/batches"), query_params={})
+    created_at = datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc)
+    batches = [
+        SimpleNamespace(
+            id=101,
+            batch_number="PUR-20260629-0001",
+            batch_type=BatchType.PURCHASE.value,
+            party_name="Supplier",
+            reason_code=None,
+            status=BatchStatus.PENDING_SYNC.value,
+            items=[object()],
+            retry_count=0,
+            created_at=created_at,
+        ),
+        SimpleNamespace(
+            id=102,
+            batch_number="SAL-20260629-0001",
+            batch_type=BatchType.SALE.value,
+            party_name="Customer",
+            reason_code=None,
+            status=BatchStatus.PENDING_SYNC.value,
+            items=[object()],
+            retry_count=0,
+            created_at=created_at,
+        ),
+    ]
+
+    html = templates.env.get_template("batches.html").render(
+        request=request,
+        user=user,
+        batches=batches,
+    )
+
+    assert 'href="/batches/new?batch_type=PURCHASE">Purchase</a>' in html
+    assert 'href="/batches/new?batch_type=SALE">Sale</a>' in html
+    assert 'href="/batches/101/tally.xml"' in html
+    assert 'href="/batches/102/tally.xml"' in html
+    assert 'action="/batches/101/retry"' in html
+    assert 'action="/batches/102/retry"' in html
+
+
+def test_purchase_and_sale_batches_sync_to_tally(monkeypatch, db_session):
+    user = User(username="tally-admin", password_hash="x", role="admin")
+    purchase_product = Product(
+        product_code="PUR-SYNC",
+        product_name="Purchase Sync Item",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        shelf_verification_interval=0,
+        tally_stock_item_name="Purchase Sync Item",
+    )
+    sale_product = Product(
+        product_code="SAL-SYNC",
+        product_name="Sale Sync Item",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=200,
+        tally_stock_item_name="Sale Sync Item",
+    )
+    location = StorageLocation(
+        code="SYNC-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, purchase_product, sale_product, location])
+    db_session.commit()
+    update_settings(db_session, {**VALID_SETTINGS, "tally_enabled": "true"})
+    purchase_serial = generate_serials(db_session, purchase_product, 1)[0]
+    sale_serial = generate_serials(db_session, sale_product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    purchase_batch = create_batch(db_session, user, BatchType.PURCHASE, "Supplier", "")
+    sale_batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, purchase_batch, user, purchase_serial.serial_number)
+    add_serial_to_batch(db_session, sale_batch, user, sale_serial.serial_number)
+    verify_pending_items_on_shelf(db_session, batch=purchase_batch, location=location, user=user)
+    apply_batch_statuses(db_session, purchase_batch, user)
+    apply_batch_statuses(db_session, sale_batch, user)
+    db_session.commit()
+    posted_xml: list[str] = []
+
+    def fake_post(xml, _settings):
+        posted_xml.append(xml)
+        return TallyResult(xml, "<RESPONSE><CREATED>1</CREATED></RESPONSE>", "CREATED=1; ALTERED=0")
+
+    monkeypatch.setattr(tally_service, "post_to_tally", fake_post)
+
+    sync_batch(db_session, purchase_batch)
+    sync_batch(db_session, sale_batch)
+
+    assert purchase_batch.status == BatchStatus.SYNCED.value
+    assert sale_batch.status == BatchStatus.SYNCED.value
+    assert any("<VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>" in xml for xml in posted_xml)
+    assert any("<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>" in xml for xml in posted_xml)

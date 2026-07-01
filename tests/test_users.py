@@ -2,11 +2,13 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
 from app.models import Batch, BatchType, User
+from app.routers.users import create_user, users_page
 from app.security import create_session_token, hash_password, verify_password
 
 
@@ -18,6 +20,22 @@ def make_session():
     )
     Base.metadata.create_all(engine)
     return engine, sessionmaker(bind=engine)
+
+
+def make_request(user_id: int, method: str = "GET", path: str = "/users") -> Request:
+    token = create_session_token(user_id)
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [(b"cookie", f"{SESSION_COOKIE}={token}".encode())],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "client": ("testclient", 50000),
+        }
+    )
 
 
 def test_super_admin_can_delete_unused_user():
@@ -53,6 +71,32 @@ def test_super_admin_can_delete_unused_user():
     assert delete.status_code == 303
     assert delete.headers["location"] == "/users"
     assert deleted is None
+
+
+def test_user_creation_accepts_multiple_roles():
+    engine, Session = make_session()
+    with Session() as db:
+        db.add(User(id=1, username="root", password_hash="x", role="super_admin", active=True))
+        db.commit()
+        page = users_page(make_request(1), db=db)
+        response = create_user(
+            make_request(1, method="POST"),
+            username="dual",
+            password="dual-pass",
+            role=["purchase", "sales"],
+            db=db,
+        )
+        after_page = users_page(make_request(1), db=db)
+        dual = db.scalar(select(User).where(User.username == "dual"))
+    engine.dispose()
+
+    assert page.status_code == 200
+    assert 'type="checkbox" name="role" value="purchase"' in page.body.decode()
+    assert response.status_code == 303
+    assert response.headers["location"] == "/users"
+    assert dual is not None
+    assert dual.role == "purchase,sales"
+    assert "purchase, sales" in after_page.body.decode()
 
 
 def test_user_delete_is_super_admin_only_and_archives_history_user():

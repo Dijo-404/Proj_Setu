@@ -103,7 +103,7 @@
 
     function closePicker() {
       if (!openPicker) return;
-      openPicker.classList.remove("is-open");
+      openPicker.classList.remove("is-open", "opens-up");
       openPicker.button.setAttribute("aria-expanded", "false");
       openPicker = null;
     }
@@ -122,9 +122,21 @@
 
     function openMenu(picker) {
       if (openPicker && openPicker !== picker) closePicker();
+      picker.classList.remove("opens-up");
       picker.classList.add("is-open");
       picker.button.setAttribute("aria-expanded", "true");
       openPicker = picker;
+
+      const scrollContainer = picker.closest(".access-matrix-scroll--limited");
+      const boundary = scrollContainer
+        ? scrollContainer.getBoundingClientRect()
+        : { top: 0, bottom: window.innerHeight };
+      const buttonBounds = picker.button.getBoundingClientRect();
+      const menuHeight = picker.menu.offsetHeight;
+      const roomAbove = buttonBounds.top - Math.max(boundary.top, 0);
+      const roomBelow = Math.min(boundary.bottom, window.innerHeight) - buttonBounds.bottom;
+      picker.classList.toggle("opens-up", roomBelow < menuHeight + 7 && roomAbove > roomBelow);
+
       const selectedItem = picker.items.find((item) => item.dataset.value === picker.select.value);
       if (selectedItem) selectedItem.focus({ preventScroll: true });
     }
@@ -166,6 +178,7 @@
 
       picker.select = select;
       picker.button = button;
+      picker.menu = menu;
       picker.items = items;
       picker.append(button, menu);
       select.after(picker);

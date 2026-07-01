@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, BatchItem, BatchType, Product, Serial
+from app.models import Batch, BatchItem, BatchType, Product, Serial, WarehouseLevel
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, label_layout, serials_xlsx
 from app.services.expiry import parse_optional_date
@@ -40,7 +40,14 @@ def assignment_page(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse(
         request,
         "barcode_assignment.html",
-        {"request": request, "user": user, "products": products, "batches": batches, "error": None},
+        {
+            "request": request,
+            "user": user,
+            "products": products,
+            "batches": batches,
+            "warehouse_levels": [level.value for level in WarehouseLevel],
+            "error": None,
+        },
     )
 
 
@@ -54,6 +61,7 @@ def generate_assignment(
     mfg_date: str = Form(""),
     expiry_date: str = Form(""),
     warehouse: str = Form(""),
+    warehouse_level: str = Form(WarehouseLevel.COMPANY_WAREHOUSE.value),
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
@@ -78,6 +86,7 @@ def generate_assignment(
                     mfg_date=parsed_mfg_date,
                     expiry_date=parsed_expiry_date,
                     warehouse=warehouse.strip() or None,
+                    warehouse_level=warehouse_level,
                 )
             ],
             notes=notes,
@@ -100,9 +109,10 @@ def bulk_assignment(
         data = upload.file.read(MAX_BULK_ASSIGNMENT_UPLOAD_BYTES + 1)
         if len(data) > MAX_BULK_ASSIGNMENT_UPLOAD_BYTES:
             raise InventoryError("Upload an Excel file up to 5 MB")
-        lines = parse_bulk_assignment_xlsx(db, data)
+        lines = parse_bulk_assignment_xlsx(db, data, user=user)
         batch = assign_barcodes_to_existing_stock(db, user, lines, notes=notes, source="BULK_EXCEL")
     except InventoryError as exc:
+        db.rollback()
         return _assignment_error(request, db, user, str(exc))
     return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)
 
@@ -172,6 +182,13 @@ def _assignment_error(request: Request, db: Session, user, error: str):
     return templates.TemplateResponse(
         request,
         "barcode_assignment.html",
-        {"request": request, "user": user, "products": products, "batches": batches, "error": error},
+        {
+            "request": request,
+            "user": user,
+            "products": products,
+            "batches": batches,
+            "warehouse_levels": [level.value for level in WarehouseLevel],
+            "error": error,
+        },
         status_code=400,
     )

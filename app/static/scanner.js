@@ -7,6 +7,9 @@ const scannerTools = document.getElementById("scanner-tools");
 const scannerBox = document.getElementById("scanner-box");
 const scanLine = document.querySelector(".scan-line");
 const cameraButton = document.getElementById("camera-button");
+const scanCountLabel = document.getElementById("scan-count");
+const submitBatchButton = document.getElementById("submit-batch-button");
+const shelfVerificationStatus = document.getElementById("shelf-verification-status");
 
 const canManual = form && form.dataset.canManual === "true";
 
@@ -19,6 +22,7 @@ let scanTimer = null;
 let inputSubmitTimer = null;
 let cameraStarting = false;
 let toastContainer = null;
+let scanCount = Number(scanCountLabel?.dataset.count || 0);
 
 function ensureToastContainer() {
   if (toastContainer) return toastContainer;
@@ -69,6 +73,33 @@ function playBeep(freq, durationMs) {
 
 function setScanStatus(text) {
   if (scanStatusLabel) scanStatusLabel.textContent = text;
+}
+
+function updateScanCount() {
+  scanCount += 1;
+  if (scanCountLabel) scanCountLabel.textContent = `${scanCount} scanned`;
+}
+
+function updateShelfState(payload) {
+  const pending = Number(payload?.pending_count || 0);
+  const required = payload?.shelf_required === true;
+  if (submitBatchButton) submitBatchButton.disabled = scanCount === 0 || pending > 0;
+  if (!shelfVerificationStatus) return;
+  shelfVerificationStatus.dataset.pending = String(pending);
+  shelfVerificationStatus.classList.toggle("warn", pending > 0);
+  if (pending > 0) {
+    const suffix = required
+      ? " Scan the shelf QR now—more product scans are blocked."
+      : " Scan the shelf QR before submitting.";
+    shelfVerificationStatus.textContent =
+      `${pending} product${pending === 1 ? "" : "s"} awaiting shelf verification.${suffix}`;
+  } else if (payload?.scan_type === "shelf") {
+    shelfVerificationStatus.textContent =
+      `Shelf verified: ${payload.location || payload.location_code || "location recorded"}.`;
+  } else {
+    shelfVerificationStatus.textContent =
+      "Shelf placement is verified. Products with a configured interval will require a shelf QR scan.";
+  }
 }
 
 function showScannerTools() {
@@ -406,6 +437,7 @@ async function decodeNative(source) {
 
 function stopCamera() {
   scanning = false;
+  lastCode = "";
   if (scanTimer) {
     clearTimeout(scanTimer);
     scanTimer = null;
@@ -422,6 +454,25 @@ function stopCamera() {
   setCameraControls(false);
 }
 
+function scheduleScan(delay = 120) {
+  if (!scanning) return;
+  if (scanTimer) clearTimeout(scanTimer);
+  scanTimer = setTimeout(() => {
+    scanTimer = null;
+    scanLoop();
+  }, delay);
+}
+
+function finishSubmission(delay = 250) {
+  submitting = false;
+  if (input) input.value = "";
+  if (scanLine) {
+    setTimeout(() => scanLine.classList.remove("detected"), 180);
+  }
+  setCameraControls(scanning);
+  scheduleScan(delay);
+}
+
 async function submitSerial(serial, source = "camera") {
   serial = cleanDecodedText(serial);
   if (!serial || submitting || !form) return;
@@ -429,7 +480,6 @@ async function submitSerial(serial, source = "camera") {
   if (input) input.value = serial;
   if (sourceInput) sourceInput.value = source;
   if (scanLine) scanLine.classList.add("detected");
-  if (cameraButton) cameraButton.disabled = true;
   setScanStatus(`Adding ${serial}...`);
 
   const data = new FormData();
@@ -448,29 +498,44 @@ async function submitSerial(serial, source = "camera") {
       const errorMsg = payload.error || payload.detail || "Scan rejected";
       const kind = errorMsg.includes("Already scanned") ? "warn" : "error";
       showToast(errorMsg.includes("not found") ? `Serial not found: ${serial}` : errorMsg, kind, 4000);
-      setScanStatus("Scan rejected - try again");
-      if (scanLine) scanLine.classList.remove("detected");
-      if (cameraButton) cameraButton.disabled = false;
-      lastCode = "";
-      submitting = false;
+      updateShelfState(payload);
+      setScanStatus(
+        scanning
+          ? (payload.shelf_required ? "Shelf QR required" : "Scan rejected - scan the next code")
+          : "Scanning stopped"
+      );
+      finishSubmission();
+      return;
+    }
+
+    if (payload.scan_type === "shelf") {
+      showToast(
+        `${payload.verified_count || 0} product(s) verified at ${payload.location_code || "shelf"}`,
+        "success",
+        3500
+      );
+      updateShelfState(payload);
+      setScanStatus(scanning ? "Shelf verified - scan the next product" : "Scanning stopped");
+      finishSubmission(500);
       return;
     }
 
     const product = payload.product || "";
     const serialNum = payload.serial || serial;
     showToast(`${serialNum}${product ? " - " + product : ""} added`, "success", 2500);
-    setScanStatus(`${serialNum} added`);
-    setTimeout(() => {
-      stopCamera();
-      window.location.reload();
-    }, 350);
+    updateScanCount();
+    updateShelfState(payload);
+    setScanStatus(
+      scanning
+        ? (payload.shelf_required ? "Product added - scan the shelf QR now" : `${serialNum} added - scan the next code`)
+        : "Scanning stopped"
+    );
+    finishSubmission();
   } catch (e) {
     showToast("Network error - check connection", "error", 5000);
-    setScanStatus("Network error - try again");
-    if (scanLine) scanLine.classList.remove("detected");
-    if (cameraButton) cameraButton.disabled = false;
+    setScanStatus(scanning ? "Network error - scan the code again" : "Scanning stopped");
     lastCode = "";
-    submitting = false;
+    finishSubmission(500);
   }
 }
 
@@ -500,11 +565,11 @@ function scheduleInputAutoSubmit() {
 
 async function scanLoop() {
   if (!scanning || submitting) {
-    if (scanning) scanTimer = setTimeout(scanLoop, 120);
+    scheduleScan();
     return;
   }
   if (!captureFrame()) {
-    scanTimer = setTimeout(scanLoop, 150);
+    scheduleScan(150);
     return;
   }
 
@@ -515,12 +580,13 @@ async function scanLoop() {
     code = "";
   }
 
+  if (!scanning) return;
   if (code && code !== lastCode) {
     lastCode = code;
     await submitSerial(code, "camera");
     return;
   }
-  if (scanning) scanTimer = setTimeout(scanLoop, 120);
+  scheduleScan();
 }
 
 async function decodeFrame() {

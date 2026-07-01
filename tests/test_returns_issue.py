@@ -55,10 +55,11 @@ def test_purchase_return_and_issue_statuses(db_session):
     add_serial_to_batch(db_session, purchase_return, user, serials[0].serial_number)
     apply_batch_statuses(db_session, purchase_return, user)
     issue = create_batch(db_session, user, BatchType.ISSUE, "Marketing", "", "SAMPLE")
-    add_serial_to_batch(db_session, issue, user, serials[1].serial_number)
+    issue_item = add_serial_to_batch(db_session, issue, user, serials[1].serial_number)
     apply_batch_statuses(db_session, issue, user)
     assert serials[0].status == SerialStatus.PURCHASE_RETURN.value
     assert serials[1].status == SerialStatus.ISSUED.value
+    assert issue_item.rate == 100
     txn_types = db_session.scalars(select(InventoryTransaction.transaction_type).order_by(InventoryTransaction.id)).all()
     assert txn_types == [TransactionType.PURCHASE_RETURN.value, TransactionType.ISSUE.value]
 

@@ -9,7 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Product, TallyMasterConfirmation, User, utc_now
-from app.services.settings import get_all_settings
+from app.services.settings import get_all_settings, parse_sales_gst_ledger_mappings
 
 
 @dataclass(frozen=True)
@@ -57,14 +57,15 @@ def collect_master_requirements(db: Session) -> list[MasterRequirement]:
     requirements: dict[tuple[str, str], MasterRequirement] = {}
 
     _add(requirements, "Company", settings["company_name"], "Settings", "Must be the open Tally company")
-    _add(requirements, "Voucher Type", settings["sales_voucher_type"], "Settings", "Used for sale batches")
-    _add(requirements, "Voucher Type", settings["purchase_voucher_type"], "Settings", "Used for receive batches")
-    _add(requirements, "Ledger", settings["sales_ledger_name"], "Settings", "Sales posting ledger")
-    _add(requirements, "Ledger", settings["purchase_ledger_name"], "Settings", "Purchase posting ledger")
-    _add(requirements, "Ledger", settings["cgst_ledger_name"], "Settings", "GST posting ledger")
-    _add(requirements, "Ledger", settings["sgst_ledger_name"], "Settings", "GST posting ledger")
     _add(requirements, "Ledger", settings["round_off_ledger_name"], "Settings", "Round off posting ledger")
-    _add(requirements, "Ledger", settings["default_party_name"], "Settings", "Fallback party ledger")
+    mappings = parse_sales_gst_ledger_mappings(settings.get("sales_gst_ledger_mappings"))
+    for gst_rate, ledgers in mappings.items():
+        source = f"Sales GST {gst_rate}% mapping"
+        _add(requirements, "Ledger", ledgers["sales"], source, "Sales posting ledger")
+        _add(requirements, "Ledger", ledgers["cgst"], source, "CGST posting ledger")
+        _add(requirements, "Ledger", ledgers["sgst"], source, "SGST posting ledger")
+        if ledgers["igst"]:
+            _add(requirements, "Ledger", ledgers["igst"], source, "IGST posting ledger")
 
     products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
     for product in products:
@@ -145,10 +146,17 @@ def build_company_list_xml() -> str:
     header = ET.SubElement(envelope, "HEADER")
     ET.SubElement(header, "VERSION").text = "1"
     ET.SubElement(header, "TALLYREQUEST").text = "Export"
-    ET.SubElement(header, "TYPE").text = "Data"
+    ET.SubElement(header, "TYPE").text = "Collection"
     ET.SubElement(header, "ID").text = "List of Companies"
     body = ET.SubElement(envelope, "BODY")
-    ET.SubElement(body, "DESC")
+    desc = ET.SubElement(body, "DESC")
+    static_variables = ET.SubElement(desc, "STATICVARIABLES")
+    ET.SubElement(static_variables, "SVEXPORTFORMAT").text = "$$SysName:XML"
+    tdl = ET.SubElement(desc, "TDL")
+    tdl_message = ET.SubElement(tdl, "TDLMESSAGE")
+    collection = ET.SubElement(tdl_message, "COLLECTION", {"NAME": "List of Companies"})
+    ET.SubElement(collection, "TYPE").text = "Company"
+    ET.SubElement(collection, "NATIVEMETHOD").text = "Name"
     return ET.tostring(envelope, encoding="unicode")
 
 
@@ -164,6 +172,25 @@ def test_tally_gateway(settings: dict[str, str]) -> GatewayCheckResult:
     except TimeoutError:
         return GatewayCheckResult(False, "Tally gateway timed out")
     excerpt = " ".join(body.split())[:500]
-    if body.strip():
-        return GatewayCheckResult(True, "Tally gateway responded", excerpt)
-    return GatewayCheckResult(False, "Tally gateway returned an empty response")
+    if not body.strip():
+        return GatewayCheckResult(False, "Tally gateway returned an empty response")
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return GatewayCheckResult(False, "Tally gateway returned unreadable XML", excerpt)
+
+    errors = [
+        node.text.strip()
+        for node in root.iter()
+        if node.tag.upper().endswith("LINEERROR") and node.text and node.text.strip()
+    ]
+    if errors:
+        return GatewayCheckResult(False, f"Tally rejected gateway check: {'; '.join(errors)}", excerpt)
+
+    status = next(
+        (node.text.strip() for node in root.iter() if node.tag.upper().endswith("STATUS") and node.text),
+        None,
+    )
+    if status == "0":
+        return GatewayCheckResult(False, "Tally rejected gateway check", excerpt)
+    return GatewayCheckResult(True, "Tally gateway responded", excerpt)

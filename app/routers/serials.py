@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, InventoryTransaction, Product, ScanLog, Serial
+from app.models import Batch, InventoryTransaction, Product, RelocationSerial, ScanLog, Serial, StockRelocation
 from app.services.access_control import role_has_access
 from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, barcode_png, label_layout, serials_xlsx
 from app.services.label_printing import LabelPrintError, mark_serial_labels_printed_once
@@ -155,6 +155,13 @@ def serial_detail(serial_id: int, request: Request, db: Session = Depends(get_db
         .options(selectinload(ScanLog.user), selectinload(ScanLog.batch))
     ).all()
     replacement = db.get(Serial, serial.replaced_by_id) if serial.replaced_by_id else None
+    relocations = db.scalars(
+        select(StockRelocation)
+        .join(RelocationSerial, RelocationSerial.relocation_id == StockRelocation.id)
+        .where(RelocationSerial.serial_id == serial.id)
+        .order_by(desc(StockRelocation.created_at))
+        .options(selectinload(StockRelocation.user))
+    ).all()
     return templates.TemplateResponse(
         request,
         "serial_detail.html",
@@ -165,6 +172,7 @@ def serial_detail(serial_id: int, request: Request, db: Session = Depends(get_db
             "transactions": transactions,
             "logs": logs,
             "replacement": replacement,
+            "relocations": relocations,
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,

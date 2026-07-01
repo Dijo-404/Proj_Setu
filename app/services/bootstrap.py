@@ -2,7 +2,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
-from app.models import Role, User
+from app.models import Role, User, has_role
 from app.security import hash_password, verify_password
 from app.services.settings import clear_legacy_placeholder_settings, ensure_company_records, ensure_default_settings
 
@@ -10,9 +10,11 @@ DEFAULT_ADMIN_PASSWORD = "admin123"
 
 
 def _flag_default_password_admins(db: Session) -> None:
-    admins = db.scalars(
-        select(User).where(User.role == Role.SUPER_ADMIN.value, User.deleted_at.is_(None))
-    ).all()
+    admins = [
+        user
+        for user in db.scalars(select(User).where(User.deleted_at.is_(None))).all()
+        if has_role(user.role, Role.SUPER_ADMIN)
+    ]
     changed = False
     for admin in admins:
         if not admin.must_change_password and verify_password(DEFAULT_ADMIN_PASSWORD, admin.password_hash):

@@ -2,6 +2,7 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from io import StringIO
 import csv
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
@@ -10,14 +11,18 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, InventoryTransaction, Product, ScanLog, TransactionType
+from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
+from app.services.audit import current_missing_stock_findings_query
 from app.services.charts import bar_chart, donut_chart
+from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
-from app.services.exports import safe_row, scans_xlsx, transactions_xlsx
+from app.services.exports import audit_reconciliation_xlsx, missing_stock_xlsx, safe_row, scans_xlsx, transactions_xlsx
+from app.services.losses import loss_summary
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
 
 router = APIRouter(prefix="/reports")
+MISSING_STOCK_ACTION = "MISSING"
 
 
 def parse_filter_date(value: str, field_name: str) -> datetime | None:
@@ -30,6 +35,31 @@ def parse_filter_date(value: str, field_name: str) -> datetime | None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid {field_name} date",
         ) from exc
+
+
+def parse_period_datetime(value: str, field_name: str, *, end: bool = False) -> datetime | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid {field_name} date/time",
+        ) from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+    if end and len(raw) == 10:
+        parsed = parsed + timedelta(days=1)
+    return parsed
+
+
+def export_url(path: str, params: dict[str, str]) -> str:
+    filtered = {key: value for key, value in params.items() if value}
+    return f"{path}?{urlencode(filtered)}" if filtered else path
 
 
 def scan_query(action: str = "", start: str = "", end: str = ""):
@@ -96,12 +126,79 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
     return query
 
 
+def missing_stock_query(q: str = "", start: str = "", end: str = ""):
+    conditions = []
+    if q:
+        like = f"%{q.strip()}%"
+        conditions.append(
+            or_(
+                AuditFinding.serial_number.ilike(like),
+                AuditFinding.product_code.ilike(like),
+                AuditFinding.product_name.ilike(like),
+                Batch.batch_number.ilike(like),
+            )
+        )
+    start_dt = parse_filter_date(start, "start")
+    if start_dt:
+        conditions.append(AuditFinding.created_at >= start_dt)
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        conditions.append(AuditFinding.created_at < end_dt + timedelta(days=1))
+    query = current_missing_stock_findings_query().join(Batch, AuditFinding.batch_id == Batch.id)
+    if conditions:
+        query = query.where(and_(*conditions))
+    return query.limit(500).options(
+        selectinload(AuditFinding.batch).selectinload(Batch.user),
+        selectinload(AuditFinding.serial).selectinload(Serial.location),
+    )
+
+
 @router.get("")
-def reports(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
+def reports(
+    request: Request,
+    action: str = "",
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    audit_start: str = "",
+    audit_end: str = "",
+    db: Session = Depends(get_db),
+):
     user = require_permission(request, db, "reports_data")
-    scans = db.scalars(scan_query(action, start, end)).all()
-    transactions = db.scalars(transaction_query(action, q, start, end)).all()
+    if has_role(user.role, Role.DIRECTORS) and not has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN}):
+        audit_start_dt = parse_period_datetime(audit_start, "audit start")
+        audit_end_dt = parse_period_datetime(audit_end, "audit end", end=True)
+        return templates.TemplateResponse(
+            request,
+            "director_reports.html",
+            {
+                "request": request,
+                "user": user,
+                "report": director_report(db, audit_start_dt, audit_end_dt),
+                "audit_start": audit_start,
+                "audit_end": audit_end,
+                "audit_reconciliation_export_url": export_url(
+                    "/reports/audit-reconciliation.xlsx",
+                    {"start": audit_start, "end": audit_end},
+                ),
+            },
+        )
+
+    start_dt = parse_filter_date(start, "start")
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        end_dt = end_dt + timedelta(days=1)
+    missing_stock_selected = action == MISSING_STOCK_ACTION
+    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end)).all()
+    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, q, start, end)).all()
+    missing_stock = (
+        db.scalars(missing_stock_query(q, start, end)).all()
+        if not action or missing_stock_selected
+        else []
+    )
     transaction_counts = Counter(txn.transaction_type for txn in transactions)
+    if missing_stock:
+        transaction_counts[MISSING_STOCK_ACTION] = len(missing_stock)
     scan_status_counts = Counter(scan.status for scan in scans)
     pending = db.scalars(
         select(Batch)
@@ -117,19 +214,105 @@ def reports(request: Request, action: str = "", q: str = "", start: str = "", en
             "user": user,
             "scans": scans,
             "transactions": transactions,
+            "missing_stock": missing_stock,
             "pending": pending,
             "transaction_chart": bar_chart(transaction_counts.items()),
             "scan_status_chart": donut_chart(scan_status_counts.items()),
             "expiry": expiry_summary(db),
+            "losses": (
+                loss_summary(db, action=action, q=q, start=start_dt, end=end_dt)
+                if has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN})
+                else None
+            ),
             "action": action,
             "q": q,
             "start": start,
             "end": end,
-            "transaction_types": [item.value for item in TransactionType],
+            "transaction_types": [item.value for item in TransactionType] + [MISSING_STOCK_ACTION],
             "invoice_created_by": invoice_created_by,
             "barcode_sold_by": barcode_sold_by,
             "product_audited_by": product_audited_by,
+            "audit_reconciliation_export_url": export_url(
+                "/reports/audit-reconciliation.xlsx",
+                {"start": start, "end": end},
+            ),
         },
+    )
+
+
+@router.get("/missing-stock")
+def missing_stock_report(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    user = require_permission(request, db, "reports_data")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    return templates.TemplateResponse(
+        request,
+        "missing_stock_report.html",
+        {
+            "request": request,
+            "user": user,
+            "findings": findings,
+            "summary": {
+                "total": len(findings),
+                "products": len({finding.product_code for finding in findings if finding.product_code}),
+                "audit_batches": len({finding.batch_id for finding in findings}),
+                "warehouses": len(
+                    {
+                        finding.serial.warehouse
+                        for finding in findings
+                        if finding.serial and finding.serial.warehouse
+                    }
+                ),
+            },
+            "q": q,
+            "start": start,
+            "end": end,
+        },
+    )
+
+
+@router.get("/audit-batches/{batch_id}")
+def director_audit_batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db)):
+    user = require_permission(request, db, "reports_data")
+    report = director_audit_batch_report(db, batch_id)
+    if report is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit batch not found")
+    return templates.TemplateResponse(
+        request,
+        "director_audit_batch.html",
+        {
+            "request": request,
+            "user": user,
+            "report": report,
+        },
+    )
+
+
+@router.get("/audit-reconciliation.xlsx")
+def audit_reconciliation_excel(
+    request: Request,
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_data")
+    start_at = parse_period_datetime(start, "audit start")
+    end_at = parse_period_datetime(end, "audit end", end=True)
+    if start_at and end_at and start_at >= end_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Audit start must be before audit end",
+        )
+    report = director_audit_reconciliation_report(db, start_at, end_at)
+    return Response(
+        audit_reconciliation_xlsx(report),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=setu-audit-reconciliation.xlsx"},
     )
 
 
@@ -237,4 +420,77 @@ def transactions_excel(request: Request, action: str = "", q: str = "", start: s
         transactions_xlsx(transactions),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-transactions.xlsx"},
+    )
+
+
+@router.get("/missing-stock.csv")
+def missing_stock_csv(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_export")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    stream = StringIO()
+    writer = csv.writer(stream)
+    writer.writerow(
+        [
+            "Audit Date",
+            "Audited By",
+            "Audit Batch",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Product Batch",
+            "Warehouse",
+            "Storage Location",
+            "Mfg Date",
+            "Expiry Date",
+            "Expected Status",
+        ]
+    )
+    for finding in findings:
+        serial = finding.serial
+        writer.writerow(
+            safe_row(
+                [
+                    finding.created_at.isoformat(),
+                    finding.batch.user.username,
+                    finding.batch.batch_number,
+                    finding.serial_number,
+                    finding.product_code or "",
+                    finding.product_name or "",
+                    serial.product_batch_number if serial else "",
+                    serial.warehouse if serial else "",
+                    serial.location.full_path if serial and serial.location else "",
+                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
+                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
+                    finding.expected_status or "",
+                ]
+            )
+        )
+    stream.seek(0)
+    return Response(
+        stream.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.csv"},
+    )
+
+
+@router.get("/missing-stock.xlsx")
+def missing_stock_excel(
+    request: Request,
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "reports_export")
+    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    return Response(
+        missing_stock_xlsx(findings),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.xlsx"},
     )

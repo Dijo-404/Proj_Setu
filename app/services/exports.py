@@ -11,7 +11,7 @@ from reportlab.platypus import Image, PageBreak, SimpleDocTemplate, Table, Table
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from PIL import Image as PILImage
 
-from app.models import Batch, InventoryTransaction, ScanLog, Serial
+from app.models import AuditFinding, Batch, InventoryTransaction, ScanLog, Serial, StorageLocation
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 
 LABEL_WIDTH_MM = 48.5
@@ -102,6 +102,7 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
             "Mfg Date",
             "Expiry Date",
             "Warehouse",
+            "Warehouse Level",
             "Status",
             "Created At",
         ]
@@ -119,6 +120,7 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
                     serial.mfg_date.isoformat() if serial.mfg_date else "",
                     serial.expiry_date.isoformat() if serial.expiry_date else "",
                     serial.warehouse or "",
+                    serial.warehouse_level,
                     serial.status,
                     serial.created_at.isoformat(),
                 ]
@@ -181,6 +183,149 @@ def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
+
+
+def missing_stock_xlsx(findings: list[AuditFinding]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Missing Stock"
+    sheet.append(
+        [
+            "Audit Date",
+            "Audited By",
+            "Audit Batch",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Product Batch",
+            "Warehouse",
+            "Storage Location",
+            "Mfg Date",
+            "Expiry Date",
+            "Expected Status",
+        ]
+    )
+    for finding in findings:
+        serial = finding.serial
+        sheet.append(
+            safe_row(
+                [
+                    finding.created_at.isoformat(),
+                    finding.batch.user.username,
+                    finding.batch.batch_number,
+                    finding.serial_number,
+                    finding.product_code or "",
+                    finding.product_name or "",
+                    serial.product_batch_number if serial else "",
+                    serial.warehouse if serial else "",
+                    serial.location.full_path if serial and serial.location else "",
+                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
+                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
+                    finding.expected_status or "",
+                ]
+            )
+        )
+    _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    summary = workbook.active
+    summary.title = "Summary"
+    summary.append(["Period start", _datetime_text(report.get("start_at")) or "All"])
+    summary.append(["Period end before", _datetime_text(report.get("end_at")) or "All"])
+    summary.append(["Audit batches", report.get("audit_batch_count", 0)])
+    summary.append(["Verified", report.get("verified", 0)])
+    summary.append(["Missing", report.get("missing", 0)])
+    summary.append(["Extra", report.get("extra", 0)])
+    summary.append(["Total findings", report.get("total", 0)])
+
+    batches = workbook.create_sheet("Audit Batches")
+    batches.append(["Audit Date", "Audit Batch", "Audited By", "Products", "Verified", "Missing", "Extra", "Total"])
+    for row in report.get("batch_rows", []):
+        batches.append(
+            safe_row(
+                [
+                    _datetime_text(row.get("audit_at")),
+                    row.get("batch_number", ""),
+                    row.get("audited_by", ""),
+                    row.get("products", 0),
+                    row.get("verified", 0),
+                    row.get("missing", 0),
+                    row.get("extra", 0),
+                    row.get("total", 0),
+                ]
+            )
+        )
+
+    products = workbook.create_sheet("Product Reconciliation")
+    products.append(["Product Code", "Product Name", "Audit Batches", "Verified", "Missing", "Extra", "Total"])
+    for row in report.get("product_rows", []):
+        products.append(
+            safe_row(
+                [
+                    row.get("product_code", ""),
+                    row.get("product_name", ""),
+                    row.get("audit_batches", ""),
+                    row.get("verified", 0),
+                    row.get("missing", 0),
+                    row.get("extra", 0),
+                    row.get("total", 0),
+                ]
+            )
+        )
+
+    findings = workbook.create_sheet("Serial Findings")
+    findings.append(
+        [
+            "Audit Date",
+            "Audit Batch",
+            "Audited By",
+            "Finding",
+            "Serial",
+            "Product Code",
+            "Product Name",
+            "Expected Status",
+            "Scanned Status",
+        ]
+    )
+    for row in report.get("finding_rows", []):
+        findings.append(
+            safe_row(
+                [
+                    _datetime_text(row.get("audit_at")),
+                    row.get("batch_number", ""),
+                    row.get("audited_by", ""),
+                    row.get("type", ""),
+                    row.get("serial_number", ""),
+                    row.get("product_code", ""),
+                    row.get("product_name", ""),
+                    row.get("expected_status", ""),
+                    row.get("scanned_status", ""),
+                ]
+            )
+        )
+
+    for sheet in workbook.worksheets:
+        _autosize(sheet)
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
+def _datetime_text(value: object) -> str:
+    if not value:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()  # type: ignore[no-any-return]
+    return str(value)
 
 
 def _autosize(sheet) -> None:
@@ -289,6 +434,128 @@ def barcode_labels_pdf(
     if not story:
         styles = getSampleStyleSheet()
         story = [Paragraph("No labels selected", styles["BodyText"])]
+    doc.build(story)
+    return stream.getvalue()
+
+
+def _location_label_cell(location: StorageLocation, target_width: float, target_height: float) -> Table:
+    qr_size = min(34 * mm, target_height - 8 * mm)
+    text_width = max(42 * mm, target_width - qr_size - 5 * mm)
+    qr_image = _label_image(location.code, qr_size, qr_size)
+    title_style = ParagraphStyle(
+        "LocationTitle",
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        leading=12,
+        textColor=colors.black,
+    )
+    code_style = ParagraphStyle(
+        "LocationCode",
+        fontName="Helvetica-Bold",
+        fontSize=8,
+        leading=10,
+        textColor=colors.HexColor("#0066cc"),
+        spaceAfter=3,
+    )
+    detail_style = ParagraphStyle(
+        "LocationDetail",
+        fontName="Helvetica",
+        fontSize=7,
+        leading=9,
+        textColor=colors.HexColor("#333333"),
+    )
+    details = "<br/>".join(
+        (
+            f"Zone: <b>{escape(location.zone)}</b> &nbsp; Section: <b>{escape(location.section)}</b>",
+            f"Rack: <b>{escape(location.rack)}</b> &nbsp; Shelf: <b>{escape(location.shelf)}</b>",
+            f"Bin: <b>{escape(location.bin)}</b>",
+        )
+    )
+    text_block = [
+        Paragraph(escape(location.warehouse), title_style),
+        Paragraph(escape(location.code), code_style),
+        Paragraph(details, detail_style),
+    ]
+    label = Table(
+        [[qr_image, text_block]],
+        colWidths=[qr_size, text_width],
+        rowHeights=[target_height],
+    )
+    label.setStyle(
+        TableStyle(
+            [
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (0, 0), "CENTER"),
+                ("LEFTPADDING", (0, 0), (0, 0), 0),
+                ("RIGHTPADDING", (0, 0), (0, 0), 3 * mm),
+                ("LEFTPADDING", (1, 0), (1, 0), 0),
+                ("RIGHTPADDING", (1, 0), (1, 0), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 0),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ]
+        )
+    )
+    return label
+
+
+def location_labels_pdf(locations: list[StorageLocation]) -> bytes:
+    stream = BytesIO()
+    doc = SimpleDocTemplate(
+        stream,
+        pagesize=A4,
+        rightMargin=8 * mm,
+        leftMargin=8 * mm,
+        topMargin=8 * mm,
+        bottomMargin=8 * mm,
+    )
+    story = []
+    rows_per_page = 5
+    columns_per_page = 2
+    labels_per_page = rows_per_page * columns_per_page
+    col_width = 97 * mm
+    row_height = 52 * mm
+
+    for page_start in range(0, len(locations), labels_per_page):
+        page_locations = locations[page_start:page_start + labels_per_page]
+        table_rows = []
+        for row_index in range(rows_per_page):
+            row = []
+            for column_index in range(columns_per_page):
+                location_index = row_index * columns_per_page + column_index
+                if location_index < len(page_locations):
+                    row.append(
+                        _location_label_cell(
+                            page_locations[location_index],
+                            col_width - 4 * mm,
+                            row_height - 4 * mm,
+                        )
+                    )
+                else:
+                    row.append("")
+            table_rows.append(row)
+        table = Table(
+            table_rows,
+            colWidths=[col_width] * columns_per_page,
+            rowHeights=[row_height] * rows_per_page,
+        )
+        table.setStyle(
+            TableStyle(
+                [
+                    ("GRID", (0, 0), (-1, -1), 0.6, colors.lightgrey),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                    ("LEFTPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("RIGHTPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("TOPPADDING", (0, 0), (-1, -1), 2 * mm),
+                    ("BOTTOMPADDING", (0, 0), (-1, -1), 2 * mm),
+                ]
+            )
+        )
+        story.append(table)
+        if page_start + labels_per_page < len(locations):
+            story.append(PageBreak())
+    if not story:
+        styles = getSampleStyleSheet()
+        story = [Paragraph("No storage locations selected", styles["BodyText"])]
     doc.build(story)
     return stream.getvalue()
 

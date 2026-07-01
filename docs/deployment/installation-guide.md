@@ -43,6 +43,17 @@ start_setu.bat
 
 Use `start_setu.bat --port 8001` if port `8000` is already in use.
 
+To pull the latest version from GitHub, update dependencies, and restart the
+server, run:
+
+```text
+update.bat
+```
+
+Run the updater as Administrator when Setu is installed as a Windows service.
+The updater fetches and applies only a fast-forward Git update. It never
+rebases and will not overwrite conflicting local code changes.
+
 Pass `-SkipCaddy` to `setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install
 `deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every
@@ -125,7 +136,12 @@ Expected response:
 
 ## Backup Reminder
 
-Configure the server backup software to include the whole project `data/`
+Setu creates verified automatic backups into `data/backups/` by default. For
+off-machine protection, set `BACKUP_OFFSITE_DIRECTORY` in `.env` to another
+drive or network share and confirm the Maintenance page shows the latest copied
+backup.
+
+If server backup software is also used, include the whole project `data/`
 folder, a separate copy of `.env`, and `deployment/caddy/state` when Caddy is
 used. The Caddy state contains private keys and must not be distributed. The
 app's Maintenance page also provides a SQLite-safe database download for manual

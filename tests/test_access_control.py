@@ -8,7 +8,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import User
 from app.security import create_session_token
-from app.services.access_control import ROLE_COLUMNS, config_from_form, get_role_access_config, role_access_sections, save_role_access_config
+from app.services.access_control import ROLE_COLUMNS, config_from_form, configured_role_has_access, get_role_access_config, landing_path_for, role_access_sections, save_role_access_config
 
 
 def test_role_access_catalog_has_cells_for_every_role():
@@ -21,6 +21,54 @@ def test_role_access_catalog_has_cells_for_every_role():
         "Data access and modification",
     ]
     assert all(len(row.cells) == role_count for section in sections for row in section.rows)
+
+
+def test_directors_default_access_is_reports_only():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        config = get_role_access_config(db)
+
+    engine.dispose()
+
+    assert config["page_reports"]["directors"] == "shown"
+    assert config["reports_data"]["directors"] == "view"
+    assert config["page_dashboard"]["directors"] == "hidden"
+    assert config["dashboard_data"]["directors"] == "no"
+    assert config["batch_list"]["directors"] == "no"
+    assert config["product_master"]["directors"] == "no"
+    assert config["serial_data"]["directors"] == "no"
+    assert config["reports_export"]["directors"] == "no"
+    assert landing_path_for(config, "directors") == "/reports"
+
+
+def test_multi_role_access_uses_union_of_selected_roles():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        config = get_role_access_config(db)
+
+    engine.dispose()
+
+    assert configured_role_has_access(config, "purchase,sales", "batch_purchase")
+    assert configured_role_has_access(config, "purchase,sales", "batch_sale")
+    assert not configured_role_has_access(config, "purchase,sales", "batch_audit")
+    assert config["page_barcodes"]["purchase"] == "shown"
+    assert config["barcode_assignment"]["purchase"] == "edit"
+    assert config["product_create"]["purchase"] == "no"
+    assert configured_role_has_access(config, "purchase", "barcode_assignment")
 
 
 def test_role_access_partial_save_merges_existing_values_and_ignores_bad_keys():
@@ -93,6 +141,25 @@ def test_role_access_page_is_super_admin_only():
     assert 'class="table-scroll"' not in root_response.text
     assert 'href="/settings/access">Role access</a>' in root_response.text
     assert 'name="access__page_reports__admin"' in root_response.text
+    assert ">Purchase</summary>" in root_response.text
+    assert ">Sales</summary>" in root_response.text
+    assert ">Stock</summary>" in root_response.text
+    assert ">Batches</summary>" not in root_response.text
+    workflow_markers = [
+        ">Dashboard</a>",
+        ">Purchase</summary>",
+        ">Sales</summary>",
+        ">Stock</summary>",
+        ">Warehouse</summary>",
+        ">Barcodes</summary>",
+        ">Serials</a>",
+        ">Reports</summary>",
+        ">Tally Check</a>",
+        ">Admin</summary>",
+    ]
+    assert [root_response.text.index(marker) for marker in workflow_markers] == sorted(
+        root_response.text.index(marker) for marker in workflow_markers
+    )
     assert admin_response.status_code == 403
     assert purchase_response.status_code == 403
 

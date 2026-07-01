@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 
-PALETTE = ["#0066cc", "#0c8a5a", "#8a5a00", "#a3262c", "#6f42c1", "#5c6670", "#d45d00"]
+PALETTE = ["#cc785c", "#5db8a6", "#e8a55a", "#5db872", "#c64545", "#8e8b82", "#a9583e"]
 
 
 def chart_label(value: object) -> str:

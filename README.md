@@ -18,6 +18,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Pending sync queue, manual retry, and automatic retry worker
 - Audit reconciliation for verified, missing, and extra serials
 - Dashboard counts, charts, recent activity, and live refresh
+- Configurable stock movement, stock-cover, slow/dead stock, overstock, and expiry-risk analysis with warehouse/franchise filters
 - CSV/XLSX reports, transaction history, scan history, and PDF audit reports
 - SQLite-safe backup download and restore procedure
 
@@ -47,6 +48,14 @@ start_setu.bat
 ```
 
 Use `setup.bat` for first-time setup and `start_setu.bat` for normal app startup. No root-level PowerShell helper files are needed for the client-facing flow.
+
+To download the latest version from GitHub and restart Setu, double-click:
+
+```text
+update.bat
+```
+
+The updater fetches the latest version and applies only a safe fast-forward update (it never rebases), refreshes Python packages, runs an import check, and restarts the existing Windows service or console server. If Setu is installed as a Windows service, run `update.bat` as Administrator.
 
 ## 1. Open The Project Folder
 
@@ -163,7 +172,7 @@ Do this in order:
 
 1. Open `Settings`.
 2. Add or activate a company profile.
-3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, round-off ledger, and default party.
+3. Enter the exact Tally company, host, port, voucher type names, ledger names, GST ledgers, and round-off ledger.
 4. Leave `Enable Tally sync` off during setup. Other fields auto-save, but sync only changes when `Save settings` is clicked.
 5. Open `Products`.
 6. Create products using exact Tally stock item names, HSN, GST rate, unit, default rate, and sales discount if applicable.
@@ -211,7 +220,7 @@ QR label assignment:
 
 1. Open `Barcodes` -> `Assignment`.
 2. Select an existing product and quantity, or upload an Excel file.
-3. Optional Excel columns are `Product Code`, `Quantity`, `Batch`, `Mfg Date`, `Expiry Date`, and `Warehouse`.
+3. Excel can use `Product Code` or `Product Name` with `Quantity`; optional columns include `HSN`, `GST`, `SGST`, `IGST`, `Batch`, `Mfg Date`, `Expiry Date`, and `Warehouse`. Tally invoice exports with `Description of Goods` and `Quantity` are also accepted.
 4. Download the generated Excel file and labels PDF.
 
 Barcode replacement:
@@ -288,9 +297,15 @@ Backup:
 3. Store the downloaded `.db` file safely.
 4. Keep a separate copy of `.env`.
 
-For scheduled server backups such as Cobian Reflector, include the whole
-`data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar files
-such as `setu.db-wal` and `setu.db-shm` while the app is running.
+Automatic verified backups run by default every 24 hours into
+`data/backups/`, retain the latest 14 files, and test each backup with SQLite
+integrity and foreign-key checks before keeping it. Set
+`BACKUP_OFFSITE_DIRECTORY` in `.env` to copy the same verified backup to
+another drive or network share. Keep a separate copy of `.env`.
+
+For an additional server-level backup such as Cobian Reflector, include the
+whole `data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar
+files such as `setu.db-wal` and `setu.db-shm` while the app is running.
 
 Restore:
 

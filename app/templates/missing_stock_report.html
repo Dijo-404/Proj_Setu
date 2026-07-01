@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Missing Stock Report - Setu{% endblock %}
+{% block content %}
+<section class="page-head">
+  <div>
+    <p class="eyebrow">Audit exceptions</p>
+    <h1>Missing stock report</h1>
+    <p>Serial-level stock that was expected but not found during an audit.</p>
+  </div>
+  {% if role_can(user, 'reports_export') %}
+  <div class="actions">
+    <a class="button" href="/reports/missing-stock.csv?q={{ q }}&start={{ start }}&end={{ end }}">Export CSV</a>
+    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}">Export XLSX</a>
+  </div>
+  {% endif %}
+</section>
+
+<section class="panel">
+  <form method="get" class="filters">
+    <label>Search
+      <input name="q" value="{{ q }}" placeholder="Serial, product, audit batch">
+    </label>
+    <label>From<input name="start" type="date" value="{{ start }}"></label>
+    <label>To<input name="end" type="date" value="{{ end }}"></label>
+    <button class="button primary" type="submit">Apply</button>
+    <a class="button" href="/reports/missing-stock">Clear</a>
+  </form>
+</section>
+
+<section class="metric-grid">
+  <div class="metric danger"><span>Missing serials</span><strong>{{ summary.total }}</strong></div>
+  <div class="metric"><span>Affected products</span><strong>{{ summary.products }}</strong></div>
+  <div class="metric"><span>Audit batches</span><strong>{{ summary.audit_batches }}</strong></div>
+  <div class="metric"><span>Warehouses</span><strong>{{ summary.warehouses }}</strong></div>
+</section>
+
+<section class="panel">
+  <div class="section-title">
+    <h2>Missing stock details</h2>
+    <span>Newest audit finding first · up to 500 rows</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>Audit date</th>
+          <th>Audited by</th>
+          <th>Serial</th>
+          <th>Product</th>
+          <th>Audit batch</th>
+          <th>Product batch</th>
+          <th>Warehouse / location</th>
+          <th>Mfg / expiry</th>
+          <th>Expected status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for finding in findings %}
+        {% set serial = finding.serial %}
+        <tr>
+          <td>{{ finding.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ finding.batch.user.username }}</td>
+          <td>
+            {% if serial %}
+            <a href="/serials/{{ serial.id }}">{{ finding.serial_number }}</a>
+            {% else %}
+            {{ finding.serial_number }}
+            {% endif %}
+          </td>
+          <td>
+            <strong>{{ finding.product_code or '-' }}</strong>
+            <small>{{ finding.product_name or '-' }}</small>
+          </td>
+          <td>
+            {% if role_can_view_batch(user, finding.batch.batch_type) %}
+            <a href="/batches/{{ finding.batch.id }}">{{ finding.batch.batch_number }}</a>
+            {% else %}
+            {{ finding.batch.batch_number }}
+            {% endif %}
+          </td>
+          <td>{{ serial.product_batch_number if serial and serial.product_batch_number else '-' }}</td>
+          <td>
+            <strong>{{ serial.warehouse if serial and serial.warehouse else '-' }}</strong>
+            <small>{{ serial.location.full_path if serial and serial.location else 'No storage location' }}</small>
+          </td>
+          <td>
+            <strong>{{ serial.mfg_date.strftime('%d %b %Y') if serial and serial.mfg_date else '-' }}</strong>
+            <small>Exp: {{ serial.expiry_date.strftime('%d %b %Y') if serial and serial.expiry_date else '-' }}</small>
+          </td>
+          <td><span class="status missing">{{ finding.expected_status or '-' }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="empty">No missing stock matches these filters.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}

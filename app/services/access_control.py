@@ -5,7 +5,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from app.models import Role
+from app.models import Role, has_role, normalize_role_values
 from app.services.settings import get_setting, update_settings
 
 
@@ -70,6 +70,8 @@ class AccessSection:
 ROLE_COLUMNS = [
     RoleColumn(Role.SUPER_ADMIN.value, "Super admin"),
     RoleColumn(Role.ADMIN.value, "Admin"),
+    RoleColumn(Role.DIRECTORS.value, "Directors"),
+    RoleColumn(Role.WAREHOUSE_MANAGER.value, "Warehouse manager"),
     RoleColumn(Role.PURCHASE.value, "Purchase"),
     RoleColumn(Role.SALES.value, "Sales"),
     RoleColumn(Role.AUDITOR.value, "Auditor"),
@@ -89,6 +91,16 @@ CELL_META = {
     "no": ("No", "failed"),
 }
 
+ACCESS_VALUE_PRIORITY = {
+    "edit": 5,
+    "yes": 4,
+    "workflow": 3,
+    "view": 2,
+    "shown": 1,
+    "no": 0,
+    "hidden": 0,
+}
+
 
 def _roles(*roles: Role) -> list[str]:
     return [role.value for role in roles]
@@ -103,8 +115,12 @@ def _defaults(options: list[AccessOption], allowed_value: str, allowed_roles: li
     return values
 
 
-def _all(options: list[AccessOption], value: str) -> dict[str, str]:
-    return {role.key: value for role in ROLE_COLUMNS}
+def _all_operational(options: list[AccessOption], value: str) -> dict[str, str]:
+    return _defaults(
+        options,
+        value,
+        _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER, Role.PURCHASE, Role.SALES, Role.AUDITOR),
+    )
 
 
 def _admin(options: list[AccessOption], value: str) -> dict[str, str]:
@@ -117,12 +133,42 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
             title="Pages shown in navigation",
             context_heading="Where",
             rows=[
-                AccessRowDefinition("page_dashboard", "Dashboard", "Top navigation", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_batches", "Batches", "Top navigation menu", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_serials", "Serials", "Top navigation", _all(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_reports", "Reports", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_dashboard", "Dashboard", "Top navigation", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_batches", "Batches", "Top navigation menu", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_warehouse",
+                    "Warehouse",
+                    "Top navigation menu",
+                    _defaults(
+                        PAGE_OPTIONS,
+                        "shown",
+                        _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER, Role.AUDITOR),
+                    ),
+                    PAGE_OPTIONS,
+                ),
+                AccessRowDefinition("page_serials", "Serials", "Top navigation", _all_operational(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_reports",
+                    "Reports",
+                    "Top navigation",
+                    _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.DIRECTORS)),
+                    PAGE_OPTIONS,
+                ),
+                AccessRowDefinition(
+                    "page_stock_movement",
+                    "Stock movement",
+                    "Top navigation",
+                    _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
+                    PAGE_OPTIONS,
+                ),
                 AccessRowDefinition("page_tally_check", "Tally Check", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
-                AccessRowDefinition("page_barcodes", "Barcodes", "Top navigation menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition(
+                    "page_barcodes",
+                    "Barcodes",
+                    "Top navigation menu",
+                    _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.PURCHASE)),
+                    PAGE_OPTIONS,
+                ),
                 AccessRowDefinition("page_admin_menu", "Admin menu", "Top navigation menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition(
                     "page_products",
@@ -156,14 +202,45 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("batch_sales_return", "Sales return", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_purchase_return", "Purchase return", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_issue", "Stock issue", "Create, scan, edit draft, submit", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "stock_relocation",
+                    "Move stock",
+                    "Search, scan, and confirm warehouse relocations",
+                    _defaults(
+                        ACTION_OPTIONS,
+                        "edit",
+                        _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER, Role.AUDITOR),
+                    ),
+                    ACTION_OPTIONS,
+                ),
+                AccessRowDefinition(
+                    "location_manage",
+                    "Storage locations",
+                    "Create, activate, and deactivate warehouse locations",
+                    _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
+                    ACTION_OPTIONS,
+                ),
                 AccessRowDefinition("manual_serial_entry", "Manual serial entry", "Type serial numbers into batches", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS, "Non-admin users can scan by camera/photo only."),
                 AccessRowDefinition("fefo_pick", "FEFO pick", "Auto-pick sale, issue, purchase return", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("tally_sync_retry", "Tally sync retry", "Retry pending or failed sync", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("product_create", "Products", "Create products and generate serials", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
-                AccessRowDefinition("barcode_assignment", "Barcode assignment", "Assign labels to existing stock", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "barcode_assignment",
+                    "Barcode assignment",
+                    "Assign labels to existing stock",
+                    _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE)),
+                    ACTION_OPTIONS,
+                ),
                 AccessRowDefinition("barcode_replacement", "Barcode replacement", "Replace damaged serial labels", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition("reports_export", "Reports", "Filter and export scan/transaction reports", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "stock_movement_export",
+                    "Stock movement export",
+                    "Export CSV, Excel, and PDF movement reports",
+                    _defaults(ACTION_OPTIONS, "yes", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
+                    ACTION_OPTIONS,
+                ),
                 AccessRowDefinition("tally_check_edit", "Tally Check", "Confirm, refresh, and remove master checks", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition("settings_edit", "Settings", "Edit company settings and enable sync", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition(
@@ -189,16 +266,40 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
             title="Data access and modification",
             context_heading="Data area",
             rows=[
-                AccessRowDefinition("dashboard_data", "Dashboard data", "Counts, charts, recent scans and batches", _all(DATA_OPTIONS, "view"), DATA_OPTIONS),
-                AccessRowDefinition("product_master", "Product master", "View product list/search", _all(DATA_OPTIONS, "view"), DATA_OPTIONS, "Only users with Product action access can create products or generate serials."),
-                AccessRowDefinition("serial_data", "Serial data", "View serial list, details, scan history", _all(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition("dashboard_data", "Dashboard data", "Counts, charts, recent scans and batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition("product_master", "Product master", "View product list/search", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Only users with Product action access can create products or generate serials."),
+                AccessRowDefinition("serial_data", "Serial data", "View serial list, details, scan history", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS),
                 AccessRowDefinition("label_files", "Label files", "Download serial XLSX or admin label PDF", _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES, Role.AUDITOR)), DATA_OPTIONS),
-                AccessRowDefinition("batch_list", "Batch list", "View all recent batches", _all(DATA_OPTIONS, "view"), DATA_OPTIONS, "Batch detail pages still follow batch-type permissions."),
+                AccessRowDefinition("batch_list", "Batch list", "View all recent batches", _all_operational(DATA_OPTIONS, "view"), DATA_OPTIONS, "Batch detail pages still follow batch-type permissions."),
                 AccessRowDefinition("purchase_data", "Purchase data", "Purchase and purchase-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.PURCHASE)), DATA_OPTIONS),
                 AccessRowDefinition("sales_data", "Sales data", "Sale and sales-return batches", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.SALES)), DATA_OPTIONS),
                 AccessRowDefinition("audit_data", "Audit data", "Audit batches and findings", _defaults(DATA_OPTIONS, "workflow", _roles(Role.ADMIN, Role.AUDITOR)), DATA_OPTIONS),
                 AccessRowDefinition("issue_data", "Issue data", "Stock issue batches", _admin(DATA_OPTIONS, "edit"), DATA_OPTIONS),
-                AccessRowDefinition("reports_data", "Reports data", "Scan logs and inventory transactions", _admin(DATA_OPTIONS, "view"), DATA_OPTIONS),
+                AccessRowDefinition(
+                    "warehouse_data",
+                    "Warehouse data",
+                    "Storage map and permanent relocation history",
+                    _defaults(
+                        DATA_OPTIONS,
+                        "view",
+                        _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER, Role.AUDITOR),
+                    ),
+                    DATA_OPTIONS,
+                ),
+                AccessRowDefinition(
+                    "reports_data",
+                    "Reports data",
+                    "Scan logs, inventory transactions, and Directors reports",
+                    _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.DIRECTORS)),
+                    DATA_OPTIONS,
+                ),
+                AccessRowDefinition(
+                    "stock_movement_data",
+                    "Stock movement data",
+                    "Movement, stock cover, expiry risk, and suggested actions",
+                    _defaults(DATA_OPTIONS, "view", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
+                    DATA_OPTIONS,
+                ),
                 AccessRowDefinition("expiry_analytics", "Expiry analytics", "Expiry risk and sleeping stock", _admin(DATA_OPTIONS, "view"), DATA_OPTIONS),
                 AccessRowDefinition("tally_settings", "Tally settings", "Company profiles, ledgers, sync flag", _admin(DATA_OPTIONS, "edit"), DATA_OPTIONS),
                 AccessRowDefinition("tally_attempts", "Tally sync attempts", "Request/response details", _admin(DATA_OPTIONS, "view"), DATA_OPTIONS),
@@ -256,12 +357,12 @@ def get_role_access_config(db: Session) -> dict[str, dict[str, str]]:
     return normalize_role_access_config(parsed)
 
 
-def save_role_access_config(db: Session, submitted: dict[str, dict[str, str]]) -> None:
+def save_role_access_config(db: Session, submitted: dict[str, dict[str, str]], *, commit: bool = True) -> None:
     config = get_role_access_config(db)
     for row_key, row_values in submitted.items():
         config.setdefault(row_key, {}).update(row_values)
     config = normalize_role_access_config(config)
-    update_settings(db, {SETTING_KEY: json.dumps(config, sort_keys=True)})
+    update_settings(db, {SETTING_KEY: json.dumps(config, sort_keys=True)}, commit=commit)
 
 
 def config_from_form(form_items) -> dict[str, dict[str, str]]:
@@ -308,15 +409,43 @@ def role_access_sections(db: Session | None = None) -> list[AccessSection]:
     return sections
 
 
+def _configured_access_values(config: dict[str, dict[str, str]], role: Role | str, access_key: str) -> list[str]:
+    values = []
+    for role_value in normalize_role_values(role):
+        if role_value == Role.SUPER_ADMIN.value:
+            values.append("edit")
+        else:
+            values.append(config.get(access_key, {}).get(role_value, "no"))
+    return values
+
+
 def role_access_value(db: Session, role: Role | str, access_key: str) -> str:
-    role_value = role.value if isinstance(role, Role) else str(role)
-    if role_value == Role.SUPER_ADMIN.value:
-        return "edit"
     config = get_role_access_config(db)
-    row = config.get(access_key)
-    if not row:
+    values = _configured_access_values(config, role, access_key)
+    if not values:
         return "no"
-    return row.get(role_value, "no")
+    return max(values, key=lambda value: ACCESS_VALUE_PRIORITY.get(value, 0))
+
+
+def _role_has_access_value(
+    config: dict[str, dict[str, str]],
+    role: Role | str,
+    access_key: str,
+    allowed_values: set[str] | None = None,
+) -> bool:
+    values = _configured_access_values(config, role, access_key)
+    if allowed_values is not None:
+        return any(value not in DENY_VALUES and value in allowed_values for value in values)
+    return any(value not in DENY_VALUES for value in values)
+
+
+def _role_can_open_access_key(config: dict[str, dict[str, str]], role: Role | str, access_key: str) -> bool:
+    values = _configured_access_values(config, role, access_key)
+    return any(value not in DENY_VALUES for value in values)
+
+
+def _role_is_super_admin(role: Role | str) -> bool:
+    return has_role(role, Role.SUPER_ADMIN)
 
 
 def configured_role_has_access(
@@ -325,28 +454,22 @@ def configured_role_has_access(
     access_key: str,
     allowed_values: set[str] | None = None,
 ) -> bool:
-    role_value = role.value if isinstance(role, Role) else str(role)
-    if role_value == Role.SUPER_ADMIN.value:
-        value = "edit"
-    else:
-        value = config.get(access_key, {}).get(role_value, "no")
-    if value in DENY_VALUES:
-        return False
-    if allowed_values is not None:
-        return value in allowed_values
-    return True
+    return _role_has_access_value(config, role, access_key, allowed_values)
 
 
 def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str:
-    can = lambda key: configured_role_has_access(config, role, key)
+    can = lambda key: _role_can_open_access_key(config, role, key)
     destinations = [
         ("page_dashboard", "dashboard_data", "/"),
         ("page_batches", "batch_list", "/batches"),
         ("page_batches", "batch_purchase", "/batches/new?batch_type=PURCHASE"),
         ("page_batches", "batch_sale", "/batches/new?batch_type=SALE"),
         ("page_batches", "batch_audit", "/batches/new?batch_type=AUDIT"),
+        ("page_warehouse", "stock_relocation", "/warehouse/move"),
+        ("page_warehouse", "warehouse_data", "/warehouse/history"),
         ("page_serials", "serial_data", "/serials"),
         ("page_reports", "reports_data", "/reports"),
+        ("page_stock_movement", "stock_movement_data", "/stock-movement"),
         ("page_tally_check", "tally_check_edit", "/tally-check"),
         ("page_barcodes", "barcode_assignment", "/barcode-assignment"),
         ("page_barcodes", "barcode_replacement", "/barcode-replacement"),
@@ -359,7 +482,7 @@ def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str
     for page_key, permission_key, path in destinations:
         if can(page_key) and can(permission_key):
             return path
-    if str(role) in {Role.SUPER_ADMIN.value, str(Role.SUPER_ADMIN)}:
+    if _role_is_super_admin(role):
         return "/settings/access"
     return "/account/password"
 

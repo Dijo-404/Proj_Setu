@@ -11,6 +11,8 @@ from app.models import (
     BatchItem,
     BatchStatus,
     BatchType,
+    GstRegistrationType,
+    GstTreatment,
     InventoryTransaction,
     Product,
     ScanLog,
@@ -18,6 +20,7 @@ from app.models import (
     SerialStatus,
     TransactionType,
     User,
+    WarehouseLevel,
 )
 from app.services.expiry import validate_fefo_scan
 
@@ -26,8 +29,38 @@ class InventoryError(ValueError):
     pass
 
 
+DEFAULT_UNREGISTERED_SALE_STATE = "Karnataka"
+REGISTERED_GST_REGISTRATION_TYPES = {
+    GstRegistrationType.COMPOSITION.value,
+    GstRegistrationType.REGULAR.value,
+}
+
+
 def normalize_serial(serial_number: str) -> str:
     return serial_number.strip().upper()
+
+
+def gst_registration_requires_gstin(value: str | None) -> bool:
+    return (value or "").strip() in REGISTERED_GST_REGISTRATION_TYPES
+
+
+def normalize_gstin(value: str | None) -> str | None:
+    raw = re.sub(r"\s+", "", value or "").upper()
+    if not raw:
+        return None
+    if not re.fullmatch(r"[0-9A-Z]{15}", raw):
+        raise InventoryError("GST number must be a 15-character GSTIN.")
+    return raw
+
+
+def normalize_gst_registration_type(value: str | None, batch_type: BatchType) -> str | None:
+    raw = value.strip() if value else ""
+    if not raw and batch_type == BatchType.SALE:
+        raw = GstRegistrationType.UNREGISTERED_CONSUMER.value
+    valid_types = {registration_type.value for registration_type in GstRegistrationType}
+    if raw and raw not in valid_types:
+        raise InventoryError("Choose a valid GST registration type.")
+    return raw or None
 
 
 def next_batch_number(db: Session, batch_type: BatchType) -> str:
@@ -46,22 +79,66 @@ def next_batch_number(db: Session, batch_type: BatchType) -> str:
     return f"{prefix}-{today}-{count + 1:04d}"
 
 
-def create_batch(db: Session, user: User, batch_type: BatchType, party_name: str | None, notes: str | None, reason_code: str | None = None) -> Batch:
+def create_batch(
+    db: Session,
+    user: User,
+    batch_type: BatchType,
+    party_name: str | None,
+    notes: str | None,
+    reason_code: str | None = None,
+    *,
+    party_state: str | None = None,
+    party_gst_registration_type: str | None = None,
+    party_gst_name: str | None = None,
+    party_gstin: str | None = None,
+    gst_treatment: str | None = None,
+    gst_cgst_rate: float | None = None,
+    gst_sgst_rate: float | None = None,
+    gst_igst_rate: float | None = None,
+    commit: bool = True,
+) -> Batch:
+    treatment = gst_treatment.strip().upper() if gst_treatment else None
+    if treatment and treatment not in {GstTreatment.INTRA_STATE.value, GstTreatment.INTER_STATE.value}:
+        raise InventoryError("Choose either CGST + SGST or IGST for this sale")
+    registration_type = normalize_gst_registration_type(party_gst_registration_type, batch_type)
+    normalized_party_state = party_state.strip() if party_state else None
+    if (
+        batch_type == BatchType.SALE
+        and registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
+        and not normalized_party_state
+    ):
+        normalized_party_state = DEFAULT_UNREGISTERED_SALE_STATE
+    gst_name = party_gst_name.strip() if party_gst_name else None
+    if gst_registration_requires_gstin(registration_type):
+        gstin = normalize_gstin(party_gstin)
+    else:
+        gstin = None
     for attempt in range(5):
         batch = Batch(
             batch_number=next_batch_number(db, batch_type),
             batch_type=batch_type.value,
             party_name=party_name.strip() if party_name else None,
+            party_state=normalized_party_state,
+            party_gst_registration_type=registration_type,
+            party_gst_name=gst_name,
+            party_gstin=gstin,
+            gst_treatment=treatment,
+            gst_cgst_rate=gst_cgst_rate,
+            gst_sgst_rate=gst_sgst_rate,
+            gst_igst_rate=gst_igst_rate,
             reason_code=reason_code.strip().upper() if reason_code else None,
             user_id=user.id,
             notes=notes.strip() if notes else None,
         )
         db.add(batch)
         try:
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
         except IntegrityError as exc:
             db.rollback()
-            if attempt == 4:
+            if not commit or attempt == 4:
                 raise InventoryError("Could not allocate a unique batch number; try again") from exc
             continue
         db.refresh(batch)
@@ -153,38 +230,32 @@ def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: st
     serial_number = normalize_serial(serial_number)
     serial = db.scalar(select(Serial).where(Serial.serial_number == serial_number))
     if not serial:
-        db.add(
-            ScanLog(
-                serial_number_raw=serial_number,
-                user_id=user.id,
-                action=batch.batch_type,
-                batch_id=batch.id,
-                status="REJECTED",
-                message="Serial number not found",
+        _record_rejected_scan(db, batch, user, serial_number, "Serial number not found")
+        raise InventoryError("Serial number not found")
+    try:
+        serial_allowed_for_batch(serial, BatchType(batch.batch_type))
+        fefo_error = validate_fefo_scan(db, batch, serial)
+        if fefo_error:
+            raise InventoryError(fefo_error)
+        existing = db.scalar(
+            select(BatchItem).where(BatchItem.batch_id == batch.id, BatchItem.serial_id == serial.id)
+        )
+        if existing:
+            raise InventoryError("Already scanned in this batch")
+        in_other_draft = db.scalar(
+            select(BatchItem.id)
+            .join(Batch, BatchItem.batch_id == Batch.id)
+            .where(
+                BatchItem.serial_id == serial.id,
+                Batch.status == BatchStatus.DRAFT.value,
+                Batch.id != batch.id,
             )
         )
-        db.commit()
-        raise InventoryError("Serial number not found")
-    serial_allowed_for_batch(serial, BatchType(batch.batch_type))
-    fefo_error = validate_fefo_scan(db, batch, serial)
-    if fefo_error:
-        raise InventoryError(fefo_error)
-    existing = db.scalar(
-        select(BatchItem).where(BatchItem.batch_id == batch.id, BatchItem.serial_id == serial.id)
-    )
-    if existing:
-        raise InventoryError("Already scanned in this batch")
-    in_other_draft = db.scalar(
-        select(BatchItem.id)
-        .join(Batch, BatchItem.batch_id == Batch.id)
-        .where(
-            BatchItem.serial_id == serial.id,
-            Batch.status == BatchStatus.DRAFT.value,
-            Batch.id != batch.id,
-        )
-    )
-    if in_other_draft:
-        raise InventoryError(f"{serial.serial_number} is already in another open batch")
+        if in_other_draft:
+            raise InventoryError(f"{serial.serial_number} is already in another open batch")
+    except InventoryError as exc:
+        _record_rejected_scan(db, batch, user, serial.serial_number, str(exc), serial=serial)
+        raise
     item = BatchItem(batch_id=batch.id, serial_id=serial.id)
     db.add(item)
     db.add(
@@ -201,9 +272,33 @@ def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: st
         db.commit()
     except IntegrityError as exc:
         db.rollback()
+        _record_rejected_scan(db, batch, user, serial.serial_number, "Already scanned in this batch", serial=serial)
         raise InventoryError("Already scanned in this batch") from exc
     db.refresh(item)
     return item
+
+
+def _record_rejected_scan(
+    db: Session,
+    batch: Batch,
+    user: User,
+    serial_number: str,
+    message: str,
+    *,
+    serial: Serial | None = None,
+) -> None:
+    db.add(
+        ScanLog(
+            serial_id=serial.id if serial else None,
+            serial_number_raw=serial_number,
+            user_id=user.id,
+            action=batch.batch_type,
+            batch_id=batch.id,
+            status="REJECTED",
+            message=message,
+        )
+    )
+    db.commit()
 
 
 def remove_batch_item(db: Session, batch: Batch, item_id: int) -> None:
@@ -217,15 +312,21 @@ def remove_batch_item(db: Session, batch: Batch, item_id: int) -> None:
 
 
 def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
+    from app.services.shelf_verification import validate_shelf_verification_complete
+
     batch_type = BatchType(batch.batch_type)
     if not batch.items:
         raise InventoryError("Scan at least one serial before submitting")
+    validate_shelf_verification_complete(batch)
     for item in batch.items:
         serial_allowed_for_batch(item.serial, batch_type)
     for item in batch.items:
         previous_status = item.serial.status
         target_status = previous_status
         scan_status = "SUBMITTED"
+        if batch_type != BatchType.AUDIT and item.rate is None:
+            # Preserve the valuation used when the stock moved; product rates can change later.
+            item.rate = float(item.serial.product.default_rate or 0)
         if batch_type in {BatchType.RECEIVE, BatchType.PURCHASE}:
             target_status = SerialStatus.IN_STOCK.value
             scan_status = SerialStatus.PURCHASED.value
@@ -348,6 +449,9 @@ def generate_serials(
     mfg_date: date | None = None,
     expiry_date: date | None = None,
     warehouse: str | None = None,
+    warehouse_level: str = WarehouseLevel.COMPANY_WAREHOUSE.value,
+    *,
+    commit: bool = True,
 ) -> list[Serial]:
     if quantity < 1:
         raise InventoryError("Quantity must be at least 1")
@@ -372,14 +476,18 @@ def generate_serials(
                 mfg_date=mfg_date,
                 expiry_date=expiry_date,
                 warehouse=warehouse.strip().upper() if warehouse else None,
+                warehouse_level=WarehouseLevel(warehouse_level).value,
             )
             db.add(serial)
             created.append(serial)
         try:
-            db.commit()
+            if commit:
+                db.commit()
+            else:
+                db.flush()
         except IntegrityError as exc:
             db.rollback()
-            if attempt == 4:
+            if not commit or attempt == 4:
                 raise InventoryError("Could not allocate unique serial numbers; try again") from exc
             continue
         for serial in created:
@@ -389,15 +497,22 @@ def generate_serials(
 
 
 def dashboard_counts(db: Session) -> dict[str, int]:
+    from app.services.shelf_verification import pending_shelf_batches
+
     today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     counts = {
         "products": db.scalar(select(func.count(Product.id))) or 0,
         "serials": db.scalar(select(func.count(Serial.id))) or 0,
         "in_stock": db.scalar(select(func.count(Serial.id)).where(Serial.status == SerialStatus.IN_STOCK.value)) or 0,
         "sold": db.scalar(select(func.count(Serial.id)).where(Serial.status == SerialStatus.SOLD.value)) or 0,
-        "pending_sync": db.scalar(select(func.count(Batch.id)).where(Batch.status == BatchStatus.PENDING_SYNC.value)) or 0,
+        "pending_sync": db.scalar(
+            select(func.count(Batch.id)).where(
+                Batch.status.in_({BatchStatus.PENDING_SYNC.value, BatchStatus.SYNCING.value})
+            )
+        ) or 0,
         "failed": db.scalar(select(func.count(Batch.id)).where(Batch.status == BatchStatus.FAILED.value)) or 0,
         "today_scans": db.scalar(select(func.count(ScanLog.id)).where(ScanLog.created_at >= today_start)) or 0,
+        "shelf_verification_pending": len(pending_shelf_batches(db)),
     }
     return counts
 

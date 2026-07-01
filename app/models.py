@@ -15,9 +15,62 @@ def utc_now() -> datetime:
 class Role(str, Enum):
     SUPER_ADMIN = "super_admin"
     ADMIN = "admin"
+    DIRECTORS = "directors"
+    WAREHOUSE_MANAGER = "warehouse_manager"
     PURCHASE = "purchase"
     SALES = "sales"
     AUDITOR = "auditor"
+
+
+def normalize_role_values(value) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, Role):
+        items = [value]
+    elif isinstance(value, str):
+        items = [value]
+    else:
+        try:
+            items = list(value)
+        except TypeError:
+            items = [str(value)]
+
+    role_values = {role.value for role in Role}
+    role_names = {role.name: role.value for role in Role}
+    selected: list[str] = []
+    for item in items:
+        parts = [item.value] if isinstance(item, Role) else str(item).split(",")
+        for part in parts:
+            token = part.strip()
+            if token.startswith("Role."):
+                token = token.split(".", 1)[1]
+            if token in role_names:
+                token = role_names[token]
+            if token in role_values and token not in selected:
+                selected.append(token)
+    return tuple(selected)
+
+
+def serialize_role_values(value) -> str:
+    selected = set(normalize_role_values(value))
+    return ",".join(role.value for role in Role if role.value in selected)
+
+
+def role_label(value) -> str:
+    roles = normalize_role_values(value)
+    return ", ".join(roles)
+
+
+def has_role(value, role: Role | str) -> bool:
+    roles = normalize_role_values(value)
+    target = normalize_role_values(role)
+    return bool(target and target[0] in roles)
+
+
+def has_any_role(value, roles) -> bool:
+    values = set(normalize_role_values(value))
+    targets = set(normalize_role_values(roles))
+    return bool(values & targets)
 
 
 class SerialStatus(str, Enum):
@@ -47,6 +100,18 @@ class BatchType(str, Enum):
     QR_ASSIGNMENT = "QR_ASSIGNMENT"
 
 
+class GstTreatment(str, Enum):
+    INTRA_STATE = "INTRA_STATE"
+    INTER_STATE = "INTER_STATE"
+
+
+class GstRegistrationType(str, Enum):
+    UNKNOWN = "Unknown"
+    COMPOSITION = "Composition"
+    REGULAR = "Regular"
+    UNREGISTERED_CONSUMER = "Unregistered/Consumer"
+
+
 class TransactionType(str, Enum):
     PURCHASE = "PURCHASE"
     SALE = "SALE"
@@ -56,11 +121,21 @@ class TransactionType(str, Enum):
     AUDIT = "AUDIT"
     QR_ASSIGNMENT = "QR_ASSIGNMENT"
     QR_REPLACEMENT = "QR_REPLACEMENT"
+    RELOCATION = "RELOCATION"
+
+
+class WarehouseLevel(str, Enum):
+    COMPANY_WAREHOUSE = "Company Warehouse"
+    C_AND_F = "C&F"
+    MASTER_FRANCHISE = "Master Franchise"
+    TALUK_FRANCHISE = "Taluk Franchise"
+    HOME_FRANCHISE = "Home Franchise"
 
 
 class BatchStatus(str, Enum):
     DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
+    SYNCING = "SYNCING"
     SYNCED = "SYNCED"
     PENDING_SYNC = "PENDING_SYNC"
     FAILED = "FAILED"
@@ -73,7 +148,7 @@ class User(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
-    role: Mapped[str] = mapped_column(String(40), index=True)
+    role: Mapped[str] = mapped_column(String(255), index=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -83,6 +158,14 @@ class User(Base):
     batches: Mapped[list["Batch"]] = relationship(back_populates="user")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="user")
 
+    @property
+    def role_values(self) -> tuple[str, ...]:
+        return normalize_role_values(self.role)
+
+    @property
+    def role_label(self) -> str:
+        return role_label(self.role)
+
 
 class Product(Base):
     __tablename__ = "products"
@@ -90,18 +173,59 @@ class Product(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     product_code: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     product_name: Mapped[str] = mapped_column(String(180), index=True)
+    nickname: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     category: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    brand: Mapped[str | None] = mapped_column(String(120), nullable=True, index=True)
     hsn: Mapped[str] = mapped_column(String(40))
     gst_rate: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(40), default="Pcs")
     default_rate: Mapped[float] = mapped_column(Float, default=0)
     sales_discount_rate: Mapped[float] = mapped_column(Float, default=0)
+    shelf_verification_interval: Mapped[int] = mapped_column(Integer, default=1)
     tally_stock_item_name: Mapped[str] = mapped_column(String(180))
+    alternate_tally_stock_item_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     serials: Mapped[list["Serial"]] = relationship(back_populates="product")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="product")
+
+
+class StorageLocation(Base):
+    __tablename__ = "storage_locations"
+    __table_args__ = (
+        UniqueConstraint(
+            "warehouse",
+            "zone",
+            "section",
+            "rack",
+            "shelf",
+            "bin",
+            name="uq_storage_location_path",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    code: Mapped[str] = mapped_column(String(140), unique=True, index=True)
+    warehouse: Mapped[str] = mapped_column(String(80), index=True)
+    warehouse_level: Mapped[str] = mapped_column(
+        String(40),
+        default=WarehouseLevel.COMPANY_WAREHOUSE.value,
+        index=True,
+    )
+    zone: Mapped[str] = mapped_column(String(80), index=True)
+    section: Mapped[str] = mapped_column(String(80), index=True)
+    rack: Mapped[str] = mapped_column(String(80), index=True)
+    shelf: Mapped[str] = mapped_column(String(80), index=True)
+    bin: Mapped[str] = mapped_column(String(80), index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    serials: Mapped[list["Serial"]] = relationship(back_populates="location")
+
+    @property
+    def full_path(self) -> str:
+        return " / ".join((self.warehouse, self.zone, self.section, self.rack, self.shelf, self.bin))
 
 
 class Serial(Base):
@@ -120,10 +244,55 @@ class Serial(Base):
     mfg_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     expiry_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
     warehouse: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    warehouse_level: Mapped[str] = mapped_column(
+        String(40),
+        default=WarehouseLevel.COMPANY_WAREHOUSE.value,
+        index=True,
+    )
+    location_id: Mapped[int | None] = mapped_column(ForeignKey("storage_locations.id"), nullable=True, index=True)
 
     product: Mapped[Product] = relationship(back_populates="serials")
+    location: Mapped[StorageLocation | None] = relationship(back_populates="serials")
     batch_items: Mapped[list["BatchItem"]] = relationship(back_populates="serial")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="serial")
+
+
+class StockRelocation(Base):
+    __tablename__ = "stock_relocations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    reference_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    product_batch_number: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    previous_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("storage_locations.id"), nullable=True, index=True
+    )
+    new_location_id: Mapped[int] = mapped_column(ForeignKey("storage_locations.id"), index=True)
+    previous_location_snapshot: Mapped[str] = mapped_column(String(520))
+    new_location_snapshot: Mapped[str] = mapped_column(String(520))
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    device_used: Mapped[str] = mapped_column(String(240))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    product: Mapped[Product] = relationship()
+    previous_location: Mapped[StorageLocation | None] = relationship(foreign_keys=[previous_location_id])
+    new_location: Mapped[StorageLocation] = relationship(foreign_keys=[new_location_id])
+    user: Mapped[User] = relationship()
+    serial_links: Mapped[list["RelocationSerial"]] = relationship(back_populates="relocation")
+
+
+class RelocationSerial(Base):
+    __tablename__ = "relocation_serials"
+    __table_args__ = (UniqueConstraint("relocation_id", "serial_id", name="uq_relocation_serial"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    relocation_id: Mapped[int] = mapped_column(ForeignKey("stock_relocations.id"), index=True)
+    serial_id: Mapped[int] = mapped_column(ForeignKey("serials.id"), index=True)
+
+    relocation: Mapped[StockRelocation] = relationship(back_populates="serial_links")
+    serial: Mapped[Serial] = relationship()
 
 
 class Batch(Base):
@@ -133,6 +302,14 @@ class Batch(Base):
     batch_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     batch_type: Mapped[str] = mapped_column(String(40), index=True)
     party_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    party_state: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    party_gst_registration_type: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    party_gst_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    party_gstin: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    gst_treatment: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    gst_cgst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gst_sgst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
+    gst_igst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     status: Mapped[str] = mapped_column(String(40), default=BatchStatus.DRAFT.value, index=True)
@@ -143,6 +320,9 @@ class Batch(Base):
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     last_retry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    sync_remote_id: Mapped[str | None] = mapped_column(String(80), nullable=True, unique=True)
+    sync_request_xml: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sync_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -166,10 +346,17 @@ class BatchItem(Base):
     rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     remarks: Mapped[str | None] = mapped_column(Text, nullable=True)
     fefo_picked: Mapped[bool] = mapped_column(Boolean, default=False)
+    shelf_location_id: Mapped[int | None] = mapped_column(
+        ForeignKey("storage_locations.id"), nullable=True, index=True
+    )
+    shelf_verified_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    shelf_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     batch: Mapped[Batch] = relationship(back_populates="items")
     serial: Mapped[Serial] = relationship(back_populates="batch_items")
+    shelf_location: Mapped[StorageLocation | None] = relationship()
+    shelf_verified_by: Mapped[User | None] = relationship()
 
 
 class ScanLog(Base):
@@ -235,6 +422,22 @@ class Setting(Base):
     key: Mapped[str] = mapped_column(String(120), primary_key=True)
     value: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now)
+
+
+class ChangeAudit(Base):
+    __tablename__ = "change_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    actor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    actor_username: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    entity_type: Mapped[str] = mapped_column(String(80), index=True)
+    entity_id: Mapped[str] = mapped_column(String(120), index=True)
+    action: Mapped[str] = mapped_column(String(80), index=True)
+    before_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    after_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    actor: Mapped[User | None] = relationship()
 
 
 class Company(Base):

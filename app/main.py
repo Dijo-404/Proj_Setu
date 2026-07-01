@@ -6,8 +6,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
-from app.middleware import CSRFOriginMiddleware
-from app.routers import account, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, tally_check, users
+from app.middleware import CSRFOriginMiddleware, SessionActivityMiddleware
+from app.routers import account, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, stock_movement, tally_check, users, warehouse
+from app.services.backup_worker import start_backup_worker, stop_backup_worker
 from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
 from app.services.sync_worker import start_retry_worker, stop_retry_worker
@@ -17,6 +18,7 @@ logger = logging.getLogger("setu")
 
 def create_app() -> FastAPI:
     app = FastAPI(title=get_settings().app_name)
+    app.add_middleware(SessionActivityMiddleware)
     app.add_middleware(CSRFOriginMiddleware)
     app.mount("/static", StaticFiles(directory="app/static"), name="static")
     app.include_router(auth.router)
@@ -27,12 +29,14 @@ def create_app() -> FastAPI:
     app.include_router(serials.router)
     app.include_router(batches.router)
     app.include_router(reports.router)
+    app.include_router(stock_movement.router)
     app.include_router(expiry.router)
     app.include_router(settings.router)
     app.include_router(tally_check.router)
     app.include_router(maintenance.router)
     app.include_router(replacements.router)
     app.include_router(users.router)
+    app.include_router(warehouse.router)
 
     @app.on_event("startup")
     async def startup() -> None:
@@ -46,10 +50,12 @@ def create_app() -> FastAPI:
         with SessionLocal() as db:
             bootstrap(db)
         start_retry_worker(app)
+        start_backup_worker(app)
 
     @app.on_event("shutdown")
     async def shutdown() -> None:
         await stop_retry_worker(app)
+        await stop_backup_worker(app)
 
     @app.get("/favicon.ico", include_in_schema=False)
     def favicon() -> FileResponse:

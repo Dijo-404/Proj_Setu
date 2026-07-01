@@ -1,7 +1,19 @@
 from sqlalchemy import select, update
 
-from app.models import BatchType, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
+from app.models import (
+    BatchType,
+    GstRegistrationType,
+    InventoryTransaction,
+    Product,
+    ScanLog,
+    Serial,
+    SerialStatus,
+    StorageLocation,
+    TransactionType,
+    User,
+)
 from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
+from app.services.shelf_verification import verify_pending_items_on_shelf
 
 
 def test_receive_generated_serial(db_session):
@@ -21,6 +33,28 @@ def test_receive_generated_serial(db_session):
     batch = create_batch(db_session, user, BatchType.RECEIVE, "Supplier", "")
     item = add_serial_to_batch(db_session, batch, user, serial.serial_number)
     assert item.serial.status == SerialStatus.GENERATED.value
+
+
+def test_unregistered_sale_ignores_stale_gst_number(db_session):
+    user = User(username="sales-unregistered", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Cash Customer",
+        "",
+        party_gst_registration_type=GstRegistrationType.UNREGISTERED_CONSUMER.value,
+        party_gst_name="Cash Customer GST Name",
+        party_gstin="not-a-gstin",
+    )
+
+    assert batch.party_gst_registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
+    assert batch.party_gst_name == "Cash Customer GST Name"
+    assert batch.party_gstin is None
+    assert batch.party_state == "Karnataka"
 
 
 def test_submit_aborts_when_serial_grabbed_concurrently(db_session):
@@ -100,6 +134,15 @@ def test_sale_rejects_generated_serial(db_session):
         assert True
     else:
         assert False
+    rejected = db_session.scalar(
+        select(ScanLog).where(
+            ScanLog.batch_id == batch.id,
+            ScanLog.serial_id == serial.id,
+            ScanLog.status == "REJECTED",
+        )
+    )
+    assert rejected is not None
+    assert "not available for sale" in rejected.message
 
 
 def test_purchase_batch_logs_purchase_transaction(db_session):
@@ -113,11 +156,21 @@ def test_purchase_batch_logs_purchase_transaction(db_session):
         default_rate=100,
         tally_stock_item_name="Turmeric",
     )
-    db_session.add_all([user, product])
+    location = StorageLocation(
+        code="PURCHASE-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, product, location])
     db_session.commit()
     serial = generate_serials(db_session, product, 1)[0]
     batch = create_batch(db_session, user, BatchType.PURCHASE, "Supplier", "")
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
     apply_batch_statuses(db_session, batch, user)
     txn = db_session.scalar(select(InventoryTransaction).where(InventoryTransaction.serial_id == serial.id))
     assert serial.status == SerialStatus.IN_STOCK.value

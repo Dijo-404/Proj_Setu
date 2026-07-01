@@ -1,113 +1,255 @@
 {% extends "base.html" %}
+{% from "partials/ledger_mapping_editor.html" import sales_ledger_editor %}
 {% block title %}Tally Check - Setu{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
-    <p class="eyebrow">Preflight</p>
-    <h1>Tally Check</h1>
-  </div>
-  <form method="post" action="/tally-check/test-gateway">
-    <button class="button primary" type="submit">Test gateway</button>
-  </form>
-</section>
-
-{% if result %}
-<div class="alert {{ '' if result.ok else 'error' }}">
-  {{ result.message }}
-  {% if result.response_excerpt %}
-  <pre class="response-preview">{{ result.response_excerpt }}</pre>
-  {% endif %}
-</div>
-{% endif %}
-
-<section class="metric-grid readiness-grid">
-  <div class="metric"><span>Total masters</span><strong>{{ counts.total }}</strong></div>
-  <div class="metric"><span>Locally ready</span><strong>{{ counts.ready }}</strong></div>
-  <div class="metric warn"><span>Unchecked</span><strong>{{ counts.unchecked }}</strong></div>
-  <div class="metric danger"><span>Missing local data</span><strong>{{ counts.missing }}</strong></div>
-  <div class="metric"><span>Confirmed</span><strong>{{ counts.confirmed }}</strong></div>
-  <div class="metric"><span>Tally host</span><strong>{{ settings.tally_host }}:{{ settings.tally_port }}</strong></div>
-</section>
-
-<section class="panel">
-  <div class="section-title">
-    <h2>Required Tally masters</h2>
-    <span>Exact names must match Tally</span>
-  </div>
-  <div class="table-scroll">
-    <table>
-      <thead>
-        <tr>
-          <th>Type</th>
-          <th>Name</th>
-          <th>Source</th>
-          <th>Local</th>
-          <th>Confirmation</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for item in requirements %}
-        {% set confirmation = confirmations.get(item.key) %}
-        <tr>
-          <td>{{ item.master_type }}</td>
-          <td>
-            {% if item.master_name %}
-            <strong>{{ item.master_name }}</strong>
-            <small>{{ item.detail }}</small>
-            {% else %}
-            <span class="muted">Missing value</span>
-            {% endif %}
-          </td>
-          <td>{{ item.source }}</td>
-          <td><span class="status {{ 'synced' if item.local_status == 'READY' else 'failed' }}">{{ item.local_status }}</span></td>
-          <td>
-            {% if confirmation %}
-            <span class="status synced">CONFIRMED</span>
-            <small>{{ confirmation.confirmed_by.username }} - {{ confirmation.confirmed_at.strftime('%d %b %Y %H:%M') }}</small>
-            {% else %}
-            <span class="status pending_sync">UNCHECKED</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if item.local_status == 'READY' and confirmation %}
-            <form method="post" action="/tally-check/unconfirm">
-              <input type="hidden" name="master_type" value="{{ item.master_type }}">
-              <input type="hidden" name="master_name" value="{{ item.master_name }}">
-              <button class="button small ghost" type="submit">Unmark</button>
-            </form>
-            {% elif item.local_status == 'READY' %}
-            <form method="post" action="/tally-check/confirm" class="inline-form">
-              <input type="hidden" name="master_type" value="{{ item.master_type }}">
-              <input type="hidden" name="master_name" value="{{ item.master_name }}">
-              <input type="hidden" name="source" value="{{ item.source }}">
-              <input name="notes" placeholder="Optional note">
-              <button class="button small" type="submit">Mark checked</button>
-            </form>
-            {% else %}
-            {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
-            <a href="/settings">Fix settings</a>
-            {% else %}
-            <span class="muted">Settings access required</span>
-            {% endif %}
-            {% endif %}
-          </td>
-        </tr>
-        {% else %}
-        <tr><td colspan="6" class="empty">No products or Tally settings found</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    <p class="eyebrow">Tally setup</p>
+    <h1>Companies</h1>
   </div>
 </section>
 
-<section class="panel">
-  <div class="section-title"><h2>Before enabling sync</h2></div>
-  <div class="checklist">
-    <div>Confirm Tally Prime is open on the server machine.</div>
-    <div>Confirm Client/Server configuration is enabled on port {{ settings.tally_port }}.</div>
-    <div>Confirm Maintain Inventory and Integrate Accounts with Inventory are enabled in Tally.</div>
-    <div>Confirm every stock item, ledger, voucher type, unit, and HSN entry above exists with the exact spelling shown.</div>
+<section class="panel company-list-panel">
+  <div class="section-title company-list-title">
+    <h2>Company names</h2>
+    <span>{{ companies|length }} compan{{ 'y' if companies|length == 1 else 'ies' }}</span>
+  </div>
+  <div class="company-name-list">
+    {% for row in companies %}
+    <button
+      class="company-name-card"
+      type="button"
+      data-company-open="company-modal-{{ row.company.id }}"
+      aria-haspopup="dialog"
+    >
+      <span data-company-name="{{ row.company.id }}">{{ row.company.name }}</span>
+      {% if row.company.is_active %}
+      <small class="status active">Active</small>
+      {% endif %}
+    </button>
+    {% else %}
+    <div class="empty company-empty">
+      <p>No companies have been added.</p>
+      {% if role_can(user, 'page_settings') and role_can(user, 'settings_edit') %}
+      <a class="button primary" href="/settings">Add a company</a>
+      {% endif %}
+    </div>
+    {% endfor %}
   </div>
 </section>
+
+{% for row in companies %}
+<dialog
+  id="company-modal-{{ row.company.id }}"
+  class="modal product-modal company-config-modal"
+  {% if open_company_id == row.company.id %}data-auto-open="true"{% endif %}
+>
+  <div class="modal__head">
+    <div>
+      <p class="eyebrow">{{ 'Active company' if row.company.is_active else 'Saved company' }}</p>
+      <h2 data-company-modal-name="{{ row.company.id }}">{{ row.company.name }}</h2>
+    </div>
+    <button class="button ghost modal__close" type="button" data-company-close aria-label="Close">&times;</button>
+  </div>
+  <div class="modal__body product-modal-body">
+    <div class="product-summary-grid company-summary-grid">
+      <div><span>Tally company</span><strong>{{ row.config.company_name or '-' }}</strong></div>
+      <div><span>Connection</span><strong>{{ row.config.tally_host }}:{{ row.config.tally_port }}</strong></div>
+      <div><span>Round-off ledger</span><strong>{{ row.config.round_off_ledger_name or '-' }}</strong></div>
+    </div>
+
+    {% if can_edit_companies %}
+    <section class="product-modal-section">
+      <div class="product-modal-section__head">
+        <div>
+          <h3>Company settings</h3>
+          <p>Connection and product GST ledgers.</p>
+        </div>
+      </div>
+      <form
+        method="post"
+        action="/tally-check/companies/{{ row.company.id }}"
+        class="product-modal-form company-modal-form"
+        data-company-settings-form
+        data-company-id="{{ row.company.id }}"
+      >
+        <label>Display name<input name="name" value="{{ row.company.name }}" required></label>
+        <label>Tally company name<input name="company_name" value="{{ row.config.company_name }}" required></label>
+        <label>Tally host<input name="tally_host" value="{{ row.config.tally_host }}" required></label>
+        <label>Tally port<input name="tally_port" type="number" min="1" max="65535" value="{{ row.config.tally_port }}" required></label>
+        <input type="hidden" name="sales_voucher_type" value="{{ row.config.sales_voucher_type }}">
+        <input type="hidden" name="purchase_voucher_type" value="{{ row.config.purchase_voucher_type }}">
+        <input type="hidden" name="sales_ledger_name" value="{{ row.config.sales_ledger_name }}">
+        <input type="hidden" name="purchase_ledger_name" value="{{ row.config.purchase_ledger_name }}">
+        <input type="hidden" name="cgst_ledger_name" value="{{ row.config.cgst_ledger_name }}">
+        <input type="hidden" name="sgst_ledger_name" value="{{ row.config.sgst_ledger_name }}">
+        <label>Round-off ledger<input name="round_off_ledger_name" value="{{ row.config.round_off_ledger_name }}" required></label>
+        {{ sales_ledger_editor(row.config.sales_gst_ledger_mappings) }}
+        <div class="product-modal-actions">
+          <span class="autosave-status" data-company-save-status aria-live="polite"></span>
+          <button class="button primary" type="submit" data-company-save-button>Save settings</button>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if row.company.is_active %}
+    <section class="product-modal-section">
+      <div class="product-modal-section__head company-check-head">
+        <div>
+          <h3>Tally verification</h3>
+          <p>Check the gateway and confirm exact master names for the active company.</p>
+        </div>
+        <form method="post" action="/tally-check/test-gateway">
+          <button class="button" type="submit">Test gateway</button>
+        </form>
+      </div>
+
+      {% if result %}
+      <div class="alert {{ '' if result.ok else 'error' }}">
+        {{ result.message }}
+        {% if result.response_excerpt %}
+        <pre class="response-preview">{{ result.response_excerpt }}</pre>
+        {% endif %}
+      </div>
+      {% endif %}
+
+      <section class="metric-grid readiness-grid company-readiness-grid">
+        <div class="metric"><span>Total</span><strong>{{ counts.total }}</strong></div>
+        <div class="metric"><span>Ready</span><strong>{{ counts.ready }}</strong></div>
+        <div class="metric warn"><span>Unchecked</span><strong>{{ counts.unchecked }}</strong></div>
+        <div class="metric danger"><span>Missing</span><strong>{{ counts.missing }}</strong></div>
+        <div class="metric"><span>Confirmed</span><strong>{{ counts.confirmed }}</strong></div>
+      </section>
+
+      <div class="table-scroll company-master-scroll">
+        <table class="company-master-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Tally master</th>
+              <th>Status</th>
+              <th>Check</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in requirements %}
+            {% set confirmation = confirmations.get(item.key) %}
+            <tr>
+              <td>{{ item.master_type }}</td>
+              <td>
+                {% if item.master_name %}
+                <strong>{{ item.master_name }}</strong>
+                <small>{{ item.detail }}</small>
+                {% else %}
+                <span class="muted">Missing value</span>
+                {% endif %}
+              </td>
+              <td>
+                <span class="tally-local-state {{ 'is-ready' if item.local_status == 'READY' else 'is-missing' }}">
+                  {{ 'Ready' if item.local_status == 'READY' else 'Missing' }}
+                </span>
+              </td>
+              <td class="tally-check-cell">
+                {% if item.local_status == 'READY' and confirmation %}
+                <form method="post" action="/tally-check/unconfirm" class="tally-confirm-form">
+                  <input type="hidden" name="master_type" value="{{ item.master_type }}">
+                  <input type="hidden" name="master_name" value="{{ item.master_name }}">
+                  <button
+                    class="tally-check-toggle is-checked"
+                    type="submit"
+                    title="Checked by {{ confirmation.confirmed_by.username }} on {{ confirmation.confirmed_at.strftime('%d %b %Y at %H:%M') }}. Click to undo."
+                    aria-label="Checked. Click to undo."
+                  >
+                    <span class="tally-check-toggle__box" aria-hidden="true">✓</span>
+                    <span>Checked</span>
+                  </button>
+                </form>
+                {% elif item.local_status == 'READY' %}
+                <form method="post" action="/tally-check/confirm" class="tally-confirm-form">
+                  <input type="hidden" name="master_type" value="{{ item.master_type }}">
+                  <input type="hidden" name="master_name" value="{{ item.master_name }}">
+                  <input type="hidden" name="source" value="{{ item.source }}">
+                  <button class="tally-check-toggle" type="submit">
+                    <span class="tally-check-toggle__box" aria-hidden="true"></span>
+                    <span>Check</span>
+                  </button>
+                </form>
+                {% else %}
+                <span class="muted">Set up first</span>
+                {% endif %}
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="4" class="empty">No Tally masters found</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    {% else %}
+    <section class="product-modal-section">
+      <div class="empty">
+        Activate this company from Settings before testing its gateway or confirming Tally masters.
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</dialog>
+{% endfor %}
+
+<script src="/static/ledger-mapping-editor.js?v=20260628-2"></script>
+<script>
+  (function () {
+    function openDialog(dialog) {
+      if (!dialog) return;
+      if (typeof dialog.showModal === "function") dialog.showModal();
+      else dialog.setAttribute("open", "");
+    }
+
+    document.querySelectorAll("[data-company-open]").forEach((button) => {
+      button.addEventListener("click", () => {
+        openDialog(document.getElementById(button.dataset.companyOpen));
+      });
+    });
+
+    document.querySelectorAll("dialog.company-config-modal").forEach((dialog) => {
+      dialog.querySelectorAll("[data-company-close]").forEach((button) => {
+        button.addEventListener("click", () => dialog.close());
+      });
+      dialog.addEventListener("click", (event) => {
+        if (event.target === dialog) dialog.close();
+      });
+      if (dialog.dataset.autoOpen === "true") openDialog(dialog);
+    });
+
+    document.querySelectorAll("[data-company-settings-form]").forEach((form) => {
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const status = form.querySelector("[data-company-save-status]");
+        const button = form.querySelector("[data-company-save-button]");
+        status.textContent = "Saving...";
+        status.className = "autosave-status saving";
+        button.disabled = true;
+        fetch(form.action, {
+          method: "POST",
+          body: new FormData(form),
+          headers: { Accept: "application/json" }
+        })
+          .then((response) => response.json().then((payload) => ({ response, payload })))
+          .then(({ response, payload }) => {
+            if (!response.ok || !payload.ok) throw new Error(payload.error || "Save failed");
+            status.textContent = "Saved";
+            status.className = "autosave-status ok";
+            window.location.href = "/tally-check?company=" + form.dataset.companyId;
+          })
+          .catch((error) => {
+            status.textContent = error.message || "Save failed";
+            status.className = "autosave-status error";
+            button.disabled = false;
+          });
+      });
+    });
+  })();
+</script>
 {% endblock %}
