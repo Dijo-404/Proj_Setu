@@ -16,6 +16,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import AuditFinding, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, WarehouseLevel
+from app.services.audit import current_missing_stock_findings_query
 from app.services.exports import safe_row
 from app.services.settings import get_setting
 
@@ -427,25 +428,12 @@ def product_inventory_metrics(
         metrics[product_id]["units_sold"] = int(metrics[product_id]["units_sold"]) + int(row["units_sold"])
         metrics[product_id]["system_stock"] = int(metrics[product_id]["system_stock"]) + int(row["current_stock"])
 
-    latest_findings = db.scalars(
-        select(AuditFinding)
-        .where(AuditFinding.serial_id.is_not(None))
-        .order_by(AuditFinding.serial_id, desc(AuditFinding.created_at), desc(AuditFinding.id))
-        .options(selectinload(AuditFinding.serial))
+    current_missing_findings = db.scalars(
+        current_missing_stock_findings_query().options(selectinload(AuditFinding.serial))
     ).all()
-    seen_serial_ids: set[int] = set()
-    for finding in latest_findings:
-        if finding.serial_id in seen_serial_ids:
-            continue
-        seen_serial_ids.add(finding.serial_id)
+    for finding in current_missing_findings:
         serial = finding.serial
-        if (
-            finding.finding_type == "MISSING"
-            and serial
-            and serial.active
-            and serial.status in STOCK_STATUSES
-            and serial.product_id in metrics
-        ):
+        if serial and serial.product_id in metrics:
             metrics[serial.product_id]["missing_stock"] = int(metrics[serial.product_id]["missing_stock"]) + 1
 
     for metric in metrics.values():

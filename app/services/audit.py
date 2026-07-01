@@ -1,10 +1,11 @@
 from collections import Counter
 from dataclasses import dataclass
 
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+from sqlalchemy import and_, delete, desc, or_, select
+from sqlalchemy.orm import Session, aliased
 
 from app.models import AuditFinding, Batch, BatchType, Serial, SerialStatus
+from app.services.expiry import STOCK_STATUSES
 
 
 @dataclass(frozen=True)
@@ -67,4 +68,35 @@ def summarize_audit_findings(batch: Batch) -> AuditSummary:
         missing=counts["MISSING"],
         extra=counts["EXTRA"],
         total=len(batch.audit_findings),
+    )
+
+
+def current_missing_stock_findings_query():
+    """Return missing findings that have not been resolved by a newer audit scan."""
+    newer_finding = aliased(AuditFinding)
+    newer_for_same_serial = (
+        select(newer_finding.id)
+        .where(
+            newer_finding.serial_id == AuditFinding.serial_id,
+            or_(
+                newer_finding.created_at > AuditFinding.created_at,
+                and_(
+                    newer_finding.created_at == AuditFinding.created_at,
+                    newer_finding.id > AuditFinding.id,
+                ),
+            ),
+        )
+        .exists()
+    )
+    return (
+        select(AuditFinding)
+        .join(Serial, AuditFinding.serial_id == Serial.id)
+        .where(
+            AuditFinding.finding_type == "MISSING",
+            AuditFinding.serial_id.is_not(None),
+            Serial.active == True,
+            Serial.status.in_(STOCK_STATUSES),
+            ~newer_for_same_serial,
+        )
+        .order_by(desc(AuditFinding.created_at), desc(AuditFinding.id))
     )

@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import require_permission
 from app.database import get_db
 from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
+from app.services.audit import current_missing_stock_findings_query
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
@@ -126,7 +127,7 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
 
 
 def missing_stock_query(q: str = "", start: str = "", end: str = ""):
-    conditions = [AuditFinding.finding_type == MISSING_STOCK_ACTION]
+    conditions = []
     if q:
         like = f"%{q.strip()}%"
         conditions.append(
@@ -143,16 +144,12 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
     end_dt = parse_filter_date(end, "end")
     if end_dt:
         conditions.append(AuditFinding.created_at < end_dt + timedelta(days=1))
-    return (
-        select(AuditFinding)
-        .join(Batch, AuditFinding.batch_id == Batch.id)
-        .where(and_(*conditions))
-        .order_by(desc(AuditFinding.created_at))
-        .limit(500)
-        .options(
-            selectinload(AuditFinding.batch).selectinload(Batch.user),
-            selectinload(AuditFinding.serial).selectinload(Serial.location),
-        )
+    query = current_missing_stock_findings_query().join(Batch, AuditFinding.batch_id == Batch.id)
+    if conditions:
+        query = query.where(and_(*conditions))
+    return query.limit(500).options(
+        selectinload(AuditFinding.batch).selectinload(Batch.user),
+        selectinload(AuditFinding.serial).selectinload(Serial.location),
     )
 
 
@@ -475,8 +472,8 @@ def missing_stock_csv(
             )
         )
     stream.seek(0)
-    return StreamingResponse(
-        iter([stream.getvalue()]),
+    return Response(
+        stream.getvalue(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=setu-missing-stock.csv"},
     )

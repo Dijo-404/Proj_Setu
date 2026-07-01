@@ -199,6 +199,69 @@ def test_product_inventory_metrics_reports_sales_available_missing_and_restock(d
     ).startswith(b"%PDF")
 
 
+def test_product_inventory_metrics_resolves_missing_after_later_verified_audit(db_session):
+    user = User(username="auditor", password_hash="x", role="admin", active=True)
+    product = _product("REPORT-RESOLVE", "Resolved missing product")
+    db_session.add_all([user, product])
+    db_session.flush()
+    serial = Serial(
+        serial_number="REPORT-RESOLVE-001",
+        product_id=product.id,
+        status=SerialStatus.IN_STOCK.value,
+    )
+    first_audit = Batch(
+        batch_number="AUD-RESOLVE-1",
+        batch_type=BatchType.AUDIT.value,
+        user_id=user.id,
+        status=BatchStatus.SUBMITTED.value,
+    )
+    second_audit = Batch(
+        batch_number="AUD-RESOLVE-2",
+        batch_type=BatchType.AUDIT.value,
+        user_id=user.id,
+        status=BatchStatus.SUBMITTED.value,
+    )
+    db_session.add_all([serial, first_audit, second_audit])
+    db_session.flush()
+    db_session.add_all(
+        [
+            AuditFinding(
+                batch_id=first_audit.id,
+                serial_id=serial.id,
+                serial_number=serial.serial_number,
+                product_code=product.product_code,
+                product_name=product.product_name,
+                finding_type="MISSING",
+                expected_status=SerialStatus.IN_STOCK.value,
+                created_at=datetime(2026, 6, 26, 10, 0, tzinfo=timezone.utc),
+            ),
+            AuditFinding(
+                batch_id=second_audit.id,
+                serial_id=serial.id,
+                serial_number=serial.serial_number,
+                product_code=product.product_code,
+                product_name=product.product_name,
+                finding_type="VERIFIED",
+                expected_status=SerialStatus.IN_STOCK.value,
+                scanned_status=SerialStatus.IN_STOCK.value,
+                created_at=datetime(2026, 6, 27, 10, 0, tzinfo=timezone.utc),
+            ),
+        ]
+    )
+    db_session.commit()
+
+    metrics, _ = product_inventory_metrics(
+        db_session,
+        [product],
+        config=MovementConfig(analysis_days=30),
+        as_of=date(2026, 6, 27),
+    )
+
+    assert metrics[product.id]["system_stock"] == 1
+    assert metrics[product.id]["missing_stock"] == 0
+    assert metrics[product.id]["available_stock"] == 1
+
+
 def test_stock_movement_exports_are_valid(db_session):
     user = User(username="admin", password_hash="x", role="admin", active=True)
     product = _product("DUR-1", "Office chair")

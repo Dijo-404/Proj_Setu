@@ -12,7 +12,14 @@ from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
 from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
-from app.routers.reports import audit_reconciliation_excel, director_audit_batch_detail, reports as reports_route
+from app.routers.reports import (
+    audit_reconciliation_excel,
+    director_audit_batch_detail,
+    missing_stock_csv,
+    missing_stock_excel,
+    missing_stock_report,
+    reports as reports_route,
+)
 from app.security import create_session_token
 from app.services.access_control import save_role_access_config
 from app.services.expiry import today
@@ -126,83 +133,136 @@ def test_reports_page_includes_filterable_missing_stock():
             mfg_date=today() - timedelta(days=30),
             expiry_date=today() + timedelta(days=120),
         )
+        resolved_serial = Serial(
+            serial_number="MISS100-000002",
+            product_id=product.id,
+            status=SerialStatus.IN_STOCK.value,
+            product_batch_number="LOT-MISS-02",
+            warehouse="Main warehouse",
+        )
         batch = Batch(
             batch_number="AUD-001",
             batch_type=BatchType.AUDIT.value,
             user_id=user.id,
             status=BatchStatus.SUBMITTED.value,
+            submitted_at=datetime(2026, 6, 28, 9, 0, tzinfo=timezone.utc),
         )
-        db.add_all([serial, batch])
+        resolved_batch = Batch(
+            batch_number="AUD-002",
+            batch_type=BatchType.AUDIT.value,
+            user_id=user.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=datetime(2026, 6, 29, 9, 0, tzinfo=timezone.utc),
+        )
+        db.add_all([serial, resolved_serial, batch, resolved_batch])
         db.flush()
-        db.add(
-            AuditFinding(
-                batch_id=batch.id,
-                serial_id=serial.id,
-                serial_number=serial.serial_number,
-                product_code=product.product_code,
-                product_name=product.product_name,
-                finding_type="MISSING",
-                expected_status=SerialStatus.IN_STOCK.value,
-            )
+        db.add_all(
+            [
+                AuditFinding(
+                    batch_id=batch.id,
+                    serial_id=serial.id,
+                    serial_number=serial.serial_number,
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    created_at=datetime(2026, 6, 28, 9, 5, tzinfo=timezone.utc),
+                ),
+                AuditFinding(
+                    batch_id=batch.id,
+                    serial_id=resolved_serial.id,
+                    serial_number=resolved_serial.serial_number,
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    created_at=datetime(2026, 6, 28, 9, 5, tzinfo=timezone.utc),
+                ),
+                AuditFinding(
+                    batch_id=resolved_batch.id,
+                    serial_id=resolved_serial.id,
+                    serial_number=resolved_serial.serial_number,
+                    product_code=product.product_code,
+                    product_name=product.product_name,
+                    finding_type="VERIFIED",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    scanned_status=SerialStatus.IN_STOCK.value,
+                    created_at=datetime(2026, 6, 29, 9, 5, tzinfo=timezone.utc),
+                ),
+            ]
         )
         db.commit()
 
-    def override_get_db():
-        db = Session()
-        try:
-            yield db
-        finally:
-            db.close()
+    def signed_request(path: str, query_string: bytes = b"") -> Request:
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": path,
+                "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(1)}".encode())],
+                "query_string": query_string,
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
 
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        client = TestClient(app, follow_redirects=False)
-        response = client.get(
-            "/reports?action=MISSING",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+    with Session() as db:
+        response = reports_route(
+            signed_request("/reports", b"action=MISSING"),
+            action="MISSING",
+            db=db,
         )
-        detail_response = client.get(
-            "/reports/missing-stock?q=MISS100",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+        detail_response = missing_stock_report(
+            signed_request("/reports/missing-stock", b"q=MISS100"),
+            q="MISS100",
+            db=db,
         )
-        csv_response = client.get(
-            "/reports/missing-stock.csv?q=MISS100",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+        csv_response = missing_stock_csv(
+            signed_request("/reports/missing-stock.csv", b"q=MISS100"),
+            q="MISS100",
+            db=db,
         )
-        xlsx_response = client.get(
-            "/reports/missing-stock.xlsx?q=MISS100",
-            cookies={SESSION_COOKIE: create_session_token(1)},
+        csv_body = csv_response.body.decode()
+        xlsx_response = missing_stock_excel(
+            signed_request("/reports/missing-stock.xlsx", b"q=MISS100"),
+            q="MISS100",
+            db=db,
         )
-    finally:
-        app.dependency_overrides.clear()
-        engine.dispose()
+    engine.dispose()
+
+    response_text = response.body.decode()
+    detail_text = detail_response.body.decode()
 
     assert response.status_code == 200
-    assert '<option value="MISSING" selected>MISSING</option>' in response.text
-    assert "<h2>Missing stock</h2>" in response.text
-    assert "MISS100-000001" in response.text
-    assert "Missing masala" in response.text
-    assert "AUD-001" in response.text
-    assert "Missing stock CSV" in response.text
-    assert "Missing stock XLSX" in response.text
+    assert '<option value="MISSING" selected>MISSING</option>' in response_text
+    assert "<h2>Missing stock</h2>" in response_text
+    assert "MISS100-000001" in response_text
+    assert "MISS100-000002" not in response_text
+    assert "Missing masala" in response_text
+    assert "AUD-001" in response_text
+    assert "AUD-002" not in response_text
+    assert "Missing stock CSV" in response_text
+    assert "Missing stock XLSX" in response_text
 
     assert detail_response.status_code == 200
-    assert "<h1>Missing stock report</h1>" in detail_response.text
-    assert "<h2>Missing stock details</h2>" in detail_response.text
-    assert "LOT-MISS-01" in detail_response.text
-    assert "Main warehouse" in detail_response.text
-    assert "MISS100-000001" in detail_response.text
-    assert 'href="/reports/missing-stock"' in detail_response.text
-    assert ">Overview</a>" in detail_response.text
+    assert "<h1>Missing stock report</h1>" in detail_text
+    assert "<h2>Missing stock details</h2>" in detail_text
+    assert "LOT-MISS-01" in detail_text
+    assert "Main warehouse" in detail_text
+    assert "MISS100-000001" in detail_text
+    assert "MISS100-000002" not in detail_text
+    assert 'href="/reports/missing-stock"' in detail_text
+    assert ">Overview</a>" in detail_text
 
     assert csv_response.status_code == 200
     assert "setu-missing-stock.csv" in csv_response.headers["content-disposition"]
-    assert "Audit Date,Audited By,Audit Batch,Serial" in csv_response.text
-    assert "LOT-MISS-01,Main warehouse" in csv_response.text
+    assert "Audit Date,Audited By,Audit Batch,Serial" in csv_body
+    assert "LOT-MISS-01,Main warehouse" in csv_body
+    assert "MISS100-000002" not in csv_body
 
     assert xlsx_response.status_code == 200
     assert xlsx_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    assert xlsx_response.content.startswith(b"PK")
+    assert xlsx_response.body.startswith(b"PK")
 
 
 def test_directors_role_gets_report_only_summary_and_audit_detail():
