@@ -222,7 +222,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 ),
                 AccessRowDefinition("manual_serial_entry", "Manual serial entry", "Type serial numbers into batches", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS, "Non-admin users can scan by camera/photo only."),
                 AccessRowDefinition("fefo_pick", "FEFO pick", "Auto-pick sale, issue, purchase return", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES)), ACTION_OPTIONS),
-                AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
+                AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale/sales-return XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("tally_sync_retry", "Tally sync retry", "Retry pending or failed sync", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("product_create", "Products", "Create products and generate serials", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition(

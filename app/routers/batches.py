@@ -43,7 +43,7 @@ from app.services.shelf_verification import (
     shelf_verification_state,
     verify_pending_items_on_shelf,
 )
-from app.services.tally import TallySyncError, build_voucher_xml, sync_batch
+from app.services.tally import TALLY_XML_SUPPORTED_BATCH_TYPES, TallySyncError, build_voucher_xml, sync_batch
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 from app.templates import templates
 
@@ -735,7 +735,7 @@ def tally_xml_preview(request: Request, batch_id: int, db: Session = Depends(get
     require_permission(request, db, "tally_xml", {"edit", "yes"})
     if batch.batch_type == BatchType.AUDIT.value:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
-    if batch.batch_type not in {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.SALE.value}:
+    if batch.batch_type not in TALLY_XML_SUPPORTED_BATCH_TYPES:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     try:
         xml = build_voucher_xml(batch, get_all_settings(db))

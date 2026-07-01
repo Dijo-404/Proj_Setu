@@ -115,7 +115,7 @@ Changing bootstrap values after the database exists does not update an existing 
 5. Create products with exact Tally stock item names.
 6. Open `Tally Check`.
 7. Mark each master checked only after comparing with Tally.
-8. Download a purchase/sale batch XML and validate it in the real Tally company.
+8. Download a purchase, sale, or sales-return batch XML and validate it in the real Tally company.
 9. Enable Tally sync only after Tally Check is complete.
 
 Switching the active company disables sync until that company's masters are checked.

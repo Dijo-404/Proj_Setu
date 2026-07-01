@@ -64,13 +64,13 @@ def test_purchase_return_and_issue_statuses(db_session):
     assert txn_types == [TransactionType.PURCHASE_RETURN.value, TransactionType.ISSUE.value]
 
 
-def test_unsupported_return_tally_sync_is_queued_not_posted(db_session):
-    user = User(username="sales", password_hash="x", role="sales")
+def test_unsupported_purchase_return_tally_sync_is_queued_not_posted(db_session):
+    user = User(username="purchase", password_hash="x", role="purchase")
     item = product()
     db_session.add_all([user, item])
     db_session.commit()
-    serial = generate_serials(db_session, item, 1, initial_status=SerialStatus.SOLD)[0]
-    batch = create_batch(db_session, user, BatchType.SALES_RETURN, "Customer", "", "GOOD")
+    serial = generate_serials(db_session, item, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.PURCHASE_RETURN, "Supplier", "", "SUPPLIER_RETURN")
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
     db_session.commit()

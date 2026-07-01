@@ -11,7 +11,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Purchase, sale, audit, sales return, purchase return, stock issue, barcode assignment, and barcode replacement workflows
 - Batch pricing, GST split, round off, and voucher preview before submit
 - FEFO picking and expiry control for sale, issue, and purchase-return batches
-- Tally XML generation for purchase/receive and sale batches
+- Tally XML generation for purchase/receive, sale, and sales-return batches
 - Tally Check screen for exact-name master readiness
 - Saved Tally company profiles with active-company settings
 - Editable admin role access controls for pages, actions, and data areas
@@ -241,17 +241,17 @@ Before enabling sync:
 3. Confirm inventory is maintained.
 4. Confirm accounts and inventory are integrated.
 5. In Setu, complete `Tally Check`.
-6. Download `Tally XML` from a purchase/sale batch and validate it against the real company.
+6. Download `Tally XML` from a purchase, sale, or sales-return batch and validate it against the real company.
 7. Enable sync in `Settings`.
 
 Supported live XML posting:
 
 - Purchase/receive
 - Sale
+- Sales return as Credit Note
 
 Implemented locally but intentionally not live-posted yet:
 
-- Sales return
 - Purchase return
 - Stock issue
 

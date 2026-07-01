@@ -57,8 +57,9 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
     cgst_total = Decimal("0")
     sgst_total = Decimal("0")
     igst_total = Decimal("0")
+    is_sales_side = batch.batch_type in {"SALE", "SALES_RETURN"}
     is_interstate_sale = (
-        batch.batch_type == "SALE"
+        is_sales_side
         and (getattr(batch, "gst_treatment", None) or "").upper() == GstTreatment.INTER_STATE.value
     )
 
@@ -67,7 +68,7 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         quantity = int(group["quantity"])
         rate = money(group.get("rate") or product.default_rate)
         gross_value = money(rate * quantity)
-        discount_rate = money(product.sales_discount_rate if batch.batch_type == "SALE" else 0)
+        discount_rate = money(product.sales_discount_rate if is_sales_side else 0)
         discount_amount = money(gross_value * discount_rate / Decimal("100"))
         taxable_value = money(gross_value - discount_amount)
         product_gst_rate = money(product.gst_rate)
@@ -83,7 +84,7 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
             igst_amount = money(taxable_value * igst_rate / Decimal("100"))
             cgst_rate = Decimal("0.00")
             sgst_rate = Decimal("0.00")
-        elif batch.batch_type == "SALE" and batch_cgst_rate is not None and batch_sgst_rate is not None:
+        elif is_sales_side and batch_cgst_rate is not None and batch_sgst_rate is not None:
             cgst_rate = money(batch_cgst_rate)
             sgst_rate = money(batch_sgst_rate)
             igst_rate = Decimal("0.00")
