@@ -58,10 +58,10 @@
             {% if batch.batch_type == 'SALE' and batch.items|length > 0 and role_can_view_batch(user, batch.batch_type) %}
             <a class="button small" href="/batches/{{ batch.id }}/preinvoice.pdf">Pre-invoice</a>
             {% endif %}
-            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.items|length > 0 and role_can(user, 'tally_xml') and role_can_view_batch(user, batch.batch_type) %}
+            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] and batch.items|length > 0 and role_can(user, 'tally_xml') and role_can_view_batch(user, batch.batch_type) %}
             <a class="button small" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
             {% endif %}
-            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE'] and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] and role_can(user, 'tally_sync_retry') and role_can_view_batch(user, batch.batch_type) %}
+            {% if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] and batch.status in ['PENDING_SYNC', 'FAILED', 'SUBMITTED'] and role_can(user, 'tally_sync_retry') and role_can_view_batch(user, batch.batch_type) %}
             <form method="post" action="/batches/{{ batch.id }}/retry">
               <button class="button small" type="submit">Sync</button>
             </form>

@@ -33,7 +33,7 @@
 
 ## Deliberate boundaries
 
-- Returns, issue, barcode assignment, and barcode replacement are active local workflows.
+- Purchase return, issue, barcode assignment, and barcode replacement are active local workflows; sales return also has Tally Credit Note XML.
 - Tally sync defaults to disabled to avoid posting against unknown ledger names.
 - Serial-level detail stays local. Tally receives aggregate voucher quantities by product.
 

@@ -263,6 +263,50 @@ def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
+def test_sales_return_credit_note_xml_reverses_sales_postings(db_session):
+    user = User(username="sales-return-xml", password_hash="x", role="sales")
+    product = Product(
+        product_code="RET005",
+        product_name="Returned Product",
+        hsn="0901",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Returned Product",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.SOLD)[0]
+    batch = create_batch(db_session, user, BatchType.SALES_RETURN, "Customer", "", "GOOD")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+
+    xml = build_voucher_xml(batch, VALID_SETTINGS)
+    root = ET.fromstring(xml)
+    voucher = root.find(".//VOUCHER")
+    inventory = root.find(".//ALLINVENTORYENTRIES.LIST")
+    allocation = inventory.find("ACCOUNTINGALLOCATIONS.LIST") if inventory is not None else None
+    ledger_amounts = {
+        entry.findtext("LEDGERNAME"): Decimal(entry.findtext("AMOUNT"))
+        for entry in root.iter("LEDGERENTRIES.LIST")
+    }
+
+    assert voucher is not None
+    assert voucher.attrib["VCHTYPE"] == "Credit Note"
+    assert "<VOUCHERTYPENAME>Credit Note</VOUCHERTYPENAME>" in xml
+    assert inventory is not None
+    assert inventory.findtext("ISDEEMEDPOSITIVE") == "Yes"
+    assert inventory.findtext("AMOUNT") == "-100.00"
+    assert allocation is not None
+    assert allocation.findtext("LEDGERNAME") == "Sales Ledger"
+    assert allocation.findtext("ISDEEMEDPOSITIVE") == "Yes"
+    assert allocation.findtext("AMOUNT") == "-100.00"
+    assert ledger_amounts["CGST Ledger"] == Decimal("-2.50")
+    assert ledger_amounts["SGST Ledger"] == Decimal("-2.50")
+    assert ledger_amounts["Customer"] == Decimal("105.00")
+    assert _accounting_sum(xml) == Decimal("0.00")
+
+
 def test_sale_voucher_requires_product_gst_rate_mapping(db_session):
     user = User(username="sales-missing-gst-map", password_hash="x", role="sales")
     product = Product(
@@ -403,7 +447,7 @@ def test_purchase_voucher_xml_is_balanced(db_session):
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
-def test_batch_list_exposes_purchase_and_sale_tally_xml_exports():
+def test_batch_list_exposes_purchase_sale_and_sales_return_tally_xml_exports():
     user = SimpleNamespace(
         username="admin",
         role="admin",
@@ -434,6 +478,17 @@ def test_batch_list_exposes_purchase_and_sale_tally_xml_exports():
             retry_count=0,
             created_at=created_at,
         ),
+        SimpleNamespace(
+            id=103,
+            batch_number="SRT-20260629-0001",
+            batch_type=BatchType.SALES_RETURN.value,
+            party_name="Customer",
+            reason_code="GOOD",
+            status=BatchStatus.PENDING_SYNC.value,
+            items=[object()],
+            retry_count=0,
+            created_at=created_at,
+        ),
     ]
 
     html = templates.env.get_template("batches.html").render(
@@ -446,8 +501,10 @@ def test_batch_list_exposes_purchase_and_sale_tally_xml_exports():
     assert 'href="/batches/new?batch_type=SALE">Sale</a>' in html
     assert 'href="/batches/101/tally.xml"' in html
     assert 'href="/batches/102/tally.xml"' in html
+    assert 'href="/batches/103/tally.xml"' in html
     assert 'action="/batches/101/retry"' in html
     assert 'action="/batches/102/retry"' in html
+    assert 'action="/batches/103/retry"' in html
 
 
 def test_purchase_and_sale_batches_sync_to_tally(monkeypatch, db_session):
@@ -508,3 +565,37 @@ def test_purchase_and_sale_batches_sync_to_tally(monkeypatch, db_session):
     assert sale_batch.status == BatchStatus.SYNCED.value
     assert any("<VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>" in xml for xml in posted_xml)
     assert any("<VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>" in xml for xml in posted_xml)
+
+
+def test_sales_return_batch_syncs_to_tally_as_credit_note(monkeypatch, db_session):
+    user = User(username="return-sync-admin", password_hash="x", role="admin")
+    product = Product(
+        product_code="RET-SYNC",
+        product_name="Sales Return Sync Item",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=200,
+        tally_stock_item_name="Sales Return Sync Item",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    update_settings(db_session, {**VALID_SETTINGS, "tally_enabled": "true"})
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.SOLD)[0]
+    batch = create_batch(db_session, user, BatchType.SALES_RETURN, "Customer", "", "GOOD")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    apply_batch_statuses(db_session, batch, user)
+    db_session.commit()
+    posted_xml: list[str] = []
+
+    def fake_post(xml, _settings):
+        posted_xml.append(xml)
+        return TallyResult(xml, "<RESPONSE><CREATED>1</CREATED></RESPONSE>", "CREATED=1; ALTERED=0")
+
+    monkeypatch.setattr(tally_service, "post_to_tally", fake_post)
+
+    sync_batch(db_session, batch)
+
+    assert batch.status == BatchStatus.SYNCED.value
+    assert len(posted_xml) == 1
+    assert "<VOUCHERTYPENAME>Credit Note</VOUCHERTYPENAME>" in posted_xml[0]

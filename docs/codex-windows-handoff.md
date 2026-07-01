@@ -18,7 +18,7 @@ Implemented:
 - Printable/PDF QR labels
 - Purchase/receive, sale, audit, sales return, purchase return, stock issue, and barcode replacement workflows
 - Batch pricing and voucher preview with GST split, round off, and final value
-- Tally XML generation for purchase/receive and sale batches
+- Tally XML generation for purchase/receive, sale, and sales-return batches
 - Tally Check master-readiness page
 - Editable admin role access controls for pages, actions, and data areas
 - Live sync gate: Tally sync cannot be enabled until Tally Check is complete
@@ -176,14 +176,14 @@ Live XML posting is supported for:
 
 - Purchase/receive
 - Sale
+- Sales return as Credit Note
 
 Implemented locally but not live-posted yet:
 
-- Sales return
 - Purchase return
 - Stock issue
 
-These workflows update local serial status but remain `PENDING_SYNC` with a clear “Tally XML is not configured” message until real Tally voucher formats are validated.
+Purchase return and stock issue update local serial status but remain `PENDING_SYNC` with a clear “Tally XML is not configured” message until real Tally voucher formats are validated.
 
 Do not enable Tally sync until:
 
@@ -193,7 +193,7 @@ Do not enable Tally sync until:
 - Product stock item names are exact
 - Unit names are exact
 - Tally Check has no missing/unchecked items
-- A purchase/sale XML has been validated against the real company
+- A purchase/sale/sales-return XML has been validated against the real company
 
 ## Pending Client Data
 
@@ -318,7 +318,7 @@ PY
 
 ## Do Not Accidentally Do This
 
-- Do not post return/issue XML to Tally until real voucher XML is validated.
+- Do not post purchase-return/issue XML to Tally until real voucher XML is validated.
 - Do not infer exact Tally master names from screenshots or memory.
 - Do not expose the app publicly unless the client explicitly asks.
 - Do not put price, GST, customer data, or product data inside the QR payload.

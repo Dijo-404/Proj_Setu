@@ -128,7 +128,7 @@ It is clearly marked as provisional and is not the final statutory GST invoice.
 - `Purchase return`: scan or FEFO-pick in-stock serials being sent back to a supplier.
 - `Issue`: scan or FEFO-pick in-stock serials issued for samples, office use, damage, marketing, production, or other reasons.
 
-Return and issue batches update local serial status. Their Tally XML is intentionally not posted until the client's exact voucher format is validated.
+Sales-return batches can be posted to Tally as Credit Note vouchers. Purchase-return and issue batches update local serial status, but their Tally XML is intentionally not posted until the client's exact voucher format is validated.
 
 ## Expiry Control
 
