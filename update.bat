@@ -98,11 +98,21 @@ if ($LASTEXITCODE -ne 0) {
     throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run update.bat again."
 }
 
-# Use an explicit fast-forward merge instead of `git pull`. This keeps the
+# Normally the update is a clean fast-forward, so try that first. This keeps the
 # updater independent of machine-wide pull.rebase settings and never rebases.
+# This deployment machine never commits to the project, so if history has
+# diverged (e.g. the remote branch was force-pushed / rewritten) a fast-forward
+# is impossible -- fall back to matching the remote exactly with a hard reset.
+# Data files (data/setu.db, .env, data/secret_key) are gitignored, so the reset
+# only rewinds tracked source files and never touches live data or config.
 & git merge --ff-only FETCH_HEAD
 if ($LASTEXITCODE -ne 0) {
-    throw "Git could not fast-forward the project. No rebase was attempted and your existing files were left intact. Resolve the Git message above and run update.bat again."
+    Write-Host "A clean fast-forward was not possible (the remote history was rewritten)." -ForegroundColor Yellow
+    Write-Host "Resetting local files to match origin/$branch exactly (your data and .env are untouched)..." -ForegroundColor Yellow
+    & git reset --hard FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) {
+        throw "Git could not sync the project to the latest version. Your data files were left intact; check the Git message above and run update.bat again."
+    }
 }
 
 if (-not (Test-Path $StopScript)) {
