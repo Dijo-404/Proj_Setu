@@ -1,14 +1,36 @@
 from io import BytesIO
 from types import SimpleNamespace
 
+from fastapi import HTTPException, UploadFile
 from openpyxl import Workbook
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from starlette.requests import Request
 
+from app.auth import SESSION_COOKIE
+from app.database import Base
 from app.models import Batch, BatchItem, BatchStatus, BatchType, ChangeAudit, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, User
+from app.routers.barcode_assignment import assignment_detail, assignment_page, bulk_assignment, generate_assignment
+from app.security import create_session_token
 from app.services import assignment as assignment_service
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import serials_xlsx
 from app.templates import templates
+
+
+def signed_request(user_id: int, path: str = "/barcode-assignment", method: str = "GET") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(user_id)}".encode())],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
 
 
 def make_product(code="SG080"):
@@ -124,6 +146,161 @@ def test_assignment_page_has_searchable_alias_product_selector():
     assert 'id="assignment-product-select"' in html
     assert "Friendly Alias" in html
     assert "Second Tally" in html
+
+
+def test_purchase_qr_generation_requires_product_permission():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        db.add_all(
+            [
+                User(id=1, username="admin", password_hash="x", role="admin", active=True),
+                User(id=2, username="purchase", password_hash="x", role="purchase", active=True),
+                Product(
+                    product_code="ALLOW",
+                    product_name="Allowed QR",
+                    hsn="0910",
+                    gst_rate=5,
+                    unit="Pcs",
+                    tally_stock_item_name="Allowed QR",
+                    purchase_qr_print_allowed=True,
+                ),
+                Product(
+                    product_code="BLOCK",
+                    product_name="Blocked QR",
+                    hsn="0910",
+                    gst_rate=5,
+                    unit="Pcs",
+                    tally_stock_item_name="Blocked QR",
+                    purchase_qr_print_allowed=False,
+                ),
+            ]
+        )
+        db.commit()
+        allowed_id = db.scalar(select(Product.id).where(Product.product_code == "ALLOW"))
+        blocked_id = db.scalar(select(Product.id).where(Product.product_code == "BLOCK"))
+
+    with Session() as db:
+        page = assignment_page(signed_request(2), db=db)
+        blocked = generate_assignment(
+            signed_request(2, path="/barcode-assignment/generate", method="POST"),
+            product_id=blocked_id,
+            quantity=1,
+            db=db,
+        )
+        allowed = generate_assignment(
+            signed_request(2, path="/barcode-assignment/generate", method="POST"),
+            product_id=allowed_id,
+            quantity=1,
+            prefix="",
+            product_batch_number="",
+            mfg_date="",
+            expiry_date="",
+            warehouse="",
+            warehouse_level="Company Warehouse",
+            notes="",
+            db=db,
+        )
+        admin_blocked = generate_assignment(
+            signed_request(1, path="/barcode-assignment/generate", method="POST"),
+            product_id=blocked_id,
+            quantity=1,
+            prefix="",
+            product_batch_number="",
+            mfg_date="",
+            expiry_date="",
+            warehouse="",
+            warehouse_level="Company Warehouse",
+            notes="",
+            db=db,
+        )
+        admin_blocked_batch_id = int(admin_blocked.headers["location"].rsplit("/", 1)[-1])
+        try:
+            assignment_detail(
+                signed_request(2, path=f"/barcode-assignment/{admin_blocked_batch_id}"),
+                admin_blocked_batch_id,
+                db=db,
+            )
+        except HTTPException as exc:
+            purchase_blocked_detail_status = exc.status_code
+        else:
+            purchase_blocked_detail_status = None
+        serial_count = db.scalar(select(func.count(Serial.id)))
+    engine.dispose()
+
+    assert page.status_code == 200
+    page_text = page.body.decode()
+    assert "ALLOW - Allowed QR" in page_text
+    assert "BLOCK - Blocked QR" not in page_text
+    assert blocked.status_code == 400
+    assert "Purchase QR printing is not enabled for this product" in blocked.body.decode()
+    assert allowed.status_code == 303
+    assert admin_blocked.status_code == 303
+    assert purchase_blocked_detail_status == 403
+    assert serial_count == 2
+
+
+def test_purchase_bulk_assignment_rejects_products_without_qr_permission():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        db.add(User(id=1, username="purchase", password_hash="x", role="purchase", active=True))
+        db.add_all(
+            [
+                Product(
+                    product_code="BULKOK",
+                    product_name="Bulk Allowed",
+                    hsn="0910",
+                    gst_rate=5,
+                    unit="Pcs",
+                    tally_stock_item_name="Bulk Allowed",
+                    purchase_qr_print_allowed=True,
+                ),
+                Product(
+                    product_code="BULKNO",
+                    product_name="Bulk Blocked",
+                    hsn="0910",
+                    gst_rate=5,
+                    unit="Pcs",
+                    tally_stock_item_name="Bulk Blocked",
+                    purchase_qr_print_allowed=False,
+                ),
+            ]
+        )
+        db.commit()
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["Product Code", "Quantity"])
+    sheet.append(["BULKOK", 1])
+    sheet.append(["BULKNO", 1])
+    stream = BytesIO()
+    workbook.save(stream)
+
+    with Session() as db:
+        response = bulk_assignment(
+            signed_request(1, path="/barcode-assignment/bulk", method="POST"),
+            upload=UploadFile(filename="labels.xlsx", file=BytesIO(stream.getvalue())),
+            db=db,
+        )
+        serial_count = db.scalar(select(func.count(Serial.id)))
+    engine.dispose()
+
+    assert response.status_code == 400
+    assert "Purchase QR printing is not enabled for BULKNO" in response.body.decode()
+    assert serial_count == 0
 
 
 def test_tally_invoice_export_import_generates_assignment_labels(db_session):

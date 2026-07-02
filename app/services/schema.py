@@ -107,6 +107,8 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
                 connection.execute(
                     text("ALTER TABLE products ADD COLUMN shelf_verification_interval INTEGER DEFAULT 1")
                 )
+            if "purchase_qr_print_allowed" not in product_columns:
+                connection.execute(text("ALTER TABLE products ADD COLUMN purchase_qr_print_allowed BOOLEAN DEFAULT 0"))
             connection.execute(
                 text(
                     "UPDATE products SET shelf_verification_interval = 1 "

@@ -13,12 +13,15 @@
 <section class="split">
   <div class="panel">
     <div class="section-title"><h2>Assign to product</h2></div>
+    {% if not products %}
+    <div class="alert warn">No products are enabled for QR assignment.</div>
+    {% endif %}
     <form method="post" action="/barcode-assignment/generate" class="stack">
       <label>Search product
         <input id="assignment-product-search" type="search" autocomplete="off" placeholder="Code, product, nickname, or Tally name">
       </label>
       <label>Existing product
-        <select name="product_id" id="assignment-product-select" required>
+        <select name="product_id" id="assignment-product-select" required {{ 'disabled' if not products else '' }}>
           {% for product in products %}
           <option
             value="{{ product.id }}"
@@ -45,7 +48,7 @@
         <label>Expiry date<input name="expiry_date" type="date"></label>
       </div>
       <label>Notes<textarea name="notes" rows="3"></textarea></label>
-      <button class="button primary full" type="submit">Generate QR labels</button>
+      <button class="button primary full" type="submit" {{ 'disabled' if not products else '' }}>Generate QR labels</button>
     </form>
   </div>
 

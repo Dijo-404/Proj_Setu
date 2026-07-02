@@ -2,6 +2,7 @@
 {% block title %}Products - Setu{% endblock %}
 {% block content %}
 {% set can_edit_products = role_can(user, 'product_create') %}
+{% set can_manage_purchase_qr_permission = has_role(user, 'admin', 'super_admin') %}
 
 <section class="page-head">
   <div>
@@ -36,6 +37,7 @@
           <th>HSN</th>
           <th>GST</th>
           <th>Shelf verification</th>
+          <th>Purchase QR</th>
           <th>Report</th>
           <th class="col-actions">Actions</th>
         </tr>
@@ -66,6 +68,12 @@
             <span class="status active" data-product-row-shelf="{{ product.id }}">Every {{ product.shelf_verification_interval or 1 }} scans</span>
           </td>
           <td>
+            <span
+              class="status {{ 'active' if product.purchase_qr_print_allowed else 'failed' }}"
+              data-product-row-purchase-qr="{{ product.id }}"
+            >{{ 'Allowed' if product.purchase_qr_print_allowed else 'Blocked' }}</span>
+          </td>
+          <td>
             <button
               class="button small"
               type="button"
@@ -83,7 +91,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="empty">No products found</td></tr>
+        <tr><td colspan="9" class="empty">No products found</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -115,6 +123,12 @@
         <input name="shelf_verification_interval" type="number" min="1" max="1000" step="1" value="1" required>
         <small>Always enabled. Minimum and default value: 1.</small>
       </label>
+      {% if can_manage_purchase_qr_permission %}
+      <label class="checkline product-checkline">
+        <input type="checkbox" name="purchase_qr_print_allowed" value="true">
+        <span>Allow purchase QR printing<small>Purchase users can generate QR labels for this product.</small></span>
+      </label>
+      {% endif %}
       <label>Tally stock item<input name="tally_stock_item_name"></label>
       <label>Alternate Tally stock item<input name="alternate_tally_stock_item_name"></label>
       <div class="product-modal-actions">
@@ -212,6 +226,10 @@
         <span>Shelf check</span>
         <strong data-product-summary-shelf="{{ product.id }}">Every {{ product.shelf_verification_interval or 1 }} scans</strong>
       </div>
+      <div>
+        <span>Purchase QR</span>
+        <strong data-product-summary-purchase-qr="{{ product.id }}">{{ 'Allowed' if product.purchase_qr_print_allowed else 'Blocked' }}</strong>
+      </div>
     </div>
 
     {% if can_edit_products %}
@@ -234,6 +252,12 @@
           <input name="shelf_verification_interval" type="number" min="1" max="1000" step="1" value="{{ product.shelf_verification_interval or 1 }}" required>
           <small>Always enabled. Minimum value: 1.</small>
         </label>
+        {% if can_manage_purchase_qr_permission %}
+        <label class="checkline product-checkline">
+          <input type="checkbox" name="purchase_qr_print_allowed" value="true" {{ 'checked' if product.purchase_qr_print_allowed else '' }}>
+          <span>Allow purchase QR printing<small>Purchase users can generate QR labels for this product.</small></span>
+        </label>
+        {% endif %}
         <div class="product-modal-actions">
           <span class="autosave-status" data-product-save-status aria-live="polite"></span>
           <button class="button primary" type="submit" data-product-save-button>Save settings</button>
@@ -341,13 +365,20 @@
           const summaryNickname = document.querySelector(`[data-product-summary-nickname="${productId}"]`);
           const summaryTally = document.querySelector(`[data-product-summary-tally="${productId}"]`);
           const summaryAltTally = document.querySelector(`[data-product-summary-alt-tally="${productId}"]`);
+          const summaryPurchaseQr = document.querySelector(`[data-product-summary-purchase-qr="${productId}"]`);
           const rowShelf = document.querySelector(`[data-product-row-shelf="${productId}"]`);
+          const rowPurchaseQr = document.querySelector(`[data-product-row-purchase-qr="${productId}"]`);
           const rowRate = document.querySelector(`[data-product-row-rate="${productId}"]`);
           if (summaryShelf) summaryShelf.textContent = intervalText;
           if (summaryNickname) summaryNickname.textContent = saved.nickname || "-";
           if (summaryTally) summaryTally.textContent = saved.tally_stock_item_name || "-";
           if (summaryAltTally) summaryAltTally.textContent = saved.alternate_tally_stock_item_name || "-";
+          if (summaryPurchaseQr) summaryPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
           if (rowShelf) rowShelf.textContent = intervalText;
+          if (rowPurchaseQr) {
+            rowPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
+            rowPurchaseQr.className = `status ${saved.purchase_qr_print_allowed ? "active" : "failed"}`;
+          }
           if (rowRate) rowRate.textContent = Number(saved.default_rate).toFixed(2);
 
           status.textContent = "Saved";

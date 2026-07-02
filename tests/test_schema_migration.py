@@ -74,7 +74,7 @@ def test_runtime_schema_adds_product_alias_columns(tmp_path):
     ensure_runtime_schema(engine)
 
     columns = {column["name"] for column in inspect(engine).get_columns("products")}
-    assert {"nickname", "alternate_tally_stock_item_name"} <= columns
+    assert {"nickname", "alternate_tally_stock_item_name", "purchase_qr_print_allowed"} <= columns
 
 
 def test_inventory_table_rebuild_preserves_rows_and_adds_all_foreign_keys(tmp_path):

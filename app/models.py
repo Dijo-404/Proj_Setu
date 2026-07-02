@@ -182,6 +182,7 @@ class Product(Base):
     default_rate: Mapped[float] = mapped_column(Float, default=0)
     sales_discount_rate: Mapped[float] = mapped_column(Float, default=0)
     shelf_verification_interval: Mapped[int] = mapped_column(Integer, default=1)
+    purchase_qr_print_allowed: Mapped[bool] = mapped_column(Boolean, default=False)
     tally_stock_item_name: Mapped[str] = mapped_column(String(180))
     alternate_tally_stock_item_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
