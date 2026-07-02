@@ -92,7 +92,13 @@ class _RawAssignmentLine:
     unit: str | None = None
 
 
-def parse_bulk_assignment_xlsx(db: Session, data: bytes, user: User | None = None) -> list[AssignmentLine]:
+def parse_bulk_assignment_xlsx(
+    db: Session,
+    data: bytes,
+    user: User | None = None,
+    *,
+    allow_product_create: bool = True,
+) -> list[AssignmentLine]:
     try:
         workbook = load_workbook(BytesIO(data), data_only=True)
     except Exception as exc:
@@ -113,7 +119,7 @@ def parse_bulk_assignment_xlsx(db: Session, data: bytes, user: User | None = Non
 
     lines: list[AssignmentLine] = []
     for raw_line in raw_lines:
-        product = _resolve_import_product(db, raw_line, user)
+        product = _resolve_import_product(db, raw_line, user, allow_product_create)
         lines.append(
             AssignmentLine(
                 product=product,
@@ -312,7 +318,12 @@ def _find_assignment_header(rows: list[tuple[object, ...]]) -> tuple[int, _Assig
     return None
 
 
-def _resolve_import_product(db: Session, line: _RawAssignmentLine, user: User | None) -> Product:
+def _resolve_import_product(
+    db: Session,
+    line: _RawAssignmentLine,
+    user: User | None,
+    allow_product_create: bool,
+) -> Product:
     if line.product_code:
         product = db.scalar(select(Product).where(Product.product_code == line.product_code, Product.active == True))
         if not product:
@@ -323,6 +334,8 @@ def _resolve_import_product(db: Session, line: _RawAssignmentLine, user: User | 
     product = _find_active_product_by_name(db, product_name)
     if product:
         return product
+    if not allow_product_create:
+        raise InventoryError(f"Row {line.row_number}: product {product_name} was not found")
 
     product = Product(
         product_code=_next_import_product_code(db, product_name),
@@ -474,6 +487,7 @@ def _product_snapshot(product: Product) -> dict[str, object]:
         "default_rate": product.default_rate,
         "sales_discount_rate": product.sales_discount_rate,
         "shelf_verification_interval": product.shelf_verification_interval,
+        "purchase_qr_print_allowed": product.purchase_qr_print_allowed,
         "tally_stock_item_name": product.tally_stock_item_name,
         "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
         "active": product.active,

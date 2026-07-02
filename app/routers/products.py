@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
@@ -7,9 +7,11 @@ from app.auth import require_permission, require_user
 from app.database import get_db
 from app.models import InventoryTransaction, Product, Role, Serial, SerialStatus, User, WarehouseLevel
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock
+from app.services.access_control import configured_role_has_access
 from app.services.change_audit import record_change
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
+from app.services.product_permissions import require_product_qr_generation, user_can_manage_purchase_qr_permission
 from app.services.stock_movement import (
     product_inventory_metrics,
     product_sales_report_pdf,
@@ -38,10 +40,21 @@ def product_snapshot(product: Product) -> dict[str, object]:
         "default_rate": product.default_rate,
         "sales_discount_rate": product.sales_discount_rate,
         "shelf_verification_interval": product.shelf_verification_interval,
+        "purchase_qr_print_allowed": product.purchase_qr_print_allowed,
         "tally_stock_item_name": product.tally_stock_item_name,
         "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
         "active": product.active,
     }
+
+
+def user_can_open_product_generate(user: User) -> bool:
+    config = getattr(user, "_access_config", {})
+    return configured_role_has_access(config, user.role, "product_create", {"edit"}) or configured_role_has_access(
+        config,
+        user.role,
+        "barcode_assignment",
+        {"edit"},
+    )
 
 
 def product_page_context(db: Session, user: User, rows: list[Product], q: str, error: str | None = None) -> dict:
@@ -132,6 +145,7 @@ def create_product(
     default_rate: float = Form(0),
     sales_discount_rate: float = Form(0),
     shelf_verification_interval: int = Form(1),
+    purchase_qr_print_allowed: bool = Form(False),
     tally_stock_item_name: str = Form(""),
     alternate_tally_stock_item_name: str = Form(""),
     db: Session = Depends(get_db),
@@ -171,6 +185,7 @@ def create_product(
         default_rate=default_rate,
         sales_discount_rate=sales_discount_rate,
         shelf_verification_interval=shelf_verification_interval,
+        purchase_qr_print_allowed=purchase_qr_print_allowed if user_can_manage_purchase_qr_permission(user) else False,
         tally_stock_item_name=tally_stock_item_name.strip() or product_name.strip(),
         alternate_tally_stock_item_name=alternate_tally_stock_item_name.strip() or None,
     )
@@ -247,6 +262,7 @@ def update_product_pricing(
     default_rate: float = Form(0),
     sales_discount_rate: float = Form(0),
     shelf_verification_interval: int | None = Form(None),
+    purchase_qr_print_allowed: bool = Form(False),
     nickname: str | None = Form(None),
     category: str | None = Form(None),
     brand: str | None = Form(None),
@@ -284,6 +300,8 @@ def update_product_pricing(
         product.shelf_verification_interval = shelf_verification_interval
     elif not product.shelf_verification_interval or product.shelf_verification_interval < 1:
         product.shelf_verification_interval = 1
+    if user_can_manage_purchase_qr_permission(user):
+        product.purchase_qr_print_allowed = purchase_qr_print_allowed
     if nickname is not None:
         product.nickname = nickname.strip() or None
     if category is not None:
@@ -317,6 +335,7 @@ def update_product_pricing(
                     "default_rate": float(product.default_rate or 0),
                     "sales_discount_rate": float(product.sales_discount_rate or 0),
                     "shelf_verification_interval": int(product.shelf_verification_interval),
+                    "purchase_qr_print_allowed": bool(product.purchase_qr_print_allowed),
                     "tally_stock_item_name": product.tally_stock_item_name,
                     "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name or "",
                 },
@@ -339,10 +358,13 @@ def generate_product_serials(
     warehouse_level: str = Form(WarehouseLevel.COMPANY_WAREHOUSE.value),
     db: Session = Depends(get_db),
 ):
-    user = require_permission(request, db, "product_create")
+    user = require_user(request, db)
+    if not user_can_open_product_generate(user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")
     product = db.get(Product, product_id)
     if not product:
         return RedirectResponse("/products", status_code=303)
+    require_product_qr_generation(user, product)
     try:
         parsed_status = SerialStatus(initial_status)
         parsed_mfg_date = parse_optional_date(mfg_date)

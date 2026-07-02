@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import desc, select
 from sqlalchemy.orm import Session, selectinload
@@ -10,6 +10,10 @@ from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_
 from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, label_layout, serials_xlsx
 from app.services.expiry import parse_optional_date
 from app.services.inventory import InventoryError
+from app.services.product_permissions import (
+    user_can_generate_product_qr,
+    user_can_manage_purchase_qr_permission,
+)
 from app.templates import templates
 
 router = APIRouter(prefix="/barcode-assignment")
@@ -30,13 +34,8 @@ def _assignment_batch(db: Session, batch_id: int) -> Batch | None:
 @router.get("")
 def assignment_page(request: Request, db: Session = Depends(get_db)):
     user = require_permission(request, db, "barcode_assignment")
-    products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
-    batches = db.scalars(
-        select(Batch)
-        .where(Batch.batch_type == BatchType.QR_ASSIGNMENT.value)
-        .order_by(desc(Batch.created_at))
-        .limit(20)
-    ).all()
+    products = _assignment_products(db, user)
+    batches = _recent_assignment_batches(db, user)
     return templates.TemplateResponse(
         request,
         "barcode_assignment.html",
@@ -69,6 +68,8 @@ def generate_assignment(
     product = db.get(Product, product_id)
     if not product:
         return _assignment_error(request, db, user, "Product not found")
+    if not user_can_generate_product_qr(user, product):
+        return _assignment_error(request, db, user, "Purchase QR printing is not enabled for this product")
     try:
         parsed_mfg_date = parse_optional_date(mfg_date)
         parsed_expiry_date = parse_optional_date(expiry_date)
@@ -109,7 +110,17 @@ def bulk_assignment(
         data = upload.file.read(MAX_BULK_ASSIGNMENT_UPLOAD_BYTES + 1)
         if len(data) > MAX_BULK_ASSIGNMENT_UPLOAD_BYTES:
             raise InventoryError("Upload an Excel file up to 5 MB")
-        lines = parse_bulk_assignment_xlsx(db, data, user=user)
+        lines = parse_bulk_assignment_xlsx(
+            db,
+            data,
+            user=user,
+            allow_product_create=user_can_manage_purchase_qr_permission(user),
+        )
+        blocked_products = [line.product.product_code for line in lines if not user_can_generate_product_qr(user, line.product)]
+        if blocked_products:
+            joined = ", ".join(sorted(set(blocked_products))[:5])
+            suffix = "..." if len(set(blocked_products)) > 5 else ""
+            raise InventoryError(f"Purchase QR printing is not enabled for {joined}{suffix}")
         batch = assign_barcodes_to_existing_stock(db, user, lines, notes=notes, source="BULK_EXCEL")
     except InventoryError as exc:
         db.rollback()
@@ -123,6 +134,7 @@ def assignment_detail(request: Request, batch_id: int, db: Session = Depends(get
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
+    _require_assignment_batch_access(user, batch)
     return templates.TemplateResponse(
         request,
         "barcode_assignment_detail.html",
@@ -144,10 +156,11 @@ def assignment_labels_pdf(
     columns_per_page: int = DEFAULT_LABEL_COLUMNS,
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "barcode_assignment")
+    user = require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
+    _require_assignment_batch_access(user, batch)
     rows_per_page, columns_per_page = label_layout(rows_per_page, columns_per_page)
     serials = [item.serial for item in batch.items]
     return Response(
@@ -159,10 +172,11 @@ def assignment_labels_pdf(
 
 @router.get("/{batch_id}/serials.xlsx")
 def assignment_serials_xlsx(request: Request, batch_id: int, db: Session = Depends(get_db)):
-    require_permission(request, db, "barcode_assignment")
+    user = require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
         return RedirectResponse("/barcode-assignment", status_code=303)
+    _require_assignment_batch_access(user, batch)
     serials = [item.serial for item in batch.items]
     return Response(
         serials_xlsx(serials),
@@ -172,13 +186,8 @@ def assignment_serials_xlsx(request: Request, batch_id: int, db: Session = Depen
 
 
 def _assignment_error(request: Request, db: Session, user, error: str):
-    products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
-    batches = db.scalars(
-        select(Batch)
-        .where(Batch.batch_type == BatchType.QR_ASSIGNMENT.value)
-        .order_by(desc(Batch.created_at))
-        .limit(20)
-    ).all()
+    products = _assignment_products(db, user)
+    batches = _recent_assignment_batches(db, user)
     return templates.TemplateResponse(
         request,
         "barcode_assignment.html",
@@ -192,3 +201,28 @@ def _assignment_error(request: Request, db: Session, user, error: str):
         },
         status_code=400,
     )
+
+
+def _recent_assignment_batches(db: Session, user) -> list[Batch]:
+    batches = db.scalars(
+        select(Batch)
+        .where(Batch.batch_type == BatchType.QR_ASSIGNMENT.value)
+        .order_by(desc(Batch.created_at))
+        .limit(50)
+        .options(selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product))
+    ).all()
+    return [batch for batch in batches if _assignment_batch_allowed(user, batch)][:20]
+
+
+def _assignment_products(db: Session, user) -> list[Product]:
+    products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
+    return [product for product in products if user_can_generate_product_qr(user, product)]
+
+
+def _assignment_batch_allowed(user, batch: Batch) -> bool:
+    return all(user_can_generate_product_qr(user, item.serial.product) for item in batch.items if item.serial)
+
+
+def _require_assignment_batch_access(user, batch: Batch) -> None:
+    if not _assignment_batch_allowed(user, batch):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not allowed")

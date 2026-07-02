@@ -53,6 +53,7 @@ def test_product_master_saves_and_updates_sales_discount_rate():
             default_rate=500,
             sales_discount_rate=7.5,
             shelf_verification_interval=1,
+            purchase_qr_print_allowed=False,
             tally_stock_item_name="Discount Item",
             alternate_tally_stock_item_name="Tally Discount Alias",
             db=db,
@@ -64,6 +65,7 @@ def test_product_master_saves_and_updates_sales_discount_rate():
             product_id,
             default_rate=525,
             sales_discount_rate=12,
+            purchase_qr_print_allowed=True,
             nickname="Updated Alias",
             category=None,
             brand=None,
@@ -84,6 +86,7 @@ def test_product_master_saves_and_updates_sales_discount_rate():
         saved = db.scalar(select(Product).where(Product.product_code == "D001"))
         assert saved.default_rate == 525
         assert saved.sales_discount_rate == 12
+        assert saved.purchase_qr_print_allowed is True
         assert saved.nickname == "Updated Alias"
         assert saved.tally_stock_item_name == "Discount Item Primary"
         assert saved.alternate_tally_stock_item_name == "Discount Item Tally Two"
@@ -103,6 +106,8 @@ def test_product_master_saves_and_updates_sales_discount_rate():
     assert "Sales discount %" in page_text
     assert "Nickname" in page_text
     assert "Alternate Tally stock item" in page_text
+    assert "Allow purchase QR printing" in page_text
+    assert "Purchase QR" in report_text
     assert "Available stock" in report_text
     assert "Missing stock" in report_text
     assert "Restock" in report_text

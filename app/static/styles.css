@@ -1906,6 +1906,22 @@ dialog.product-report-modal {
   align-items: start;
 }
 
+.product-checkline {
+  align-self: end;
+  min-height: 44px;
+}
+
+.product-checkline span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.product-checkline small {
+  color: var(--ink-48);
+  font-weight: 500;
+}
+
 .product-modal-actions {
   grid-column: 1 / -1;
   display: flex;
