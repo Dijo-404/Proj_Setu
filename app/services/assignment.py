@@ -30,6 +30,7 @@ PRODUCT_NAME_HEADERS = {
     "goods",
 }
 QUANTITY_HEADERS = {"quantity", "qty"}
+RATE_HEADERS = {"rate", "unit rate", "price"}
 BATCH_HEADERS = {"batch", "batch no", "batch number", "product batch"}
 MFG_DATE_HEADERS = {"mfg date", "manufacturing date", "manufacture date"}
 EXPIRY_DATE_HEADERS = {"expiry date", "expiry", "exp date"}
@@ -47,6 +48,7 @@ UNIT_HEADERS = {"unit", "per", "uom"}
 class AssignmentLine:
     product: Product
     quantity: int
+    rate: Decimal | None = None
     prefix: str | None = None
     product_batch_number: str | None = None
     mfg_date: date | None = None
@@ -60,6 +62,7 @@ class _AssignmentImportColumns:
     product_code_col: int | None
     product_name_col: int | None
     qty_col: int
+    rate_col: int | None = None
     batch_col: int | None = None
     mfg_col: int | None = None
     expiry_col: int | None = None
@@ -79,6 +82,7 @@ class _RawAssignmentLine:
     product_code: str | None
     product_name: str | None
     quantity: int
+    rate: Decimal | None = None
     product_batch_number: str | None = None
     mfg_date: date | None = None
     expiry_date: date | None = None
@@ -124,6 +128,7 @@ def parse_bulk_assignment_xlsx(
             AssignmentLine(
                 product=product,
                 quantity=raw_line.quantity,
+                rate=raw_line.rate,
                 product_batch_number=raw_line.product_batch_number,
                 mfg_date=raw_line.mfg_date,
                 expiry_date=raw_line.expiry_date,
@@ -272,6 +277,7 @@ def _parse_assignment_rows(rows: list[tuple[object, ...]]) -> list[_RawAssignmen
                 product_code=normalize_serial(product_code) if product_code else None,
                 product_name=product_name or None,
                 quantity=quantity,
+                rate=_parse_decimal(_cell_value(row, columns.rate_col)),
                 product_batch_number=_cell_text(row, columns.batch_col) or None,
                 mfg_date=mfg_date,
                 expiry_date=expiry_date,
@@ -302,6 +308,7 @@ def _find_assignment_header(rows: list[tuple[object, ...]]) -> tuple[int, _Assig
                 product_code_col=product_code_col,
                 product_name_col=product_name_col,
                 qty_col=qty_col,
+                rate_col=_find_column(header, RATE_HEADERS),
                 batch_col=_find_column(header, BATCH_HEADERS),
                 mfg_col=_find_column(header, MFG_DATE_HEADERS),
                 expiry_col=_find_column(header, EXPIRY_DATE_HEADERS),

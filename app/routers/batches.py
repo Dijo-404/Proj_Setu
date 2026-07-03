@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
@@ -14,12 +14,14 @@ from app.models import (
     GstRegistrationType,
     GstTreatment,
     Product,
+    Role,
     Serial,
     SyncAttempt,
+    has_any_role,
 )
 from app.services.audit import reconcile_audit_batch, summarize_audit_findings
 from app.services.exports import audit_report_pdf
-from app.services.expiry import add_fefo_serials_to_batch
+from app.services.expiry import add_fefo_serials_to_batch, fefo_available_statuses
 from app.services.inventory import (
     DEFAULT_UNREGISTERED_SALE_STATE,
     InventoryError,
@@ -37,6 +39,13 @@ from app.services.preinvoice import sale_preinvoice_pdf
 from app.services.access_control import role_has_access
 from app.services.settings import get_all_settings
 from app.services.relocation import find_location_by_code
+from app.services.sale_returns import (
+    ensure_sale_scan_allowed,
+    sale_return_state,
+    scan_sale_return_product,
+    validate_sale_returns_complete,
+    verify_sale_return_on_shelf,
+)
 from app.services.shelf_verification import (
     ShelfVerificationError,
     ensure_product_scan_allowed,
@@ -44,6 +53,13 @@ from app.services.shelf_verification import (
     verify_pending_items_on_shelf,
 )
 from app.services.tally import TALLY_XML_SUPPORTED_BATCH_TYPES, TallySyncError, build_voucher_xml, sync_batch
+from app.services.tally_excel import (
+    MAX_TALLY_EXCEL_UPLOAD_BYTES,
+    TALLY_EXCEL_EXPORT_BATCH_TYPES,
+    TALLY_EXCEL_IMPORT_BATCH_TYPES,
+    batch_tally_xlsx,
+    import_tally_excel_to_batch,
+)
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 from app.templates import templates
 
@@ -87,10 +103,6 @@ INDIAN_STATE_OPTIONS = (
     "Uttar Pradesh",
     "Uttarakhand",
     "West Bengal",
-)
-GST_TREATMENT_OPTIONS = (
-    (GstTreatment.INTRA_STATE.value, "CGST + SGST"),
-    (GstTreatment.INTER_STATE.value, "IGST"),
 )
 GST_REGISTRATION_OPTIONS = tuple(
     (
@@ -156,20 +168,140 @@ def data_key_for_batch(batch_type: BatchType) -> str:
 
 
 def can_use_manual_scan(db: Session, user) -> bool:
-    return role_has_access(db, user.role, "manual_serial_entry", {"edit", "yes"})
+    return has_any_role(user.role, (Role.ADMIN, Role.SUPER_ADMIN)) and role_has_access(
+        db,
+        user.role,
+        "manual_serial_entry",
+        {"edit", "yes"},
+    )
 
 
 def scan_source_allowed(db: Session, user, scan_source: str) -> bool:
     return can_use_manual_scan(db, user) or scan_source == "camera"
 
 
+def sale_gst_treatment_for_state(party_state: str | None) -> str:
+    state = (party_state or "").strip().casefold()
+    local_state = DEFAULT_UNREGISTERED_SALE_STATE.casefold()
+    if state and state != local_state:
+        return GstTreatment.INTER_STATE.value
+    return GstTreatment.INTRA_STATE.value
+
+
+def fefo_product_options_for_type(db: Session, batch_type: str) -> list[dict[str, object]]:
+    statuses = fefo_available_statuses(batch_type)
+    if not statuses:
+        return []
+    available_count = func.count(Serial.id)
+    selected_in_draft_batch = (
+        select(BatchItem.serial_id)
+        .join(Batch, BatchItem.batch_id == Batch.id)
+        .where(Batch.status == BatchStatus.DRAFT.value)
+    )
+    rows = db.execute(
+        select(Product, available_count.label("available_quantity"))
+        .join(Serial, Serial.product_id == Product.id)
+        .where(
+            Product.active == True,
+            Serial.active == True,
+            Serial.status.in_(statuses),
+            ~Serial.id.in_(selected_in_draft_batch),
+        )
+        .group_by(Product.id)
+        .having(available_count > 0)
+        .order_by(Product.product_code)
+    ).all()
+    return [
+        {
+            "id": product.id,
+            "product_code": product.product_code,
+            "product_name": product.product_name,
+            "nickname": product.nickname,
+            "tally_stock_item_name": product.tally_stock_item_name,
+            "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
+            "available_quantity": int(available_quantity),
+        }
+        for product, available_quantity in rows
+    ]
+
+
+def sale_product_options_for_type(db: Session, batch_type: str) -> list[dict[str, object]]:
+    statuses = fefo_available_statuses(batch_type)
+    if not statuses:
+        return []
+    selected_in_draft_batch = (
+        select(BatchItem.serial_id)
+        .join(Batch, BatchItem.batch_id == Batch.id)
+        .where(Batch.status == BatchStatus.DRAFT.value)
+    )
+    available = (
+        select(Serial.product_id, func.count(Serial.id).label("available_quantity"))
+        .where(
+            Serial.active == True,
+            Serial.status.in_(statuses),
+            ~Serial.id.in_(selected_in_draft_batch),
+        )
+        .group_by(Serial.product_id)
+        .subquery()
+    )
+    rows = db.execute(
+        select(Product, func.coalesce(available.c.available_quantity, 0).label("available_quantity"))
+        .outerjoin(available, Product.id == available.c.product_id)
+        .where(Product.active == True)
+        .order_by(Product.product_code)
+    ).all()
+    return [
+        {
+            "id": product.id,
+            "product_code": product.product_code,
+            "product_name": product.product_name,
+            "nickname": product.nickname,
+            "tally_stock_item_name": product.tally_stock_item_name,
+            "alternate_tally_stock_item_name": product.alternate_tally_stock_item_name,
+            "available_quantity": int(available_quantity or 0),
+        }
+        for product, available_quantity in rows
+    ]
+
+
+def fefo_product_options(db: Session, batch: Batch) -> list[dict[str, object]]:
+    return fefo_product_options_for_type(db, batch.batch_type)
+
+
+def party_ledger_options(db: Session, batch_type: BatchType) -> list[str]:
+    related_types = {
+        BatchType.SALE: (BatchType.SALE.value, BatchType.SALES_RETURN.value),
+        BatchType.SALES_RETURN: (BatchType.SALE.value, BatchType.SALES_RETURN.value),
+        BatchType.PURCHASE: (BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.PURCHASE_RETURN.value),
+        BatchType.RECEIVE: (BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.PURCHASE_RETURN.value),
+        BatchType.PURCHASE_RETURN: (BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.PURCHASE_RETURN.value),
+    }.get(batch_type)
+    if not related_types:
+        return []
+    rows = db.scalars(
+        select(Batch.party_name)
+        .where(
+            Batch.batch_type.in_(related_types),
+            Batch.party_name.is_not(None),
+            Batch.party_name != "",
+        )
+        .distinct()
+        .order_by(Batch.party_name)
+    ).all()
+    return [name for name in rows if name]
+
+
 def batch_permission_context(db: Session, user, batch: Batch) -> dict[str, bool]:
     action_key = action_key_for_batch(BatchType(batch.batch_type))
     can_edit = role_has_access(db, user.role, action_key)
+    can_fefo = can_edit and role_has_access(db, user.role, "fefo_pick", {"edit", "yes"})
+    can_tally_export = role_has_access(db, user.role, "tally_xml", {"edit", "yes"})
     return {
         "can_edit_batch": can_edit,
-        "can_fefo": can_edit and role_has_access(db, user.role, "fefo_pick", {"edit", "yes"}),
-        "can_tally_xml": role_has_access(db, user.role, "tally_xml", {"edit", "yes"}),
+        "can_fefo": can_fefo,
+        "can_tally_xml": can_tally_export,
+        "can_tally_excel_export": can_tally_export,
+        "can_tally_excel_import": can_fefo,
         "can_retry_sync": role_has_access(db, user.role, "tally_sync_retry", {"edit", "yes"}),
         "can_view_attempts": role_has_access(db, user.role, "tally_attempts"),
         "can_view_batch_list": role_has_access(db, user.role, "batch_list"),
@@ -193,10 +325,10 @@ def batch_form_context(
     party_gst_registration_type: str | None = None,
     party_gst_name: str = "",
     party_gstin: str = "",
-    gst_treatment: str | None = None,
-    gst_cgst_rate: str = "",
-    gst_sgst_rate: str = "",
-    gst_igst_rate: str = "",
+    party_name_options: list[str] | None = None,
+    sale_product_options: list[dict[str, object]] | None = None,
+    sale_product_id: str = "",
+    sale_quantity: str = "1",
     notes: str = "",
     error: str | None = None,
 ) -> dict[str, object]:
@@ -215,29 +347,15 @@ def batch_form_context(
         ),
         "party_gst_name": party_gst_name,
         "party_gstin": party_gstin,
+        "party_name_options": party_name_options or [],
+        "sale_product_options": sale_product_options or [],
+        "sale_product_id": sale_product_id,
+        "sale_quantity": sale_quantity,
         "gst_registration_options": GST_REGISTRATION_OPTIONS,
-        "gst_treatment": gst_treatment or GstTreatment.INTRA_STATE.value,
-        "gst_cgst_rate": gst_cgst_rate,
-        "gst_sgst_rate": gst_sgst_rate,
-        "gst_igst_rate": gst_igst_rate,
-        "gst_treatment_options": GST_TREATMENT_OPTIONS,
         "state_options": INDIAN_STATE_OPTIONS,
         "notes": notes,
         "error": error,
     }
-
-
-def parse_optional_gst_rate(value: str, label: str) -> float | None:
-    raw = value.strip()
-    if not raw:
-        return None
-    try:
-        rate = float(raw)
-    except ValueError as exc:
-        raise ValueError(f"{label} must be a number.") from exc
-    if rate < 0 or rate > 100:
-        raise ValueError(f"{label} must be between 0 and 100%.")
-    return rate
 
 
 def batch_list_rows(db: Session, batch_types: tuple[str, ...] | None = None) -> list[Batch]:
@@ -245,6 +363,88 @@ def batch_list_rows(db: Session, batch_types: tuple[str, ...] | None = None) -> 
     if batch_types:
         query = query.where(Batch.batch_type.in_(batch_types))
     return db.scalars(query.order_by(desc(Batch.created_at)).limit(80)).all()
+
+
+def _money_text(value) -> str:
+    return f"{value:.2f}"
+
+
+def _summary_payload(batch: Batch) -> dict[str, object]:
+    summary = calculate_voucher_summary(batch)
+    return {
+        "lines": [
+            {
+                "product_id": line.product_id,
+                "product_code": line.product_code,
+                "product_name": line.product_name,
+                "tally_stock_item_name": line.tally_stock_item_name,
+                "hsn": line.hsn,
+                "quantity": line.quantity,
+                "unit": line.unit,
+                "rate": _money_text(line.rate),
+                "discount_rate": _money_text(line.discount_rate),
+                "discount_amount": _money_text(line.discount_amount),
+                "taxable_value": _money_text(line.taxable_value),
+                "cgst_amount": _money_text(line.cgst_amount),
+                "sgst_amount": _money_text(line.sgst_amount),
+                "igst_amount": _money_text(line.igst_amount),
+                "line_total": _money_text(line.line_total),
+            }
+            for line in summary.lines
+        ],
+        "taxable_value": _money_text(summary.taxable_value),
+        "cgst_amount": _money_text(summary.cgst_amount),
+        "sgst_amount": _money_text(summary.sgst_amount),
+        "igst_amount": _money_text(summary.igst_amount),
+        "round_off": _money_text(summary.round_off),
+        "final_value": _money_text(summary.final_value),
+    }
+
+
+def _batch_items_payload(batch: Batch) -> list[dict[str, object]]:
+    shelf_controlled = batch.batch_type in {BatchType.PURCHASE.value, BatchType.RECEIVE.value, BatchType.AUDIT.value}
+    return [
+        {
+            "id": item.id,
+            "serial_number": item.serial.serial_number,
+            "product_name": item.serial.product.product_name,
+            "product_batch_number": item.serial.product_batch_number or "-",
+            "expiry_date": item.serial.expiry_date.strftime("%d %b %Y") if item.serial.expiry_date else "-",
+            "fefo_picked": bool(item.fefo_picked),
+            "shelf_code": item.shelf_location.code if item.shelf_location else "",
+            "shelf_verified_at": item.shelf_verified_at.strftime("%d %b %H:%M") if item.shelf_verified_at else "",
+            "shelf_pending": bool(
+                shelf_controlled
+                and item.serial.product.shelf_verification_interval
+                and not item.shelf_verified_at
+            ),
+            "shelf_required": bool(shelf_controlled and item.serial.product.shelf_verification_interval),
+            "status": item.serial.status,
+            "rate": _money_text(item.rate if item.rate is not None else item.serial.product.default_rate),
+        }
+        for item in batch.items
+    ]
+
+
+def batch_scan_state(db: Session, batch_id: int) -> dict[str, object]:
+    batch = db.scalar(
+        select(Batch)
+        .where(Batch.id == batch_id)
+        .options(
+            selectinload(Batch.items)
+            .selectinload(BatchItem.serial)
+            .selectinload(Serial.product),
+            selectinload(Batch.items).selectinload(BatchItem.shelf_location),
+        )
+    )
+    if not batch:
+        return {}
+    return {
+        "item_count": len(batch.items),
+        "summary": _summary_payload(batch),
+        "items": _batch_items_payload(batch),
+        "sale_return": sale_return_state(db, batch),
+    }
 
 
 def batch_list_response(request: Request, db: Session, scope: str):
@@ -263,6 +463,18 @@ def batch_list_response(request: Request, db: Session, scope: str):
             "empty_message": config["empty_message"],
         },
     )
+
+
+def tally_excel_import_message(request: Request) -> str | None:
+    imported = request.query_params.get("excel_imported")
+    if not imported:
+        return None
+    try:
+        quantity = int(imported)
+    except ValueError:
+        return None
+    item_label = "item" if quantity == 1 else "items"
+    return f"Imported {quantity} {item_label} from Excel."
 
 
 @router.get("")
@@ -287,7 +499,12 @@ def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: 
     return templates.TemplateResponse(
         request,
         "batch_new.html",
-        batch_form_context(request, user, parsed),
+        batch_form_context(
+            request,
+            user,
+            parsed,
+            party_name_options=party_ledger_options(db, parsed),
+        ),
     )
 
 
@@ -300,9 +517,6 @@ def create_batch_route(
     party_gst_registration_type: str = Form(""),
     party_gst_name: str = Form(""),
     party_gstin: str = Form(""),
-    gst_cgst_rate: str = Form(""),
-    gst_sgst_rate: str = Form(""),
-    gst_igst_rate: str = Form(""),
     reason_code: str = Form(""),
     notes: str = Form(""),
     db: Session = Depends(get_db),
@@ -326,19 +540,7 @@ def create_batch_route(
                 party_state = DEFAULT_UNREGISTERED_SALE_STATE
             if gst_registration_requires_gstin(selected_gst_registration_type):
                 normalize_gstin(party_gstin)
-            cgst_rate = parse_optional_gst_rate(gst_cgst_rate, "CGST")
-            sgst_rate = parse_optional_gst_rate(gst_sgst_rate, "SGST")
-            igst_rate = parse_optional_gst_rate(gst_igst_rate, "IGST")
-            if igst_rate is not None:
-                if cgst_rate is not None or sgst_rate is not None:
-                    raise ValueError("Enter either IGST, or CGST and SGST. Do not enter both.")
-                cgst_rate = None
-                sgst_rate = None
-                selected_gst_treatment = GstTreatment.INTER_STATE.value
-            else:
-                if (cgst_rate is None) != (sgst_rate is None):
-                    raise ValueError("Enter both CGST and SGST values, or leave both blank.")
-                selected_gst_treatment = GstTreatment.INTRA_STATE.value
+            selected_gst_treatment = sale_gst_treatment_for_state(party_state)
         except ValueError as exc:
             return templates.TemplateResponse(
                 request,
@@ -354,10 +556,7 @@ def create_batch_route(
                     ),
                     party_gst_name=party_gst_name,
                     party_gstin=party_gstin,
-                    gst_treatment=selected_gst_treatment,
-                    gst_cgst_rate=gst_cgst_rate,
-                    gst_sgst_rate=gst_sgst_rate,
-                    gst_igst_rate=gst_igst_rate,
+                    party_name_options=party_ledger_options(db, parsed),
                     notes=notes,
                     error=str(exc),
                 ),
@@ -386,33 +585,53 @@ def create_batch_route(
                 ),
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
-                gst_treatment=selected_gst_treatment,
-                gst_cgst_rate=gst_cgst_rate,
-                gst_sgst_rate=gst_sgst_rate,
-                gst_igst_rate=gst_igst_rate,
+                party_name_options=party_ledger_options(db, parsed),
                 notes=notes,
                 error=f"{party_label} is required.",
             ),
             status_code=400,
         )
-    batch = create_batch(
-        db,
-        user,
-        parsed,
-        party_name,
-        notes,
-        reason_code,
-        party_state=party_state if parsed == BatchType.SALE else None,
-        party_gst_registration_type=(
-            selected_gst_registration_type if parsed == BatchType.SALE else None
-        ),
-        party_gst_name=party_gst_name if parsed == BatchType.SALE else None,
-        party_gstin=party_gstin if parsed == BatchType.SALE else None,
-        gst_treatment=selected_gst_treatment if parsed == BatchType.SALE else None,
-        gst_cgst_rate=cgst_rate,
-        gst_sgst_rate=sgst_rate,
-        gst_igst_rate=igst_rate,
-    )
+    try:
+        batch = create_batch(
+            db,
+            user,
+            parsed,
+            party_name,
+            notes,
+            reason_code,
+            party_state=party_state if parsed == BatchType.SALE else None,
+            party_gst_registration_type=(
+                selected_gst_registration_type if parsed == BatchType.SALE else None
+            ),
+            party_gst_name=party_gst_name if parsed == BatchType.SALE else None,
+            party_gstin=party_gstin if parsed == BatchType.SALE else None,
+            gst_treatment=selected_gst_treatment if parsed == BatchType.SALE else None,
+            gst_cgst_rate=cgst_rate,
+            gst_sgst_rate=sgst_rate,
+            gst_igst_rate=igst_rate,
+        )
+    except InventoryError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "batch_new.html",
+            batch_form_context(
+                request,
+                user,
+                parsed,
+                party_name=party_name,
+                party_state=party_state,
+                party_gst_registration_type=(
+                    selected_gst_registration_type or party_gst_registration_type
+                ),
+                party_gst_name=party_gst_name,
+                party_gstin=party_gstin,
+                party_name_options=party_ledger_options(db, parsed),
+                notes=notes,
+                error=str(exc),
+            ),
+            status_code=400,
+        )
     return RedirectResponse(f"/batches/{batch.id}", status_code=303)
 
 
@@ -439,11 +658,15 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "request": request,
             "user": user,
             "batch": batch,
-            "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
+            "products": fefo_product_options(db, batch),
             "summary": calculate_voucher_summary(batch),
             "audit_summary": summarize_audit_findings(batch),
             "shelf_state": shelf_verification_state(batch),
+            "sale_return_state": sale_return_state(db, batch),
             "can_manual_scan": can_use_manual_scan(db, user),
+            "tally_excel_import_types": TALLY_EXCEL_IMPORT_BATCH_TYPES,
+            "tally_excel_export_types": TALLY_EXCEL_EXPORT_BATCH_TYPES,
+            "tally_excel_message": tally_excel_import_message(request),
             **batch_permission_context(db, user, batch),
             "error": None,
         },
@@ -456,6 +679,7 @@ def scan_into_batch(
     batch_id: int,
     serial_number: str = Form(...),
     scan_source: str = Form("manual"),
+    scan_mode: str = Form("sale"),
     db: Session = Depends(get_db),
 ):
     batch = db.get(Batch, batch_id)
@@ -464,8 +688,36 @@ def scan_into_batch(
     user = require_permission(request, db, action_key_for_batch(BatchType(batch.batch_type)))
     if not scan_source_allowed(db, user, scan_source):
         return JSONResponse({"ok": False, "error": "Use camera scan to add serials"}, status_code=403)
+    normalized_scan_mode = scan_mode.strip().lower()
     location = find_location_by_code(db, serial_number)
     if location:
+        if batch.batch_type == BatchType.SALE.value:
+            try:
+                verified_count = verify_sale_return_on_shelf(
+                    db,
+                    batch=batch,
+                    location=location,
+                    user=user,
+                )
+            except InventoryError as exc:
+                return JSONResponse(
+                    {
+                        "ok": False,
+                        "error": str(exc),
+                        **batch_scan_state(db, batch.id),
+                    },
+                    status_code=400,
+                )
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "scan_type": "sale_return_shelf",
+                    "location_code": location.code,
+                    "location": location.full_path,
+                    "verified_count": verified_count,
+                    **batch_scan_state(db, batch.id),
+                }
+            )
         try:
             verified_count = verify_pending_items_on_shelf(
                 db,
@@ -479,6 +731,7 @@ def scan_into_batch(
                     "ok": False,
                     "error": str(exc),
                     **shelf_verification_state(batch),
+                    **batch_scan_state(db, batch.id),
                 },
                 status_code=400,
             )
@@ -490,14 +743,32 @@ def scan_into_batch(
                 "location": location.full_path,
                 "verified_count": verified_count,
                 **shelf_verification_state(batch),
+                **batch_scan_state(db, batch.id),
             }
         )
     try:
+        if batch.batch_type == BatchType.SALE.value and normalized_scan_mode == "return":
+            serial = scan_sale_return_product(db, batch, user, serial_number)
+            return JSONResponse(
+                {
+                    "ok": True,
+                    "scan_type": "sale_return_product",
+                    "serial": serial.serial_number,
+                    "product": serial.product.product_name,
+                    **batch_scan_state(db, batch.id),
+                }
+            )
+        ensure_sale_scan_allowed(db, batch)
         ensure_product_scan_allowed(batch)
         item = add_serial_to_batch(db, batch, user, serial_number)
     except (InventoryError, ShelfVerificationError) as exc:
         return JSONResponse(
-            {"ok": False, "error": str(exc), **shelf_verification_state(batch)},
+            {
+                "ok": False,
+                "error": str(exc),
+                **shelf_verification_state(batch),
+                **batch_scan_state(db, batch.id),
+            },
             status_code=400,
         )
     return JSONResponse(
@@ -508,6 +779,7 @@ def scan_into_batch(
             "product": item.serial.product.product_name,
             "status": item.serial.status,
             **shelf_verification_state(batch),
+            **batch_scan_state(db, batch.id),
         }
     )
 
@@ -540,10 +812,11 @@ def fefo_pick_into_batch(
                 "request": request,
                 "user": user,
                 "batch": batch,
-                "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
+                "products": fefo_product_options(db, batch),
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "shelf_state": shelf_verification_state(batch),
+                "sale_return_state": sale_return_state(db, batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
                 **batch_permission_context(db, user, batch),
                 "fefo_error": str(exc),
@@ -629,6 +902,7 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
     if batch.status != BatchStatus.DRAFT.value:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     try:
+        validate_sale_returns_complete(db, batch)
         validate_priced_batch(batch)
         apply_batch_statuses(db, batch, user)
         if batch.batch_type == BatchType.AUDIT.value:
@@ -642,10 +916,11 @@ def submit_batch(request: Request, batch_id: int, db: Session = Depends(get_db))
                 "request": request,
                 "user": user,
                 "batch": batch,
-                "products": db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all(),
+                "products": fefo_product_options(db, batch),
                 "summary": calculate_voucher_summary(batch),
                 "audit_summary": summarize_audit_findings(batch),
                 "shelf_state": shelf_verification_state(batch),
+                "sale_return_state": sale_return_state(db, batch),
                 "can_manual_scan": can_use_manual_scan(db, user),
                 **batch_permission_context(db, user, batch),
                 "error": str(exc),
@@ -746,6 +1021,81 @@ def tally_xml_preview(request: Request, batch_id: int, db: Session = Depends(get
         media_type="application/xml",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-tally.xml"},
     )
+
+
+@router.get("/{batch_id}/tally.xlsx")
+def tally_excel_export(request: Request, batch_id: int, db: Session = Depends(get_db)):
+    batch = db.scalar(
+        select(Batch)
+        .where(Batch.id == batch_id)
+        .options(selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product))
+    )
+    if not batch:
+        return RedirectResponse("/batches", status_code=303)
+    require_permission(request, db, "tally_xml", {"edit", "yes"})
+    if batch.batch_type not in TALLY_EXCEL_EXPORT_BATCH_TYPES or not batch.items:
+        return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    return Response(
+        batch_tally_xlsx(batch),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-tally.xlsx"},
+    )
+
+
+@router.post("/{batch_id}/tally.xlsx/import")
+def tally_excel_import(
+    request: Request,
+    batch_id: int,
+    upload: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    batch = db.scalar(
+        select(Batch)
+        .where(Batch.id == batch_id)
+        .options(selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product))
+    )
+    if not batch:
+        return RedirectResponse("/batches", status_code=303)
+    user = require_permission(request, db, action_key_for_batch(BatchType(batch.batch_type)))
+    require_permission(request, db, "fefo_pick", {"edit", "yes"})
+    try:
+        data = upload.file.read(MAX_TALLY_EXCEL_UPLOAD_BYTES + 1)
+        if len(data) > MAX_TALLY_EXCEL_UPLOAD_BYTES:
+            raise InventoryError("Upload an Excel file up to 5 MB")
+        result = import_tally_excel_to_batch(db, batch, user, data)
+    except InventoryError as exc:
+        db.rollback()
+        batch = db.scalar(
+            select(Batch)
+            .where(Batch.id == batch_id)
+            .options(
+                selectinload(Batch.items).selectinload(BatchItem.serial).selectinload(Serial.product),
+                selectinload(Batch.sync_attempts),
+                selectinload(Batch.audit_findings).selectinload(AuditFinding.serial),
+            )
+        ) or batch
+        return templates.TemplateResponse(
+            request,
+            "batch_detail.html",
+            {
+                "request": request,
+                "user": user,
+                "batch": batch,
+                "products": fefo_product_options(db, batch),
+                "summary": calculate_voucher_summary(batch),
+                "audit_summary": summarize_audit_findings(batch),
+                "shelf_state": shelf_verification_state(batch),
+                "sale_return_state": sale_return_state(db, batch),
+                "can_manual_scan": can_use_manual_scan(db, user),
+                "tally_excel_import_types": TALLY_EXCEL_IMPORT_BATCH_TYPES,
+                "tally_excel_export_types": TALLY_EXCEL_EXPORT_BATCH_TYPES,
+                "tally_excel_error": str(exc),
+                **batch_permission_context(db, user, batch),
+                "error": None,
+            },
+            status_code=400,
+        )
+    return RedirectResponse(f"/batches/{batch.id}?excel_imported={result.quantity}", status_code=303)
 
 
 @router.get("/{batch_id}/sync-attempts/{attempt_id}")

@@ -10,8 +10,21 @@ const cameraButton = document.getElementById("camera-button");
 const scanCountLabel = document.getElementById("scan-count");
 const submitBatchButton = document.getElementById("submit-batch-button");
 const shelfVerificationStatus = document.getElementById("shelf-verification-status");
+const scanModeInput = document.getElementById("scan-mode");
+const saleModeButtons = document.querySelectorAll("[data-scan-mode-button]");
+const saleReturnStatus = document.getElementById("sale-return-status");
+const voucherPreviewTable = document.getElementById("voucher-preview-table");
+const voucherPreviewBody = document.getElementById("voucher-preview-body");
+const voucherPreviewFoot = document.getElementById("voucher-preview-foot");
+const voucherLineCount = document.getElementById("voucher-line-count");
+const scannedSerialsTable = document.getElementById("scanned-serials-table");
+const scannedSerialsBody = document.getElementById("scanned-serials-body");
 
 const canManual = form && form.dataset.canManual === "true";
+const canEditVoucher = voucherPreviewTable?.dataset.canEdit === "true";
+const canEditScans = scannedSerialsTable?.dataset.canEdit === "true";
+const batchId = voucherPreviewTable?.dataset.batchId || scannedSerialsTable?.dataset.batchId || "";
+const batchType = scannedSerialsTable?.dataset.batchType || "";
 
 let nativeDetector = null;
 let activeStream = null;
@@ -23,6 +36,7 @@ let inputSubmitTimer = null;
 let cameraStarting = false;
 let toastContainer = null;
 let scanCount = Number(scanCountLabel?.dataset.count || 0);
+let saleReturnPending = Number(saleReturnStatus?.dataset.pending || 0);
 
 function ensureToastContainer() {
   if (toastContainer) return toastContainer;
@@ -75,17 +89,31 @@ function setScanStatus(text) {
   if (scanStatusLabel) scanStatusLabel.textContent = text;
 }
 
+function syncSubmitButton() {
+  if (!submitBatchButton) return;
+  const shelfPending = Number(shelfVerificationStatus?.dataset.pending || 0);
+  submitBatchButton.disabled = scanCount === 0 || shelfPending > 0 || saleReturnPending > 0;
+}
+
+function setScanCount(value) {
+  scanCount = Number(value || 0);
+  if (scanCountLabel) {
+    scanCountLabel.dataset.count = String(scanCount);
+    scanCountLabel.textContent = `${scanCount} scanned`;
+  }
+  syncSubmitButton();
+}
+
 function updateScanCount() {
-  scanCount += 1;
-  if (scanCountLabel) scanCountLabel.textContent = `${scanCount} scanned`;
+  setScanCount(scanCount + 1);
 }
 
 function updateShelfState(payload) {
   const pending = Number(payload?.pending_count || 0);
   const required = payload?.shelf_required === true;
-  if (submitBatchButton) submitBatchButton.disabled = scanCount === 0 || pending > 0;
+  if (shelfVerificationStatus) shelfVerificationStatus.dataset.pending = String(pending);
+  syncSubmitButton();
   if (!shelfVerificationStatus) return;
-  shelfVerificationStatus.dataset.pending = String(pending);
   shelfVerificationStatus.classList.toggle("warn", pending > 0);
   if (pending > 0) {
     const suffix = required
@@ -100,6 +128,224 @@ function updateShelfState(payload) {
     shelfVerificationStatus.textContent =
       "Shelf placement is verified. Products with a configured interval will require a shelf QR scan.";
   }
+}
+
+function setSaleScanMode(mode, options = {}) {
+  if (!scanModeInput) return;
+  let nextMode = mode === "return" ? "return" : "sale";
+  if (nextMode === "sale" && saleReturnPending > 0) {
+    nextMode = "return";
+    if (!options.silent) showToast("Scan the shelf QR before continuing the sale", "warn", 3500);
+  }
+  scanModeInput.value = nextMode;
+  saleModeButtons.forEach((button) => {
+    const active = button.dataset.scanModeButton === nextMode;
+    button.setAttribute("aria-pressed", active ? "true" : "false");
+    button.classList.toggle("primary", active && nextMode === "sale");
+    button.classList.toggle("danger", active && nextMode === "return");
+  });
+  lastCode = "";
+  if (options.status !== false) {
+    if (saleReturnPending > 0) {
+      setScanStatus(scanning ? "Return shelf pending - scan shelf QR" : "Return shelf pending");
+    } else if (nextMode === "return") {
+      setScanStatus(scanning ? "Return mode - scan product QR" : "Return mode ready");
+    } else if (!scanning) {
+      setScanStatus("Scanning stopped");
+    }
+  }
+}
+
+function updateSaleReturnState(state) {
+  if (!saleReturnStatus || !state) return;
+  saleReturnPending = Number(state.pending_count || 0);
+  saleReturnStatus.dataset.pending = String(saleReturnPending);
+  saleReturnStatus.hidden = saleReturnPending === 0;
+  if (saleReturnPending > 0) {
+    const first = Array.isArray(state.pending_serials) ? state.pending_serials[0] : null;
+    const label = first?.serial ? `: ${first.serial}${first.product ? " - " + first.product : ""}` : "";
+    saleReturnStatus.textContent =
+      `${saleReturnPending} returned product${saleReturnPending === 1 ? "" : "s"} waiting for shelf QR${label}`;
+    setSaleScanMode("return", { silent: true, status: false });
+  } else {
+    saleReturnStatus.textContent = "";
+  }
+  syncSubmitButton();
+}
+
+function clearNode(node) {
+  while (node && node.firstChild) node.removeChild(node.firstChild);
+}
+
+function appendCell(row, text, className = "") {
+  const cell = document.createElement("td");
+  if (className) cell.className = className;
+  cell.textContent = text;
+  row.appendChild(cell);
+  return cell;
+}
+
+function createSmallText(text) {
+  const small = document.createElement("small");
+  small.textContent = text;
+  return small;
+}
+
+function createRateForm(action, rate) {
+  const formNode = document.createElement("form");
+  formNode.method = "post";
+  formNode.action = action;
+  formNode.className = "inline-form compact-inline";
+  formNode.dataset.autosave = action;
+
+  const rateInput = document.createElement("input");
+  rateInput.name = "rate";
+  rateInput.type = "number";
+  rateInput.min = "0";
+  rateInput.step = "0.01";
+  rateInput.value = rate;
+
+  const button = document.createElement("button");
+  button.className = "button small";
+  button.type = "submit";
+  button.textContent = "Set";
+
+  formNode.append(rateInput, button);
+  return formNode;
+}
+
+function updateVoucherPreview(summary) {
+  if (!voucherPreviewBody || !summary) return;
+  const lines = Array.isArray(summary.lines) ? summary.lines : [];
+  clearNode(voucherPreviewBody);
+  if (voucherLineCount) {
+    voucherLineCount.textContent = `${lines.length} product line${lines.length === 1 ? "" : "s"}`;
+  }
+
+  if (!lines.length) {
+    const row = document.createElement("tr");
+    appendCell(row, batchType === "SALE" ? "Scan product QR codes to build the sale" : "Scan serials to build the voucher preview", "empty")
+      .colSpan = 10;
+    voucherPreviewBody.appendChild(row);
+  } else {
+    lines.forEach((line) => {
+      const row = document.createElement("tr");
+      const productCell = appendCell(row, "");
+      const strong = document.createElement("strong");
+      strong.textContent = line.product_name || "";
+      productCell.appendChild(strong);
+      if (line.tally_stock_item_name) productCell.appendChild(createSmallText(line.tally_stock_item_name));
+      appendCell(row, line.hsn || "-");
+      appendCell(row, `${line.quantity || 0} ${line.unit || ""}`.trim());
+      const rateCell = appendCell(row, "");
+      if (canEditVoucher && batchId) {
+        rateCell.appendChild(createRateForm(`/batches/${batchId}/products/${line.product_id}/rate`, line.rate || "0.00"));
+      } else {
+        rateCell.textContent = line.rate || "0.00";
+      }
+      const discountCell = appendCell(row, `${line.discount_rate || "0.00"}%`);
+      if (Number(line.discount_amount || 0) > 0) {
+        discountCell.appendChild(createSmallText(`-${line.discount_amount}`));
+      }
+      appendCell(row, line.taxable_value || "0.00");
+      appendCell(row, line.cgst_amount || "0.00");
+      appendCell(row, line.sgst_amount || "0.00");
+      appendCell(row, line.igst_amount || "0.00");
+      appendCell(row, line.line_total || "0.00");
+      voucherPreviewBody.appendChild(row);
+    });
+  }
+
+  if (!voucherPreviewFoot) return;
+  voucherPreviewFoot.hidden = !lines.length;
+  clearNode(voucherPreviewFoot);
+  [
+    ["Taxable value", summary.taxable_value],
+    ["CGST", summary.cgst_amount],
+    ["SGST", summary.sgst_amount],
+    ["IGST", summary.igst_amount],
+    ["Round off", summary.round_off],
+    ["Final invoice value", summary.final_value, "grand-total"],
+  ].forEach(([label, value, className]) => {
+    const row = document.createElement("tr");
+    if (className) row.className = className;
+    const heading = document.createElement("th");
+    heading.colSpan = 6;
+    heading.textContent = label;
+    const cell = document.createElement("td");
+    cell.colSpan = 4;
+    cell.textContent = value || "0.00";
+    row.append(heading, cell);
+    voucherPreviewFoot.appendChild(row);
+  });
+}
+
+function createStatusBadge(status) {
+  const badge = document.createElement("span");
+  badge.className = `status ${String(status || "").toLowerCase()}`;
+  badge.textContent = status || "-";
+  return badge;
+}
+
+function updateScannedSerials(items) {
+  if (!scannedSerialsBody) return;
+  const rows = Array.isArray(items) ? items : [];
+  clearNode(scannedSerialsBody);
+  if (!rows.length) {
+    const row = document.createElement("tr");
+    appendCell(row, "No scans yet", "empty").colSpan = 8;
+    scannedSerialsBody.appendChild(row);
+    return;
+  }
+
+  rows.forEach((item) => {
+    const row = document.createElement("tr");
+    appendCell(row, item.serial_number || "");
+    appendCell(row, item.product_name || "");
+    const batchCell = appendCell(row, item.product_batch_number || "-");
+    if (item.fefo_picked) batchCell.appendChild(createSmallText("FEFO picked"));
+    appendCell(row, item.expiry_date || "-");
+    const shelfCell = appendCell(row, "");
+    if (item.shelf_code) {
+      const strong = document.createElement("strong");
+      strong.textContent = item.shelf_code;
+      shelfCell.appendChild(strong);
+      if (item.shelf_verified_at) shelfCell.appendChild(createSmallText(`Verified ${item.shelf_verified_at}`));
+    } else if (item.shelf_pending) {
+      shelfCell.appendChild(createStatusBadge("PENDING_SYNC"));
+    } else {
+      shelfCell.textContent = "Not required";
+    }
+    const statusCell = appendCell(row, "");
+    statusCell.appendChild(createStatusBadge(item.status));
+    const rateCell = appendCell(row, "");
+    if (canEditScans && batchType !== "AUDIT" && batchId) {
+      rateCell.appendChild(createRateForm(`/batches/${batchId}/items/${item.id}/rate`, item.rate || "0.00"));
+    } else {
+      rateCell.textContent = item.rate || "0.00";
+    }
+    const actionCell = appendCell(row, "");
+    if (canEditScans && batchId) {
+      const formNode = document.createElement("form");
+      formNode.method = "post";
+      formNode.action = `/batches/${batchId}/items/${item.id}/delete`;
+      const button = document.createElement("button");
+      button.className = "button small ghost";
+      button.type = "submit";
+      button.textContent = "Remove";
+      formNode.appendChild(button);
+      actionCell.appendChild(formNode);
+    }
+    scannedSerialsBody.appendChild(row);
+  });
+}
+
+function updateBatchState(payload) {
+  if (!payload) return;
+  if (typeof payload.item_count !== "undefined") setScanCount(payload.item_count);
+  if (payload.summary) updateVoucherPreview(payload.summary);
+  if (payload.items) updateScannedSerials(payload.items);
+  if (payload.sale_return) updateSaleReturnState(payload.sale_return);
 }
 
 function showScannerTools() {
@@ -477,14 +723,16 @@ async function submitSerial(serial, source = "camera") {
   serial = cleanDecodedText(serial);
   if (!serial || submitting || !form) return;
   submitting = true;
+  const activeScanMode = scanModeInput?.value || "sale";
   if (input) input.value = serial;
   if (sourceInput) sourceInput.value = source;
   if (scanLine) scanLine.classList.add("detected");
-  setScanStatus(`Adding ${serial}...`);
+  setScanStatus(`${activeScanMode === "return" ? "Returning" : "Adding"} ${serial}...`);
 
   const data = new FormData();
   data.append("serial_number", serial);
   data.append("scan_source", source);
+  data.append("scan_mode", activeScanMode);
 
   try {
     const response = await fetch(form.action, {
@@ -499,12 +747,37 @@ async function submitSerial(serial, source = "camera") {
       const kind = errorMsg.includes("Already scanned") ? "warn" : "error";
       showToast(errorMsg.includes("not found") ? `Serial not found: ${serial}` : errorMsg, kind, 4000);
       updateShelfState(payload);
+      updateBatchState(payload);
       setScanStatus(
         scanning
-          ? (payload.shelf_required ? "Shelf QR required" : "Scan rejected - scan the next code")
+          ? (payload.shelf_required || payload.sale_return?.return_shelf_required ? "Shelf QR required" : "Scan rejected - scan the next code")
           : "Scanning stopped"
       );
       finishSubmission();
+      return;
+    }
+
+    if (payload.scan_type === "sale_return_product") {
+      const product = payload.product || "";
+      const serialNum = payload.serial || serial;
+      showToast(`${serialNum}${product ? " - " + product : ""} returned`, "warn", 3500);
+      updateBatchState(payload);
+      setSaleScanMode("return", { silent: true, status: false });
+      setScanStatus(scanning ? "Returned - scan shelf QR" : "Return shelf pending");
+      finishSubmission(500);
+      return;
+    }
+
+    if (payload.scan_type === "sale_return_shelf") {
+      showToast(
+        `${payload.verified_count || 0} returned product(s) placed at ${payload.location_code || "shelf"}`,
+        "success",
+        3500
+      );
+      updateBatchState(payload);
+      setSaleScanMode("sale", { silent: true, status: false });
+      setScanStatus(scanning ? "Return complete - scan the next product" : "Scanning stopped");
+      finishSubmission(500);
       return;
     }
 
@@ -515,6 +788,7 @@ async function submitSerial(serial, source = "camera") {
         3500
       );
       updateShelfState(payload);
+      updateBatchState(payload);
       setScanStatus(scanning ? "Shelf verified - scan the next product" : "Scanning stopped");
       finishSubmission(500);
       return;
@@ -523,7 +797,8 @@ async function submitSerial(serial, source = "camera") {
     const product = payload.product || "";
     const serialNum = payload.serial || serial;
     showToast(`${serialNum}${product ? " - " + product : ""} added`, "success", 2500);
-    updateScanCount();
+    if (typeof payload.item_count === "undefined") updateScanCount();
+    updateBatchState(payload);
     updateShelfState(payload);
     setScanStatus(
       scanning
@@ -670,6 +945,14 @@ async function startCamera() {
     return false;
   }
 }
+
+saleModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setSaleScanMode(button.dataset.scanModeButton || "sale");
+  });
+});
+setSaleScanMode(scanModeInput?.value || "sale", { silent: true, status: false });
+syncSubmitButton();
 
 if (form) {
   form.addEventListener("submit", async (event) => {

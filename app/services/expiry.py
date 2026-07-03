@@ -8,11 +8,19 @@ from math import floor
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Batch, BatchItem, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import Batch, BatchItem, BatchStatus, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
 
 
 STOCK_STATUSES = {SerialStatus.IN_STOCK.value, SerialStatus.RETURNED.value}
 FEFO_BATCH_TYPES = {"SALE", "ISSUE", "PURCHASE_RETURN"}
+
+
+def fefo_available_statuses(batch_type: str) -> set[str]:
+    if batch_type == "ISSUE":
+        return {SerialStatus.IN_STOCK.value}
+    if batch_type in FEFO_BATCH_TYPES:
+        return set(STOCK_STATUSES)
+    return set()
 
 
 @dataclass(frozen=True)
@@ -237,30 +245,40 @@ def warehouse_heatmap_rows(db: Session, as_of: date | None = None) -> list[dict[
     return sorted(rows, key=lambda item: -float(item["value"]))
 
 
-def fefo_candidate_serials(db: Session, product_id: int, quantity: int, exclude_batch_id: int | None = None) -> list[Serial]:
+def fefo_candidate_serials(
+    db: Session,
+    product_id: int,
+    quantity: int,
+    statuses: set[str] | None = None,
+) -> list[Serial]:
     if quantity < 1:
         return []
+    available_statuses = statuses or STOCK_STATUSES
     query = (
         select(Serial)
         .where(
             Serial.active == True,
             Serial.product_id == product_id,
-            Serial.status.in_(STOCK_STATUSES),
+            Serial.status.in_(available_statuses),
         )
         .options(selectinload(Serial.product))
         .order_by(Serial.expiry_date.is_(None), Serial.expiry_date, Serial.created_at, Serial.id)
         .limit(quantity)
     )
-    if exclude_batch_id is not None:
-        subquery = select(BatchItem.serial_id).where(BatchItem.batch_id == exclude_batch_id)
-        query = query.where(~Serial.id.in_(subquery))
+    draft_subquery = (
+        select(BatchItem.serial_id)
+        .join(Batch, BatchItem.batch_id == Batch.id)
+        .where(Batch.status == BatchStatus.DRAFT.value)
+    )
+    query = query.where(~Serial.id.in_(draft_subquery))
     return db.scalars(query).all()
 
 
 def validate_fefo_scan(db: Session, batch: Batch, serial: Serial) -> str | None:
-    if batch.batch_type not in FEFO_BATCH_TYPES or serial.status not in STOCK_STATUSES:
+    statuses = fefo_available_statuses(batch.batch_type)
+    if batch.batch_type not in FEFO_BATCH_TYPES or serial.status not in statuses:
         return None
-    candidates = fefo_candidate_serials(db, serial.product_id, 1, exclude_batch_id=batch.id)
+    candidates = fefo_candidate_serials(db, serial.product_id, 1, statuses=statuses)
     if not candidates:
         return None
     earliest = candidates[0]
@@ -281,7 +299,8 @@ def add_fefo_serials_to_batch(db: Session, batch: Batch, user: User, product_id:
         raise InventoryError("This batch is already submitted")
     if batch.batch_type not in FEFO_BATCH_TYPES:
         raise InventoryError("FEFO picking is available for sale, issue, and purchase return batches")
-    serials = fefo_candidate_serials(db, product_id, quantity, exclude_batch_id=batch.id)
+    statuses = fefo_available_statuses(batch.batch_type)
+    serials = fefo_candidate_serials(db, product_id, quantity, statuses=statuses)
     if len(serials) < quantity:
         raise InventoryError(f"Only {len(serials)} FEFO-ready serials are available")
     items: list[BatchItem] = []

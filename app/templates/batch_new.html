@@ -39,7 +39,6 @@
   'Uttarakhand',
   'West Bengal'
 ], true) %}
-{% set selected_gst_treatment = gst_treatment|default('INTRA_STATE', true) %}
 {% set selected_gst_registration = party_gst_registration_type|default('Unregistered/Consumer', true) %}
 {% set selected_party_state = party_state|default('', true) %}
 {% if batch_type.value == 'SALE' and selected_gst_registration == 'Unregistered/Consumer' and not selected_party_state %}
@@ -61,10 +60,18 @@
       {% if batch_type.value == 'SALE' %}Debtor ledger name{% elif batch_type.value == 'SALES_RETURN' %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
       <input
         name="party_name"
+        {% if batch_type.value in ['SALE', 'SALES_RETURN', 'PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}list="party-ledger-options"{% endif %}
         placeholder="{% if batch_type.value == 'SALE' %}Exact Tally debtor ledger name{% else %}Name{% endif %}"
         value="{{ party_name or '' }}"
         {% if batch_type.value in ['SALE', 'SALES_RETURN', 'PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}required{% endif %}
       >
+      {% if batch_type.value in ['SALE', 'SALES_RETURN', 'PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}
+      <datalist id="party-ledger-options">
+        {% for ledger_name in party_name_options|default([], true) %}
+        <option value="{{ ledger_name }}"></option>
+        {% endfor %}
+      </datalist>
+      {% endif %}
     </label>
     {% if batch_type.value == 'SALE' %}
     <div class="two-col">
@@ -104,19 +111,6 @@
           <option value="{{ state }}"></option>
           {% endfor %}
         </datalist>
-      </label>
-    </div>
-    <div class="two-col">
-      <label data-gst-local-rate>CGST %
-        <input name="gst_cgst_rate" type="number" min="0" max="100" step="0.01" placeholder="2.5" value="{{ gst_cgst_rate or '' }}">
-      </label>
-      <label data-gst-local-rate>SGST %
-        <input name="gst_sgst_rate" type="number" min="0" max="100" step="0.01" placeholder="2.5" value="{{ gst_sgst_rate or '' }}">
-      </label>
-    </div>
-    <div class="two-col">
-      <label data-gst-interstate-rate>IGST % (optional)
-        <input name="gst_igst_rate" type="number" min="0" max="100" step="0.01" placeholder="5" value="{{ gst_igst_rate or '' }}">
       </label>
     </div>
     {% endif %}
@@ -188,6 +182,7 @@
     } else {
       initGstRegistrationFields();
     }
+
   })();
 </script>
 {% endif %}

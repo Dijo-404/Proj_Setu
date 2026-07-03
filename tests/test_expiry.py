@@ -1,11 +1,12 @@
 from datetime import date
 
 from app.models import BatchType, Product, SerialStatus, User
+from app.routers.batches import fefo_product_options
 from app.services.expiry import add_fefo_serials_to_batch, expiry_summary
 from app.services.inventory import InventoryError, add_serial_to_batch, create_batch, generate_serials
 
 
-def _product(code="EXP001") -> Product:
+def _product(code="EXP001", active=True) -> Product:
     return Product(
         product_code=code,
         product_name="Turmeric Powder",
@@ -14,6 +15,7 @@ def _product(code="EXP001") -> Product:
         unit="Pcs",
         default_rate=100,
         tally_stock_item_name="Turmeric Powder",
+        active=active,
     )
 
 
@@ -91,3 +93,34 @@ def test_fefo_auto_pick_uses_nearest_expiry(db_session):
     assert len(items) == 1
     assert items[0].serial.serial_number == early.serial_number
     assert items[0].fefo_picked is True
+
+
+def test_sale_fefo_dropdown_uses_only_active_sellable_stock(db_session):
+    user = User(username="sales", password_hash="x", role="sales")
+    available = _product("AVAIL")
+    returned = _product("RET")
+    sold = _product("SOLD")
+    inactive = _product("INACT", active=False)
+    empty = _product("EMPTY")
+    db_session.add_all([user, available, returned, sold, inactive, empty])
+    db_session.commit()
+    available_serials = generate_serials(
+        db_session,
+        available,
+        2,
+        initial_status=SerialStatus.IN_STOCK,
+        product_batch_number="A1",
+        expiry_date=date(2026, 7, 1),
+    )
+    generate_serials(db_session, returned, 1, initial_status=SerialStatus.RETURNED)
+    generate_serials(db_session, sold, 1, initial_status=SerialStatus.SOLD)
+    generate_serials(db_session, inactive, 1, initial_status=SerialStatus.IN_STOCK)
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, available_serials[0].serial_number)
+
+    options = fefo_product_options(db_session, batch)
+
+    assert {option["product_code"]: option["available_quantity"] for option in options} == {
+        "AVAIL": 1,
+        "RET": 1,
+    }

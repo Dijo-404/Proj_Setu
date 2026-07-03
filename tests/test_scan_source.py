@@ -24,9 +24,9 @@ def test_staff_roles_must_use_camera_scan_source(db_session):
         assert not scan_source_allowed(db_session, user, "manual")
 
 
-def test_manual_scan_source_can_be_granted_to_staff_role(db_session):
+def test_manual_scan_source_cannot_be_granted_to_staff_role(db_session):
     purchase = User(username="purchase", password_hash="x", role=Role.PURCHASE.value)
     save_role_access_config(db_session, {"manual_serial_entry": {Role.PURCHASE.value: "edit"}})
 
-    assert can_use_manual_scan(db_session, purchase)
-    assert scan_source_allowed(db_session, purchase, "manual")
+    assert not can_use_manual_scan(db_session, purchase)
+    assert not scan_source_allowed(db_session, purchase, "manual")

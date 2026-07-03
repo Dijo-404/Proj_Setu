@@ -11,7 +11,7 @@ from app.services.settings import get_setting, update_settings
 
 SETTING_KEY = "role_access_config"
 DENY_VALUES = {"hidden", "no"}
-SUPER_ADMIN_ONLY_KEYS = {"page_role_access", "role_access_edit"}
+SUPER_ADMIN_ONLY_KEYS = {"page_role_access", "role_access_edit", "database_reset"}
 
 
 @dataclass(frozen=True)
@@ -220,7 +220,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
                     ACTION_OPTIONS,
                 ),
-                AccessRowDefinition("manual_serial_entry", "Manual serial entry", "Type serial numbers into batches", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS, "Non-admin users can scan by camera/photo only."),
+                AccessRowDefinition("manual_serial_entry", "Manual serial entry", "Type serial numbers into batches", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS, "Locked to admin and super admin; non-admin users can scan by camera/photo only."),
                 AccessRowDefinition("fefo_pick", "FEFO pick", "Auto-pick sale, issue, purchase return", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale/sales-return XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("tally_sync_retry", "Tally sync retry", "Retry pending or failed sync", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
@@ -260,6 +260,14 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     "Only super admins can delete user accounts. Accounts with history are hidden and kept for old records.",
                 ),
                 AccessRowDefinition("backup_download", "Backup", "Download SQLite backup", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "database_reset",
+                    "Database reset",
+                    "Clear database records and application cache",
+                    _defaults(ACTION_OPTIONS, "yes", []),
+                    ACTION_OPTIONS,
+                    "Locked to super admin and requires password verification.",
+                ),
             ],
         ),
         AccessSectionDefinition(

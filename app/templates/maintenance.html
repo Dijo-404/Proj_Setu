@@ -11,6 +11,9 @@
   {% endif %}
 </section>
 
+{% if error %}<div class="alert error">{{ error }}</div>{% endif %}
+{% if success %}<div class="alert success">{{ success }}</div>{% endif %}
+
 <section class="panel narrow">
   <div class="section-title"><h2>Backup</h2></div>
   <dl class="details">
@@ -31,6 +34,30 @@
   <p class="muted">Configure BACKUP_OFFSITE_DIRECTORY for a verified copy on another drive or network share. Keep a separate copy of .env.</p>
 </section>
 
+{% if has_role(user, 'super_admin') and role_can(user, 'database_reset') %}
+<section class="panel">
+  <div class="section-title"><h2>Reset database</h2></div>
+  <div class="product-danger-zone">
+    <div>
+      <strong>Clear database and cache</strong>
+      <p>This keeps your super admin account and removes users, products, serials, batches, reports, settings, logs, and cached application state.</p>
+    </div>
+    <form method="post" action="/maintenance/reset" class="stack" onsubmit="return confirm('Clear and reset the database now? This cannot be undone.');">
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_reset" required placeholder="Type RESET">
+      </label>
+      <button class="button danger full" type="submit">Clear and reset database</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
 <section class="panel">
   <div class="section-title"><h2>Restore procedure</h2></div>
   <div class="checklist">
@@ -41,4 +68,5 @@
     <div>Open Dashboard, Products, and Reports to confirm the restored data is visible.</div>
   </div>
 </section>
+<script src="/static/password-toggle.js"></script>
 {% endblock %}
