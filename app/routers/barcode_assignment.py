@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import Batch, BatchItem, BatchType, Product, Serial, WarehouseLevel
+from app.models import Batch, BatchItem, BatchType, Product, Serial, SerialStatus, WarehouseLevel
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import DEFAULT_LABEL_COLUMNS, DEFAULT_LABEL_ROWS, barcode_labels_pdf, label_layout, serials_xlsx
 from app.services.expiry import parse_optional_date
@@ -56,6 +56,7 @@ def generate_assignment(
     product_id: int = Form(...),
     quantity: int = Form(...),
     prefix: str = Form(""),
+    initial_status: str = Form(SerialStatus.IN_STOCK.value),
     product_batch_number: str = Form(""),
     mfg_date: str = Form(""),
     expiry_date: str = Form(""),
@@ -71,6 +72,9 @@ def generate_assignment(
     if not user_can_generate_product_qr(user, product):
         return _assignment_error(request, db, user, "Purchase QR printing is not enabled for this product")
     try:
+        parsed_status = SerialStatus(initial_status)
+        if parsed_status not in {SerialStatus.GENERATED, SerialStatus.IN_STOCK}:
+            raise InventoryError("Choose either purchase/future stock or existing stock")
         parsed_mfg_date = parse_optional_date(mfg_date)
         parsed_expiry_date = parse_optional_date(expiry_date)
         if parsed_mfg_date and parsed_expiry_date and parsed_expiry_date <= parsed_mfg_date:
@@ -91,7 +95,8 @@ def generate_assignment(
                 )
             ],
             notes=notes,
-            source="MANUAL",
+            source="GENERATED" if parsed_status == SerialStatus.GENERATED else "MANUAL",
+            initial_status=parsed_status,
         )
     except (InventoryError, ValueError) as exc:
         return _assignment_error(request, db, user, str(exc))

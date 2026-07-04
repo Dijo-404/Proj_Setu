@@ -34,6 +34,12 @@
         <label>Quantity<input name="quantity" type="number" min="1" max="5000" required></label>
         <label>Prefix<input name="prefix" placeholder="Uses product code"></label>
       </div>
+      <label>Start as
+        <select name="initial_status">
+          <option value="GENERATED">Purchase / future stock</option>
+          <option value="IN_STOCK" selected>Existing stock</option>
+        </select>
+      </label>
       <div class="two-col">
         <label>Product batch<input name="product_batch_number" placeholder="CP24001"></label>
         <label>Warehouse<input name="warehouse" placeholder="WH1"></label>

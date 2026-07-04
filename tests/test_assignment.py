@@ -16,6 +16,7 @@ from app.security import create_session_token
 from app.services import assignment as assignment_service
 from app.services.assignment import AssignmentLine, assign_barcodes_to_existing_stock, parse_bulk_assignment_xlsx
 from app.services.exports import serials_xlsx
+from app.services.inventory import add_serial_to_batch, create_batch
 from app.templates import templates
 
 
@@ -199,6 +200,7 @@ def test_purchase_qr_generation_requires_product_permission():
             product_id=allowed_id,
             quantity=1,
             prefix="",
+            initial_status=SerialStatus.IN_STOCK.value,
             product_batch_number="",
             mfg_date="",
             expiry_date="",
@@ -212,6 +214,7 @@ def test_purchase_qr_generation_requires_product_permission():
             product_id=blocked_id,
             quantity=1,
             prefix="",
+            initial_status=SerialStatus.IN_STOCK.value,
             product_batch_number="",
             mfg_date="",
             expiry_date="",
@@ -244,6 +247,58 @@ def test_purchase_qr_generation_requires_product_permission():
     assert admin_blocked.status_code == 303
     assert purchase_blocked_detail_status == 403
     assert serial_count == 2
+
+
+def test_purchase_assignment_can_generate_serials_for_purchase_scan():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        db.add(User(id=1, username="purchase", password_hash="x", role="purchase", active=True))
+        db.add(
+            Product(
+                product_code="PURQR",
+                product_name="Purchase QR",
+                hsn="0910",
+                gst_rate=5,
+                unit="Pcs",
+                tally_stock_item_name="Purchase QR",
+                purchase_qr_print_allowed=True,
+            )
+        )
+        db.commit()
+        product_id = db.scalar(select(Product.id).where(Product.product_code == "PURQR"))
+
+        response = generate_assignment(
+            signed_request(1, path="/barcode-assignment/generate", method="POST"),
+            product_id=product_id,
+            quantity=1,
+            prefix="",
+            initial_status=SerialStatus.GENERATED.value,
+            product_batch_number="",
+            mfg_date="",
+            expiry_date="",
+            warehouse="",
+            warehouse_level="Company Warehouse",
+            notes="",
+            db=db,
+        )
+        serial = db.scalar(select(Serial).where(Serial.product_id == product_id))
+        serial_status = serial.status
+        batch = create_batch(db, db.get(User, 1), BatchType.PURCHASE, "Supplier", "")
+        add_serial_to_batch(db, batch, db.get(User, 1), serial.serial_number)
+        item_count = db.scalar(select(func.count(BatchItem.id)).where(BatchItem.batch_id == batch.id))
+
+    engine.dispose()
+
+    assert response.status_code == 303
+    assert serial_status == SerialStatus.GENERATED.value
+    assert item_count == 1
 
 
 def test_purchase_bulk_assignment_rejects_products_without_qr_permission():

@@ -201,6 +201,11 @@ def serial_allowed_for_batch(serial: Serial, batch_type: BatchType) -> None:
     if not serial.active or status in {SerialStatus.REPLACED, SerialStatus.INVALID}:
         raise InventoryError(f"{serial.serial_number} is inactive")
     if batch_type in {BatchType.PURCHASE, BatchType.RECEIVE}:
+        if status == SerialStatus.IN_STOCK:
+            raise InventoryError(
+                f"{serial.serial_number} is already in stock. "
+                "For purchase, scan a QR label that starts as Generated."
+            )
         if status not in {SerialStatus.GENERATED, SerialStatus.PURCHASE_RETURN}:
             raise InventoryError(f"{serial.serial_number} cannot be purchased from {serial.status}")
     elif batch_type == BatchType.SALE:
