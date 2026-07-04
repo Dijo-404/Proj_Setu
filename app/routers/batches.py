@@ -1035,8 +1035,12 @@ def tally_excel_export(request: Request, batch_id: int, db: Session = Depends(ge
     require_permission(request, db, "tally_xml", {"edit", "yes"})
     if batch.batch_type not in TALLY_EXCEL_EXPORT_BATCH_TYPES or not batch.items:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
+    try:
+        data = batch_tally_xlsx(batch, get_all_settings(db))
+    except TallySyncError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return Response(
-        batch_tally_xlsx(batch),
+        data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-tally.xlsx"},
     )

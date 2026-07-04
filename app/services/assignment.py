@@ -29,8 +29,8 @@ PRODUCT_NAME_HEADERS = {
     "description",
     "goods",
 }
-QUANTITY_HEADERS = {"quantity", "qty"}
-RATE_HEADERS = {"rate", "unit rate", "price"}
+QUANTITY_HEADERS = {"quantity", "qty", "billed quantity"}
+RATE_HEADERS = {"rate", "unit rate", "price", "item rate"}
 BATCH_HEADERS = {"batch", "batch no", "batch number", "product batch"}
 MFG_DATE_HEADERS = {"mfg date", "manufacturing date", "manufacture date"}
 EXPIRY_DATE_HEADERS = {"expiry date", "expiry", "exp date"}
@@ -39,9 +39,9 @@ WAREHOUSE_LEVEL_HEADERS = {"warehouse level", "franchise level", "location level
 HSN_HEADERS = {"hsn", "hsn sac", "hsn code"}
 GST_HEADERS = {"gst", "gst rate", "gst percentage", "gst percent"}
 CGST_HEADERS = {"cgst", "cgst rate", "cgst percentage", "cgst percent"}
-SGST_HEADERS = {"sgst", "sgst rate", "sgst percentage", "sgst percent"}
+SGST_HEADERS = {"sgst", "sgst rate", "sgst utgst rate", "sgst percentage", "sgst percent"}
 IGST_HEADERS = {"igst", "ignst", "igst rate", "ignst rate", "igst percentage", "igst percent"}
-UNIT_HEADERS = {"unit", "per", "uom"}
+UNIT_HEADERS = {"unit", "per", "uom", "item rate per"}
 
 
 @dataclass(frozen=True)
