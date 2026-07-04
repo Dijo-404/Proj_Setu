@@ -7,9 +7,15 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $projectRoot = [IO.Path]::GetFullPath($ProjectDir).TrimEnd("\")
-$pythonExe = [IO.Path]::GetFullPath((Join-Path $projectRoot ".venv\Scripts\python.exe"))
 $startScript = [IO.Path]::GetFullPath((Join-Path $projectRoot "start_setu.bat"))
+$startHelper = [IO.Path]::GetFullPath((Join-Path $projectRoot "deployment\windows\start_setu.ps1"))
+$processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
 $stoppedAnything = $false
+
+if (-not (Test-Path -LiteralPath $processHelper)) {
+    throw "The Setu process helper was not found: '$processHelper'."
+}
+. $processHelper
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service -and $service.Status -ne "Stopped") {
@@ -27,33 +33,12 @@ if ($service -and $service.Status -ne "Stopped") {
     $stoppedAnything = $true
 }
 
-$setuProcesses = @(
-    Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
-        Where-Object {
-            $_.ProcessId -ne $PID -and
-            $_.ExecutablePath -and
-            [string]::Equals(
-                [IO.Path]::GetFullPath($_.ExecutablePath),
-                $pythonExe,
-                [StringComparison]::OrdinalIgnoreCase
-            ) -and
-            $_.CommandLine -match "(?i)(?:^|\s)-m\s+uvicorn\s+app\.main:app(?:\s|$)"
-        }
-)
+$setuProcesses = @(Get-SetuServerProcesses -ProjectRoot $projectRoot -ExcludeProcessIds @($PID))
 
 foreach ($process in $setuProcesses) {
-    $launcher = Get-CimInstance Win32_Process -Filter "ProcessId = $($process.ParentProcessId)" -ErrorAction SilentlyContinue
-    $launcherIsSetuBatch = (
-        $launcher -and
-        $launcher.Name -ieq "cmd.exe" -and
-        $launcher.CommandLine -and
-        (
-            $launcher.CommandLine.IndexOf($startScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-            $launcher.CommandLine -match "(?i)start_setu\.bat"
-        )
-    )
+    $launcher = Get-SetuLauncherProcess -ServerProcess $process -StartScript $startScript -StartHelper $startHelper
 
-    if ($launcherIsSetuBatch) {
+    if ($launcher) {
         Write-Host "Stopping the existing Setu server window..."
         & taskkill.exe /PID $launcher.ProcessId /T /F | Out-Host
         if ($LASTEXITCODE -ne 0) {

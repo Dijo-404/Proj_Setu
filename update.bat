@@ -21,7 +21,12 @@ $ProjectRoot = Split-Path -Parent $env:SETU_UPDATE_BAT
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $StartScript = Join-Path $ProjectRoot "start_setu.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setu.ps1"
+$ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
 $ServiceName = "SetuQrTallyBridge"
+$restartAsService = $false
+$restartAsConsole = $false
+$restartHostAddress = "127.0.0.1"
+$restartPort = $Port
 
 function Write-Section {
     param([string]$Title)
@@ -41,11 +46,17 @@ function Start-SetuServer {
         $svc = Get-Service -Name $ServiceName
         $svc.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
         Write-Host "Setu is running as a Windows service." -ForegroundColor Green
+        return $true
     }
-    else {
-        Start-Process -FilePath $StartScript -ArgumentList @("-Port", "$Port")
+
+    if ($restartAsConsole) {
+        Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort")
         Write-Host "Setu is running in a new window." -ForegroundColor Green
+        return $true
     }
+
+    Write-Host "Setu was not running before the update; leaving it stopped." -ForegroundColor Yellow
+    return $false
 }
 
 function Restore-PreviousVersion {
@@ -65,6 +76,10 @@ if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
 if (-not (Test-Path $VenvPython)) {
     throw "Setu is not set up yet. Run setup.bat first."
 }
+if (-not (Test-Path $ProcessHelper)) {
+    throw "The Setu process helper is missing: '$ProcessHelper'."
+}
+. $ProcessHelper
 
 $branch = (@(& git branch --show-current) -join "").Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($branch)) {
@@ -80,7 +95,14 @@ if ($originUrl -notmatch "(?i)github\.com[:/]Dijo-404/Proj_Setu(?:\.git)?/?$") {
 }
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-$restartAsService = $null -ne $service
+$restartAsService = $service -and $service.Status -ne "Stopped"
+$runningSetuProcesses = @(Get-SetuServerProcesses -ProjectRoot $ProjectRoot -ExcludeProcessIds @($PID))
+$restartAsConsole = (-not $restartAsService) -and $runningSetuProcesses.Count -gt 0
+if ($restartAsConsole) {
+    $launchInfo = Get-SetuServerLaunchInfo -Process $runningSetuProcesses[0] -DefaultHostAddress $restartHostAddress -DefaultPort $restartPort
+    $restartHostAddress = $launchInfo.HostAddress
+    $restartPort = $launchInfo.Port
+}
 if ($restartAsService -and -not (Test-AdminShell)) {
     throw "Setu is installed as a Windows service. Right-click update.bat, choose 'Run as administrator', and try again."
 }
@@ -147,8 +169,13 @@ catch {
         Write-Host "Automatic rollback failed. Resolve the Git/pip message above before retrying." -ForegroundColor Red
     }
     try {
-        Start-SetuServer
-        Write-Host "The previous version was restored and the server is running again." -ForegroundColor Yellow
+        $serverRestarted = Start-SetuServer
+        if ($serverRestarted) {
+            Write-Host "The previous version was restored and the server is running again." -ForegroundColor Yellow
+        }
+        else {
+            Write-Host "The previous version was restored. Setu was left stopped because it was not running before the update." -ForegroundColor Yellow
+        }
     }
     catch {
         Write-Host "The server could not be restarted automatically. Start it manually with start_setu.bat." -ForegroundColor Red
@@ -157,6 +184,13 @@ catch {
 }
 
 Write-Section "Restart Server"
-Start-SetuServer
+$serverRestarted = Start-SetuServer
 Write-Host "Setu was updated successfully." -ForegroundColor Green
-Write-Host "Local URL: http://127.0.0.1:$Port"
+if ($serverRestarted) {
+    if ($restartAsService) {
+        Write-Host "Local URL: http://127.0.0.1:$Port"
+    }
+    else {
+        Write-Host "Local URL: http://${restartHostAddress}:$restartPort"
+    }
+}

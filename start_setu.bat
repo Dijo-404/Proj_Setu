@@ -2,6 +2,8 @@
 setlocal
 cd /d "%~dp0"
 
+set "PROJECT_DIR=%CD%"
+set "START_SCRIPT=%PROJECT_DIR%\deployment\windows\start_setu.ps1"
 set "HOST_ADDRESS=127.0.0.1"
 set "PORT=8000"
 
@@ -41,6 +43,15 @@ shift
 goto parse_args
 
 :args_done
+if not exist "%START_SCRIPT%" (
+    echo The Setu start helper was not found:
+    echo %START_SCRIPT%
+    echo.
+    echo Check that the deployment\windows folder is present, then try again.
+    pause
+    exit /b 1
+)
+
 if not exist "%~dp0.venv\Scripts\python.exe" (
     echo Setu is not set up yet. Run setup.bat first.
     echo.
@@ -48,12 +59,9 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
     exit /b 1
 )
 
-echo Starting Setu QR Tally Bridge...
-echo Open: http://%HOST_ADDRESS%:%PORT%
-echo Press Ctrl+C in this window to stop the app.
-"%~dp0.venv\Scripts\python.exe" -m uvicorn app.main:app --host "%HOST_ADDRESS%" --port "%PORT%"
-set "APP_EXIT=%ERRORLEVEL%"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -ProjectDir "%PROJECT_DIR%" -HostAddress "%HOST_ADDRESS%" -Port "%PORT%"
+set "START_EXIT=%ERRORLEVEL%"
 echo.
-if not "%APP_EXIT%"=="0" echo Setu stopped with error code %APP_EXIT%.
+if not "%START_EXIT%"=="0" echo Setu stopped with error code %START_EXIT%.
 pause
-exit /b %APP_EXIT%
+exit /b %START_EXIT%
