@@ -37,6 +37,8 @@ let cameraStarting = false;
 let toastContainer = null;
 let scanCount = Number(scanCountLabel?.dataset.count || 0);
 let saleReturnPending = Number(saleReturnStatus?.dataset.pending || 0);
+const MAX_DESKTOP_TOASTS = 3;
+const MAX_MOBILE_TOASTS = 2;
 
 function ensureToastContainer() {
   if (toastContainer) return toastContainer;
@@ -47,10 +49,13 @@ function ensureToastContainer() {
 }
 
 function showToast(message, kind = "info", duration = 3500) {
+  const container = ensureToastContainer();
+  pruneToasts(container, kind);
   const toast = document.createElement("div");
   toast.className = `scan-toast ${kind}`;
+  toast.dataset.kind = kind;
   toast.textContent = message;
-  ensureToastContainer().appendChild(toast);
+  container.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("visible"));
   if (kind === "success") playBeep(800, 120);
   if (kind === "error") playBeep(300, 200);
@@ -58,7 +63,26 @@ function showToast(message, kind = "info", duration = 3500) {
   if (duration > 0) setTimeout(() => dismissToast(toast), duration);
 }
 
+function maxVisibleToasts() {
+  return window.matchMedia("(max-width: 640px)").matches ? MAX_MOBILE_TOASTS : MAX_DESKTOP_TOASTS;
+}
+
+function pruneToasts(container, kind) {
+  const activeToasts = Array.from(container.querySelectorAll(".scan-toast"));
+  if (kind === "success") {
+    activeToasts
+      .filter((toast) => toast.dataset.kind === "success")
+      .forEach((toast) => toast.remove());
+  }
+
+  const remainingToasts = Array.from(container.querySelectorAll(".scan-toast"));
+  while (remainingToasts.length >= maxVisibleToasts()) {
+    remainingToasts.shift().remove();
+  }
+}
+
 function dismissToast(toast) {
+  if (!toast.parentNode) return;
   toast.classList.remove("visible");
   toast.classList.add("exit");
   toast.addEventListener("animationend", () => toast.remove(), { once: true });
