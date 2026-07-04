@@ -49,6 +49,12 @@ Normal startup after setup:
 .\start_setu.bat
 ```
 
+Stop Setu, including the Windows service when installed:
+
+```powershell
+.\stop_setu.bat
+```
+
 Manual fallback:
 
 ```powershell

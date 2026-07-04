@@ -43,6 +43,15 @@ start_setu.bat
 
 Use `start_setu.bat --port 8001` if port `8000` is already in use.
 
+Stop the app, including the Windows service when installed, with:
+
+```text
+stop_setu.bat
+```
+
+Run `stop_setu.bat` as Administrator when Setu is installed as a Windows
+service.
+
 To pull the latest version from GitHub, update dependencies, and restart the
 server, run:
 

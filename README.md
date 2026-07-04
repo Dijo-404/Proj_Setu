@@ -47,7 +47,15 @@ After setup, start the app anytime with:
 start_setu.bat
 ```
 
-Use `setup.bat` for first-time setup and `start_setu.bat` for normal app startup. No root-level PowerShell helper files are needed for the client-facing flow.
+To stop the app, including the Windows service if it is installed, double-click:
+
+```text
+stop_setu.bat
+```
+
+If Setu is installed as a Windows service, run `stop_setu.bat` as Administrator.
+
+Use `setup.bat` for first-time setup, `start_setu.bat` for normal app startup, and `stop_setu.bat` when the server needs to be stopped. No root-level PowerShell helper files are needed for the client-facing flow.
 
 To download the latest version from GitHub and restart Setu, double-click:
 
