@@ -199,6 +199,16 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("batch_purchase", "Purchase batch", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_sale", "Sale batch", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_audit", "Audit batch", "Create, scan, submit, download audit PDF", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.AUDITOR)), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "audit_assignment_manage",
+                    "Audit assignments",
+                    "Assign timed product audits; auditors can view their assigned work",
+                    {
+                        **_defaults(DATA_OPTIONS, "edit", _roles(Role.ADMIN, Role.DIRECTORS)),
+                        Role.AUDITOR.value: "view",
+                    },
+                    DATA_OPTIONS,
+                ),
                 AccessRowDefinition("batch_sales_return", "Sales return", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_purchase_return", "Purchase return", "Create, scan, edit draft, submit", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE)), ACTION_OPTIONS),
                 AccessRowDefinition("batch_issue", "Stock issue", "Create, scan, edit draft, submit", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),

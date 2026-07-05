@@ -65,6 +65,7 @@
   </form>
   <section class="metric-grid director-detail-grid">
     <div class="metric"><span>Verified</span><strong>{{ report.reconciliation.verified }}</strong></div>
+    <div class="metric"><span>Pending</span><strong>{{ report.reconciliation.pending }}</strong></div>
     <div class="metric danger"><span>Missing</span><strong>{{ report.reconciliation.missing }}</strong></div>
     <div class="metric warn"><span>Extra</span><strong>{{ report.reconciliation.extra }}</strong></div>
     <div class="metric"><span>Total checked</span><strong>{{ report.reconciliation.total }}</strong></div>
@@ -85,6 +86,7 @@
           <th>Date and time</th>
           <th>Audited by</th>
           <th>Products</th>
+          <th>Pending</th>
           <th>Missing</th>
           <th>Extra</th>
         </tr>
@@ -97,11 +99,12 @@
           <td>{{ row.audit_at.strftime('%d %b %Y, %I:%M %p') }}</td>
           <td>{{ row.audited_by }}</td>
           <td>{{ row.products }}</td>
+          <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
           <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
           <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="empty">No audit batches found</td></tr>
+        <tr><td colspan="8" class="empty">No audit batches found</td></tr>
         {% endfor %}
       </tbody>
     </table>

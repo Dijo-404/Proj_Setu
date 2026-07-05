@@ -2,12 +2,12 @@
   <div class="chart-card chart-card--donut">
     <div class="chart-head">
       <div>
-        <h2>Stock mix</h2>
+        <h2>QR status mix</h2>
         <p>{{ stock_chart.total }} serials</p>
       </div>
     </div>
     <div class="chart-body">
-      <div class="donut" style="--chart-bg: {{ stock_chart.gradient }};" aria-label="Stock mix chart">
+      <div class="donut" style="--chart-bg: {{ stock_chart.gradient }};" aria-label="QR status mix chart">
         <span>{{ stock_chart.total }}</span>
       </div>
       <div class="chart-legend">
@@ -18,7 +18,7 @@
           <strong>{{ item.value }}</strong>
         </div>
         {% else %}
-        <p class="chart-empty">No stock data yet</p>
+        <p class="chart-empty">No QR data yet</p>
         {% endfor %}
       </div>
     </div>

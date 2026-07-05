@@ -11,7 +11,7 @@
     <select name="status">
       <option value="">All status</option>
       {% for value in ['GENERATED','PURCHASED','IN_STOCK','SOLD','RETURNED','PURCHASE_RETURN','ISSUED','DAMAGED','MISSING','INVALID','REPLACED'] %}
-      <option value="{{ value }}" {{ 'selected' if status == value else '' }}>{{ value }}</option>
+      <option value="{{ value }}" {{ 'selected' if status == value else '' }}>{{ 'UNASSIGNED' if value == 'GENERATED' else value }}</option>
       {% endfor %}
     </select>
     <button class="button" type="submit">Search</button>
@@ -29,7 +29,7 @@
           <td>{{ serial.product.product_name }}</td>
           <td>{{ serial.product_batch_number or '-' }}<small>{{ serial.location.full_path if serial.location else (serial.warehouse or '') }}{% if serial.warehouse %} · {{ serial.warehouse_level }}{% endif %}</small></td>
           <td>{{ serial.expiry_date.strftime('%d %b %Y') if serial.expiry_date else '-' }}</td>
-          <td><span class="status {{ serial.status|lower }}">{{ serial.status }}</span></td>
+          <td><span class="status {{ serial.display_status|lower }}">{{ serial.display_status }}</span></td>
           <td>{% if role_can(user, 'label_files') %}<a href="/serials/labels?ids={{ serial.id }}">Label</a>{% else %}-{% endif %}</td>
         </tr>
         {% else %}

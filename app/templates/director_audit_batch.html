@@ -20,6 +20,10 @@
     <span>Audited by</span>
     <strong>{{ report.audited_by }}</strong>
   </div>
+  <div class="metric">
+    <span>Pending stock</span>
+    <strong>{{ report.pending }}</strong>
+  </div>
   <div class="metric danger">
     <span>Missing stock</span>
     <strong>{{ report.missing }}</strong>
@@ -41,6 +45,7 @@
         <tr>
           <th>Product</th>
           <th>Product code</th>
+          <th>Pending</th>
           <th>Missing</th>
           <th>Extra</th>
           <th>Verified</th>
@@ -52,13 +57,14 @@
         <tr>
           <td><strong>{{ row.product_name }}</strong></td>
           <td>{{ row.product_code }}</td>
+          <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
           <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
           <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
           <td>{{ row.verified }}</td>
           <td>{{ row.total }}</td>
         </tr>
         {% else %}
-        <tr><td colspan="6" class="empty">No missing or extra stock in this audit</td></tr>
+        <tr><td colspan="7" class="empty">No pending, missing, or extra stock in this audit</td></tr>
         {% endfor %}
       </tbody>
     </table>

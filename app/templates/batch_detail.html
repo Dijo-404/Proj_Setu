@@ -34,6 +34,12 @@
 {% if tally_excel_error %}<div class="alert error">{{ tally_excel_error }}</div>{% endif %}
 {% if tally_excel_message %}<div class="alert">{{ tally_excel_message }}</div>{% endif %}
 {% if batch.last_error %}<div class="alert warn">{{ batch.last_error }}</div>{% endif %}
+{% if batch.batch_type == 'AUDIT' and batch.audit_assignment %}
+<div class="alert">
+  Cumulative audit for <strong>{{ batch.audit_assignment.product.product_name }}</strong>.
+  Scans from every batch in this assignment are reconciled together; remaining stock becomes missing only after the audit deadline.
+</div>
+{% endif %}
 {% if shelf_state.controlled %}
 <div
   id="shelf-verification-status"
@@ -258,6 +264,7 @@
   </div>
   <section class="metric-grid audit-grid">
     <div class="metric"><span>Verified</span><strong>{{ audit_summary.verified }}</strong></div>
+    <div class="metric"><span>Pending</span><strong>{{ audit_summary.pending }}</strong></div>
     <div class="metric danger"><span>Missing</span><strong>{{ audit_summary.missing }}</strong></div>
     <div class="metric warn"><span>Extra</span><strong>{{ audit_summary.extra }}</strong></div>
   </section>
@@ -307,7 +314,7 @@
             Not required
             {% endif %}
           </td>
-          <td><span class="status {{ item.serial.status|lower }}">{{ item.serial.status }}</span></td>
+          <td><span class="status {{ item.serial.display_status|lower }}">{{ item.serial.display_status }}</span></td>
           <td>
             {% if batch.status == 'DRAFT' and can_edit_batch and batch.batch_type != 'AUDIT' %}
             <form method="post" action="/batches/{{ batch.id }}/items/{{ item.id }}/rate" class="inline-form compact-inline" data-autosave="/batches/{{ batch.id }}/items/{{ item.id }}/rate">

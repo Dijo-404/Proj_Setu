@@ -44,7 +44,7 @@
         <summary class="{{ 'active' if request.url.path in ['/batches', '/batches/purchase', '/batches/sales'] or (request.url.path.startswith('/batches') and nav_batch_type in ['ISSUE', 'AUDIT']) else '' }}">Stock</summary>
         <div class="nav-menu__panel">
           {% if role_can(user, 'batch_issue') %}<a href="/batches/new?batch_type=ISSUE">Issue</a>{% endif %}
-          {% if role_can(user, 'batch_audit') %}<a href="/batches/new?batch_type=AUDIT">Audit</a>{% endif %}
+          {% if role_can(user, 'batch_audit') %}<a href="/audit-assignments">Audits</a>{% endif %}
           {% if role_can(user, 'purchase_data') %}<a href="/batches/purchase">Purchase batches</a>{% endif %}
           {% if role_can(user, 'sales_data') %}<a href="/batches/sales">Sales batches</a>{% endif %}
           {% if role_can(user, 'batch_list') %}<a href="/batches">All batches</a>{% endif %}
@@ -73,6 +73,9 @@
       {% endif %}
       {% if role_can(user, 'page_serials') and role_can(user, 'serial_data') %}
       <a href="/serials" class="{{ 'active' if request.url.path.startswith('/serials') else '' }}">Serials</a>
+      {% endif %}
+      {% if role_can(user, 'audit_assignment_manage') %}
+      <a href="/audit-assignments" class="{{ 'active' if request.url.path.startswith('/audit-assignments') else '' }}">Audit assignments</a>
       {% endif %}
       {% if role_can(user, 'page_reports') and role_can(user, 'reports_data') %}
       <details class="nav-menu">

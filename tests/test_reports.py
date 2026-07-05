@@ -707,8 +707,8 @@ def test_dashboard_renders_stock_and_activity_charts():
         engine.dispose()
 
     assert response.status_code == 200
-    assert "Stock mix" in response.text
+    assert "QR status mix" in response.text
     assert "Scan activity" in response.text
     assert "In Stock" in response.text
     assert data_response.status_code == 200
-    assert "Stock mix" in data_response.json()["charts_html"]
+    assert "QR status mix" in data_response.json()["charts_html"]

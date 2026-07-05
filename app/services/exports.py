@@ -121,7 +121,7 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
                     serial.expiry_date.isoformat() if serial.expiry_date else "",
                     serial.warehouse or "",
                     serial.warehouse_level,
-                    serial.status,
+                    serial.display_status,
                     serial.created_at.isoformat(),
                 ]
             )
@@ -246,9 +246,10 @@ def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
     summary.append(["Missing", report.get("missing", 0)])
     summary.append(["Extra", report.get("extra", 0)])
     summary.append(["Total findings", report.get("total", 0)])
+    summary.append(["Pending", report.get("pending", 0)])
 
     batches = workbook.create_sheet("Audit Batches")
-    batches.append(["Audit Date", "Audit Batch", "Audited By", "Products", "Verified", "Missing", "Extra", "Total"])
+    batches.append(["Audit Date", "Audit Batch", "Audited By", "Products", "Verified", "Missing", "Extra", "Total", "Pending"])
     for row in report.get("batch_rows", []):
         batches.append(
             safe_row(
@@ -261,12 +262,13 @@ def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
                     row.get("missing", 0),
                     row.get("extra", 0),
                     row.get("total", 0),
+                    row.get("pending", 0),
                 ]
             )
         )
 
     products = workbook.create_sheet("Product Reconciliation")
-    products.append(["Product Code", "Product Name", "Audit Batches", "Verified", "Missing", "Extra", "Total"])
+    products.append(["Product Code", "Product Name", "Audit Batches", "Verified", "Missing", "Extra", "Total", "Pending"])
     for row in report.get("product_rows", []):
         products.append(
             safe_row(
@@ -278,6 +280,7 @@ def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
                     row.get("missing", 0),
                     row.get("extra", 0),
                     row.get("total", 0),
+                    row.get("pending", 0),
                 ]
             )
         )

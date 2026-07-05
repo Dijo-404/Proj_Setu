@@ -16,7 +16,8 @@ Setu is used from a browser on the factory LAN. Staff sign in, scan serial QR la
 - `admin` and `super_admin`: full setup, products, labels, assignment, replacement, reports, Tally settings, sync retry, maintenance, and users.
 - `purchase`: purchase and purchase-return batches.
 - `sales`: sale and sales-return batches.
-- `auditor`: audit batches.
+- `directors`: directors reports and timed audit assignment.
+- `auditor`: assigned audit batches.
 
 Manual serial entry is admin-only. Non-admin users should use the camera or photo scan controls.
 
@@ -116,12 +117,18 @@ It is clearly marked as provisional and is not the final statutory GST invoice.
 
 ## Audit
 
-1. Open `Batches` -> `Audit`.
-2. Enter location/reference details.
-3. Scan physical stock.
-4. Submit the batch.
-5. Review verified, missing, and extra findings.
-6. Download the audit PDF when needed.
+1. An admin or director opens `Audit assignments`, selects one product and
+   auditor, and sets the start and end time.
+2. Setu freezes the in-stock serials expected for that product and opens the
+   auditor's first batch.
+3. The auditor opens `Audit assignments`, scans physical stock, and submits the
+   batch. More batches may be opened during the same audit window.
+4. Setu combines scans from every batch in the assignment. Unscanned serials
+   remain pending during the window, so finding the remaining stock in a later
+   batch clears it.
+5. After the deadline, only serials not scanned in any linked batch appear as
+   missing stock. Review the cumulative reconciliation or download the audit
+   PDF when needed.
 
 ## Returns and Issue
 

@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile, status
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import desc, func, select
@@ -7,6 +9,7 @@ from app.auth import require_permission
 from app.database import get_db
 from app.models import (
     AuditFinding,
+    AuditAssignment,
     Batch,
     BatchItem,
     BatchStatus,
@@ -139,6 +142,12 @@ BATCH_LIST_SCOPES = {
 
 def wants_json(request: Request) -> bool:
     return "application/json" in request.headers.get("accept", "")
+
+
+def as_utc(moment: datetime) -> datetime:
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
 
 
 def action_key_for_batch(batch_type: BatchType) -> str:
@@ -329,6 +338,8 @@ def batch_form_context(
     sale_product_options: list[dict[str, object]] | None = None,
     sale_product_id: str = "",
     sale_quantity: str = "1",
+    audit_assignments: list[AuditAssignment] | None = None,
+    audit_assignment_id: str = "",
     notes: str = "",
     error: str | None = None,
 ) -> dict[str, object]:
@@ -351,6 +362,8 @@ def batch_form_context(
         "sale_product_options": sale_product_options or [],
         "sale_product_id": sale_product_id,
         "sale_quantity": sale_quantity,
+        "audit_assignments": audit_assignments or [],
+        "audit_assignment_id": audit_assignment_id,
         "gst_registration_options": GST_REGISTRATION_OPTIONS,
         "state_options": INDIAN_STATE_OPTIONS,
         "notes": notes,
@@ -363,6 +376,23 @@ def batch_list_rows(db: Session, batch_types: tuple[str, ...] | None = None) -> 
     if batch_types:
         query = query.where(Batch.batch_type.in_(batch_types))
     return db.scalars(query.order_by(desc(Batch.created_at)).limit(80)).all()
+
+
+def open_audit_assignments(db: Session, user) -> list[AuditAssignment]:
+    now = datetime.now(timezone.utc)
+    return db.scalars(
+        select(AuditAssignment)
+        .where(
+            AuditAssignment.auditor_id == user.id,
+            AuditAssignment.starts_at <= now,
+            AuditAssignment.ends_at >= now,
+        )
+        .options(
+            selectinload(AuditAssignment.product),
+            selectinload(AuditAssignment.batches),
+        )
+        .order_by(AuditAssignment.ends_at, AuditAssignment.id)
+    ).all()
 
 
 def _money_text(value) -> str:
@@ -419,7 +449,7 @@ def _batch_items_payload(batch: Batch) -> list[dict[str, object]]:
                 and not item.shelf_verified_at
             ),
             "shelf_required": bool(shelf_controlled and item.serial.product.shelf_verification_interval),
-            "status": item.serial.status,
+            "status": item.serial.display_status,
             "rate": _money_text(item.rate if item.rate is not None else item.serial.product.default_rate),
         }
         for item in batch.items
@@ -493,7 +523,12 @@ def sales_batches(request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/new")
-def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: Session = Depends(get_db)):
+def new_batch(
+    request: Request,
+    batch_type: str = BatchType.PURCHASE.value,
+    audit_assignment_id: str = "",
+    db: Session = Depends(get_db),
+):
     parsed = parse_batch_type(batch_type)
     user = require_permission(request, db, action_key_for_batch(parsed))
     return templates.TemplateResponse(
@@ -504,6 +539,8 @@ def new_batch(request: Request, batch_type: str = BatchType.PURCHASE.value, db: 
             user,
             parsed,
             party_name_options=party_ledger_options(db, parsed),
+            audit_assignments=open_audit_assignments(db, user) if parsed == BatchType.AUDIT else [],
+            audit_assignment_id=audit_assignment_id,
         ),
     )
 
@@ -518,11 +555,57 @@ def create_batch_route(
     party_gst_name: str = Form(""),
     party_gstin: str = Form(""),
     reason_code: str = Form(""),
+    audit_assignment_id: str = Form(""),
     notes: str = Form(""),
     db: Session = Depends(get_db),
 ):
     parsed = parse_batch_type(batch_type)
     user = require_permission(request, db, action_key_for_batch(parsed))
+    assignment = None
+    if parsed == BatchType.AUDIT:
+        try:
+            assignment_id = int(audit_assignment_id)
+        except (TypeError, ValueError):
+            assignment_id = 0
+        assignment = db.scalar(
+            select(AuditAssignment)
+            .where(
+                AuditAssignment.id == assignment_id,
+                AuditAssignment.auditor_id == user.id,
+            )
+            .options(
+                selectinload(AuditAssignment.product),
+                selectinload(AuditAssignment.batches),
+            )
+        )
+        now = datetime.now(timezone.utc)
+        if (
+            not assignment
+            or as_utc(assignment.starts_at) > now
+            or as_utc(assignment.ends_at) < now
+        ):
+            return templates.TemplateResponse(
+                request,
+                "batch_new.html",
+                batch_form_context(
+                    request,
+                    user,
+                    parsed,
+                    audit_assignments=open_audit_assignments(db, user),
+                    audit_assignment_id=audit_assignment_id,
+                    notes=notes,
+                    error="Choose one of your active audit assignments.",
+                ),
+                status_code=400,
+            )
+        if any(batch.status == BatchStatus.DRAFT.value for batch in assignment.batches):
+            draft = next(
+                batch
+                for batch in assignment.batches
+                if batch.status == BatchStatus.DRAFT.value
+            )
+            return RedirectResponse(f"/batches/{draft.id}", status_code=303)
+        party_name = assignment.product.product_name
     party_state = party_state.strip() if parsed == BatchType.SALE else ""
     selected_gst_registration_type = ""
     selected_gst_treatment = ""
@@ -609,6 +692,7 @@ def create_batch_route(
             gst_cgst_rate=cgst_rate,
             gst_sgst_rate=sgst_rate,
             gst_igst_rate=igst_rate,
+            audit_assignment_id=assignment.id if assignment else None,
         )
     except InventoryError as exc:
         db.rollback()
@@ -627,6 +711,8 @@ def create_batch_route(
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
                 party_name_options=party_ledger_options(db, parsed),
+                audit_assignments=open_audit_assignments(db, user) if parsed == BatchType.AUDIT else [],
+                audit_assignment_id=audit_assignment_id,
                 notes=notes,
                 error=str(exc),
             ),
@@ -777,7 +863,7 @@ def scan_into_batch(
             "scan_type": "product",
             "serial": item.serial.serial_number,
             "product": item.serial.product.product_name,
-            "status": item.serial.status,
+            "status": item.serial.display_status,
             **shelf_verification_state(batch),
             **batch_scan_state(db, batch.id),
         }

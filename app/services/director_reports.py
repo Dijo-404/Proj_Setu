@@ -43,6 +43,7 @@ def director_audit_batch_rows(db: Session, limit: int = 30) -> list[dict[str, ob
                 "audit_at": audit_time(batch),
                 "products": len(product_codes),
                 "verified": counts["VERIFIED"],
+                "pending": counts["PENDING"],
                 "missing": counts["MISSING"],
                 "extra": counts["EXTRA"],
                 "total": sum(counts.values()),
@@ -92,6 +93,7 @@ def director_audit_reconciliation_report(
                 "audit_at": audit_time(batch),
                 "products": len(batch_products),
                 "verified": batch_counts["VERIFIED"],
+                "pending": batch_counts["PENDING"],
                 "missing": batch_counts["MISSING"],
                 "extra": batch_counts["EXTRA"],
                 "total": sum(batch_counts.values()),
@@ -108,6 +110,7 @@ def director_audit_reconciliation_report(
                     "product_name": key[1],
                     "audit_batches": set(),
                     "verified": 0,
+                    "pending": 0,
                     "missing": 0,
                     "extra": 0,
                     "total": 0,
@@ -117,6 +120,8 @@ def director_audit_reconciliation_report(
             product_row["total"] = int(product_row["total"]) + 1
             if finding.finding_type == "VERIFIED":
                 product_row["verified"] = int(product_row["verified"]) + 1
+            elif finding.finding_type == "PENDING":
+                product_row["pending"] = int(product_row["pending"]) + 1
             elif finding.finding_type == "MISSING":
                 product_row["missing"] = int(product_row["missing"]) + 1
             elif finding.finding_type == "EXTRA":
@@ -166,6 +171,7 @@ def director_audit_reconciliation_report(
         ),
         "audit_batch_count": len(batches),
         "verified": totals["VERIFIED"],
+        "pending": totals["PENDING"],
         "missing": totals["MISSING"],
         "extra": totals["EXTRA"],
         "total": sum(totals.values()),
@@ -273,6 +279,7 @@ def director_audit_batch_report(db: Session, batch_id: int) -> dict[str, object]
                 "product_code": key[0],
                 "product_name": key[1],
                 "verified": 0,
+                "pending": 0,
                 "missing": 0,
                 "extra": 0,
                 "total": 0,
@@ -281,13 +288,19 @@ def director_audit_batch_report(db: Session, batch_id: int) -> dict[str, object]
         row["total"] = int(row["total"]) + 1
         if finding.finding_type == "VERIFIED":
             row["verified"] = int(row["verified"]) + 1
+        elif finding.finding_type == "PENDING":
+            row["pending"] = int(row["pending"]) + 1
         elif finding.finding_type == "MISSING":
             row["missing"] = int(row["missing"]) + 1
         elif finding.finding_type == "EXTRA":
             row["extra"] = int(row["extra"]) + 1
 
     product_rows = sorted(
-        (row for row in grouped.values() if int(row["missing"]) or int(row["extra"])),
+        (
+            row
+            for row in grouped.values()
+            if int(row["pending"]) or int(row["missing"]) or int(row["extra"])
+        ),
         key=lambda row: (-int(row["missing"]), -int(row["extra"]), str(row["product_name"])),
     )
     counts = Counter(finding.finding_type for finding in batch.audit_findings)
@@ -302,7 +315,7 @@ def director_audit_batch_report(db: Session, batch_id: int) -> dict[str, object]
                 "scanned_status": finding.scanned_status or "-",
             }
             for finding in batch.audit_findings
-            if finding.finding_type in {"MISSING", "EXTRA"}
+            if finding.finding_type in {"PENDING", "MISSING", "EXTRA"}
         ),
         key=lambda row: (str(row["type"]), str(row["product_name"]), str(row["serial_number"])),
     )
@@ -313,6 +326,7 @@ def director_audit_batch_report(db: Session, batch_id: int) -> dict[str, object]
         "product_rows": product_rows,
         "finding_rows": finding_rows,
         "verified": counts["VERIFIED"],
+        "pending": counts["PENDING"],
         "missing": counts["MISSING"],
         "extra": counts["EXTRA"],
         "total": sum(counts.values()),

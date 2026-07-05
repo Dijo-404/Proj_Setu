@@ -27,6 +27,7 @@ def test_runtime_schema_adds_sale_gst_columns_to_batches(tmp_path):
 
     columns = {column["name"] for column in inspect(engine).get_columns("batches")}
     assert {
+        "audit_assignment_id",
         "party_state",
         "party_gst_registration_type",
         "party_gst_name",

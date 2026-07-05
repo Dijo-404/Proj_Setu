@@ -95,6 +95,7 @@ def create_batch(
     gst_cgst_rate: float | None = None,
     gst_sgst_rate: float | None = None,
     gst_igst_rate: float | None = None,
+    audit_assignment_id: int | None = None,
     commit: bool = True,
 ) -> Batch:
     treatment = gst_treatment.strip().upper() if gst_treatment else None
@@ -128,6 +129,7 @@ def create_batch(
             gst_igst_rate=gst_igst_rate,
             reason_code=reason_code.strip().upper() if reason_code else None,
             user_id=user.id,
+            audit_assignment_id=audit_assignment_id,
             notes=notes.strip() if notes else None,
         )
         db.add(batch)
@@ -200,6 +202,15 @@ def serial_allowed_for_batch(serial: Serial, batch_type: BatchType) -> None:
     status = SerialStatus(serial.status)
     if not serial.active or status in {SerialStatus.REPLACED, SerialStatus.INVALID}:
         raise InventoryError(f"{serial.serial_number} is inactive")
+    if status == SerialStatus.GENERATED and batch_type not in {
+        BatchType.PURCHASE,
+        BatchType.RECEIVE,
+        BatchType.QR_ASSIGNMENT,
+    }:
+        raise InventoryError(
+            f"{serial.serial_number} is unassigned. "
+            "Complete its purchase before using this QR in a stock transaction."
+        )
     if batch_type in {BatchType.PURCHASE, BatchType.RECEIVE}:
         if status == SerialStatus.IN_STOCK:
             raise InventoryError(
@@ -239,6 +250,10 @@ def add_serial_to_batch(db: Session, batch: Batch, user: User, serial_number: st
         raise InventoryError("Serial number not found")
     try:
         serial_allowed_for_batch(serial, BatchType(batch.batch_type))
+        if batch.batch_type == BatchType.AUDIT.value and batch.audit_assignment_id:
+            from app.services.audit import validate_assignment_scan
+
+            validate_assignment_scan(batch, user, serial)
         fefo_error = validate_fefo_scan(db, batch, serial)
         if fefo_error:
             raise InventoryError(fefo_error)
@@ -524,4 +539,8 @@ def dashboard_counts(db: Session) -> dict[str, int]:
 
 def status_summary(db: Session) -> dict[str, int]:
     rows = db.execute(select(Serial.status, func.count(Serial.id)).group_by(Serial.status)).all()
-    return defaultdict(int, {status: count for status, count in rows})
+    summary = defaultdict(int)
+    for status, count in rows:
+        label = "UNASSIGNED" if status == SerialStatus.GENERATED.value else status
+        summary[label] += count
+    return summary

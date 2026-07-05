@@ -24,7 +24,7 @@
     <a class="button" href="/batches/new?batch_type=ISSUE">Issue</a>
     {% endif %}
     {% if scope == 'all' and role_can(user, 'batch_audit') %}
-    <a class="button" href="/batches/new?batch_type=AUDIT">Audit</a>
+    <a class="button" href="/audit-assignments">Audits</a>
     {% endif %}
     {% if scope != 'all' and role_can(user, 'batch_list') %}
     <a class="button" href="/batches">All batches</a>

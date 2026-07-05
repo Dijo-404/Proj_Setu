@@ -2285,6 +2285,7 @@ dialog.company-config-modal {
 
 .status.pending_sync,
 .status.generated,
+.status.unassigned,
 .status.draft {
   background: var(--warn-bg);
   color: var(--warn-fg);

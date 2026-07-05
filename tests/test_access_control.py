@@ -23,7 +23,7 @@ def test_role_access_catalog_has_cells_for_every_role():
     assert all(len(row.cells) == role_count for section in sections for row in section.rows)
 
 
-def test_directors_default_access_is_reports_only():
+def test_directors_default_access_is_reports_plus_audit_assignment():
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -45,6 +45,9 @@ def test_directors_default_access_is_reports_only():
     assert config["product_master"]["directors"] == "no"
     assert config["serial_data"]["directors"] == "no"
     assert config["reports_export"]["directors"] == "no"
+    assert config["audit_assignment_manage"]["directors"] == "edit"
+    assert config["audit_assignment_manage"]["admin"] == "edit"
+    assert config["audit_assignment_manage"]["auditor"] == "view"
     assert landing_path_for(config, "directors") == "/reports"
 
 

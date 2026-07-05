@@ -190,6 +190,7 @@ class Product(Base):
 
     serials: Mapped[list["Serial"]] = relationship(back_populates="product")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="product")
+    audit_assignments: Mapped[list["AuditAssignment"]] = relationship(back_populates="product")
 
 
 class StorageLocation(Base):
@@ -256,6 +257,14 @@ class Serial(Base):
     location: Mapped[StorageLocation | None] = relationship(back_populates="serials")
     batch_items: Mapped[list["BatchItem"]] = relationship(back_populates="serial")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="serial")
+    audit_assignment_items: Mapped[list["AuditAssignmentItem"]] = relationship(back_populates="serial")
+
+    @property
+    def display_status(self) -> str:
+        """Use the business-facing name for a QR that is not stock yet."""
+        if self.status == SerialStatus.GENERATED.value:
+            return "UNASSIGNED"
+        return self.status
 
 
 class StockRelocation(Base):
@@ -296,6 +305,43 @@ class RelocationSerial(Base):
     serial: Mapped[Serial] = relationship()
 
 
+class AuditAssignment(Base):
+    __tablename__ = "audit_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), index=True)
+    auditor_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    assigned_by_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+    product: Mapped[Product] = relationship(back_populates="audit_assignments")
+    auditor: Mapped[User] = relationship(foreign_keys=[auditor_id])
+    assigned_by: Mapped[User] = relationship(foreign_keys=[assigned_by_id])
+    expected_items: Mapped[list["AuditAssignmentItem"]] = relationship(
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+    )
+    batches: Mapped[list["Batch"]] = relationship(back_populates="audit_assignment")
+
+
+class AuditAssignmentItem(Base):
+    __tablename__ = "audit_assignment_items"
+    __table_args__ = (
+        UniqueConstraint("assignment_id", "serial_id", name="uq_audit_assignment_serial"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    assignment_id: Mapped[int] = mapped_column(ForeignKey("audit_assignments.id"), index=True)
+    serial_id: Mapped[int] = mapped_column(ForeignKey("serials.id"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    assignment: Mapped[AuditAssignment] = relationship(back_populates="expected_items")
+    serial: Mapped[Serial] = relationship(back_populates="audit_assignment_items")
+
+
 class Batch(Base):
     __tablename__ = "batches"
 
@@ -313,6 +359,11 @@ class Batch(Base):
     gst_igst_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     reason_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    audit_assignment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("audit_assignments.id"),
+        nullable=True,
+        index=True,
+    )
     status: Mapped[str] = mapped_column(String(40), default=BatchStatus.DRAFT.value, index=True)
     tally_voucher_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
     tally_voucher_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
@@ -329,6 +380,7 @@ class Batch(Base):
     synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped[User] = relationship(back_populates="batches")
+    audit_assignment: Mapped[AuditAssignment | None] = relationship(back_populates="batches")
     items: Mapped[list["BatchItem"]] = relationship(back_populates="batch", cascade="all, delete-orphan")
     scan_logs: Mapped[list["ScanLog"]] = relationship(back_populates="batch")
     sync_attempts: Mapped[list["SyncAttempt"]] = relationship(back_populates="batch")

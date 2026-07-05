@@ -56,6 +56,21 @@
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
   <form method="post" action="/batches" class="stack" data-draft="setu:newbatch:{{ batch_type.value }}">
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
+    {% if batch_type.value == 'AUDIT' %}
+    <label>Audit assignment
+      <select name="audit_assignment_id" required>
+        <option value="">Choose an active assignment</option>
+        {% for assignment in audit_assignments|default([], true) %}
+        <option value="{{ assignment.id }}" {% if audit_assignment_id == assignment.id|string %}selected{% endif %}>
+          {{ assignment.product.product_code }} - {{ assignment.product.product_name }}
+        </option>
+        {% endfor %}
+      </select>
+      {% if not audit_assignments %}
+      <span class="muted">No active assignment is available. Ask an admin or director to assign one.</span>
+      {% endif %}
+    </label>
+    {% else %}
     <label>
       {% if batch_type.value == 'SALE' %}Debtor ledger name{% elif batch_type.value == 'SALES_RETURN' %}Customer{% elif batch_type.value in ['PURCHASE', 'RECEIVE', 'PURCHASE_RETURN'] %}Supplier{% else %}Reference{% endif %}
       <input
@@ -73,6 +88,7 @@
       </datalist>
       {% endif %}
     </label>
+    {% endif %}
     {% if batch_type.value == 'SALE' %}
     <div class="two-col">
       <label>GST registration type

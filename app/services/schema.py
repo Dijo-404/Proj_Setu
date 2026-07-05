@@ -48,6 +48,14 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
             connection.execute(
                 text("CREATE INDEX IF NOT EXISTS ix_batches_sync_started_at ON batches (sync_started_at)")
             )
+        if "audit_assignment_id" not in columns:
+            connection.execute(text("ALTER TABLE batches ADD COLUMN audit_assignment_id INTEGER"))
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_batches_audit_assignment_id "
+                    "ON batches (audit_assignment_id)"
+                )
+            )
 
         if "serials" in inspector.get_table_names():
             serial_columns = {column["name"] for column in inspector.get_columns("serials")}

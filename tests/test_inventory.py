@@ -12,7 +12,14 @@ from app.models import (
     TransactionType,
     User,
 )
-from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
+from app.services.inventory import (
+    InventoryError,
+    add_serial_to_batch,
+    apply_batch_statuses,
+    create_batch,
+    generate_serials,
+    status_summary,
+)
 from app.services.shelf_verification import verify_pending_items_on_shelf
 
 
@@ -33,6 +40,8 @@ def test_receive_generated_serial(db_session):
     batch = create_batch(db_session, user, BatchType.RECEIVE, "Supplier", "")
     item = add_serial_to_batch(db_session, batch, user, serial.serial_number)
     assert item.serial.status == SerialStatus.GENERATED.value
+    assert item.serial.display_status == "UNASSIGNED"
+    assert status_summary(db_session)["UNASSIGNED"] == 1
 
 
 def test_unregistered_sale_ignores_stale_gst_number(db_session):
@@ -142,7 +151,41 @@ def test_sale_rejects_generated_serial(db_session):
         )
     )
     assert rejected is not None
-    assert "not available for sale" in rejected.message
+    assert "is unassigned" in rejected.message
+
+
+def test_audit_rejects_generated_unassigned_serial(db_session):
+    user = User(username="audit-unassigned", password_hash="x", role="auditor")
+    product = Product(
+        product_code="SG003",
+        product_name="Pepper",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name="Pepper",
+    )
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1)[0]
+    batch = create_batch(db_session, user, BatchType.AUDIT, "Rack A", "")
+
+    try:
+        add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    except InventoryError as exc:
+        assert "is unassigned" in str(exc)
+    else:
+        assert False, "an unassigned serial must not be accepted by audit"
+
+    rejected = db_session.scalar(
+        select(ScanLog).where(
+            ScanLog.batch_id == batch.id,
+            ScanLog.serial_id == serial.id,
+            ScanLog.status == "REJECTED",
+        )
+    )
+    assert rejected is not None
+    assert "is unassigned" in rejected.message
 
 
 def test_purchase_batch_logs_purchase_transaction(db_session):

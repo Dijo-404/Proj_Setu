@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.auth import require_permission
 from app.database import get_db
 from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
-from app.services.audit import current_missing_stock_findings_query
+from app.services.audit import current_missing_stock_findings_query, refresh_expired_audit_assignments
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
@@ -165,6 +165,7 @@ def reports(
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
+    refresh_expired_audit_assignments(db)
     if has_role(user.role, Role.DIRECTORS) and not has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN}):
         audit_start_dt = parse_period_datetime(audit_start, "audit start")
         audit_end_dt = parse_period_datetime(audit_end, "audit end", end=True)
@@ -249,6 +250,7 @@ def missing_stock_report(
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
+    refresh_expired_audit_assignments(db)
     findings = db.scalars(missing_stock_query(q, start, end)).all()
     return templates.TemplateResponse(
         request,
@@ -279,6 +281,7 @@ def missing_stock_report(
 @router.get("/audit-batches/{batch_id}")
 def director_audit_batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db)):
     user = require_permission(request, db, "reports_data")
+    refresh_expired_audit_assignments(db)
     report = director_audit_batch_report(db, batch_id)
     if report is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Audit batch not found")
@@ -301,6 +304,7 @@ def audit_reconciliation_excel(
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_data")
+    refresh_expired_audit_assignments(db)
     start_at = parse_period_datetime(start, "audit start")
     end_at = parse_period_datetime(end, "audit end", end=True)
     if start_at and end_at and start_at >= end_at:
@@ -432,6 +436,7 @@ def missing_stock_csv(
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
+    refresh_expired_audit_assignments(db)
     findings = db.scalars(missing_stock_query(q, start, end)).all()
     stream = StringIO()
     writer = csv.writer(stream)
@@ -488,6 +493,7 @@ def missing_stock_excel(
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
+    refresh_expired_audit_assignments(db)
     findings = db.scalars(missing_stock_query(q, start, end)).all()
     return Response(
         missing_stock_xlsx(findings),

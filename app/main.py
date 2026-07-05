@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import get_settings
 from app.database import Base, SessionLocal, engine
 from app.middleware import CSRFOriginMiddleware, SessionActivityMiddleware
-from app.routers import account, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, stock_movement, tally_check, users, warehouse
+from app.routers import account, audit_assignments, auth, barcode_assignment, batches, dashboard, expiry, maintenance, products, replacements, reports, serials, settings, stock_movement, tally_check, users, warehouse
 from app.services.backup_worker import start_backup_worker, stop_backup_worker
 from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
@@ -27,6 +27,7 @@ def create_app() -> FastAPI:
     app.include_router(barcode_assignment.router)
     app.include_router(products.router)
     app.include_router(serials.router)
+    app.include_router(audit_assignments.router)
     app.include_router(batches.router)
     app.include_router(reports.router)
     app.include_router(stock_movement.router)

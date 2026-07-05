@@ -9,6 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models import (
+    AuditAssignment,
+    AuditAssignmentItem,
     AuditFinding,
     Batch,
     BatchItem,
@@ -36,12 +38,14 @@ DELETE_ALL_MODELS = (
     AuditFinding,
     SyncAttempt,
     BatchItem,
+    AuditAssignmentItem,
     RelocationSerial,
     InventoryTransaction,
     ScanLog,
     TallyMasterConfirmation,
     StockRelocation,
     Batch,
+    AuditAssignment,
     Serial,
     StorageLocation,
     Product,
