@@ -1,5 +1,4 @@
-from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -60,7 +59,7 @@ def test_admin_and_director_can_assign_timed_product_audit(
         2,
         initial_status=SerialStatus.IN_STOCK,
     )
-    now = datetime.now(ZoneInfo("Asia/Kolkata"))
+    now = datetime.now(timezone(timedelta(hours=5, minutes=30)))
 
     response = assign_audit(
         signed_request(manager.id, "POST"),

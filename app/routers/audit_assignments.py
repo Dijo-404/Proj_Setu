@@ -1,5 +1,4 @@
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse
@@ -15,7 +14,7 @@ from app.services.inventory import InventoryError
 from app.templates import templates
 
 router = APIRouter(prefix="/audit-assignments")
-_IST = ZoneInfo("Asia/Kolkata")
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _parse_local_datetime(value: str, label: str) -> datetime:
