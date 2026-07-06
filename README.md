@@ -22,6 +22,30 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Excel reports, transaction history, scan history, and PDF audit reports
 - SQLite-safe backup download and restore procedure
 
+## Folder Structure
+
+```text
+Proj_Setu/
+|-- README.md                         Project guide and setup notes
+|-- setup.bat                         First-time Windows setup helper
+|-- start_setu.bat                    Start the local/server app
+|-- stop_setu.bat                     Stop the local/server app
+|-- update.bat                        Fast-forward update helper
+|-- requirements.txt                  Python dependency pins
+|-- app/                              FastAPI application
+|   |-- main.py                       App entrypoint and route registration
+|   |-- models.py                     SQLAlchemy database models
+|   |-- routers/                      Page and API route handlers
+|   |-- services/                     Business logic and integrations
+|   |-- static/                       Browser JavaScript, CSS, and assets
+|   `-- templates/                    Jinja HTML templates
+|-- deployment/                       Windows service and Caddy config
+|-- docs/                             Deployment, handoff, and context docs
+|-- tests/                            Pytest coverage
+|-- data/                             Runtime database and backups, ignored by git
+`-- logs/                             Runtime logs, ignored by git
+```
+
 ## Prerequisites
 
 - Python 3.11 for the current pinned dependency set
