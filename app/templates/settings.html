@@ -7,9 +7,14 @@
     <p class="eyebrow">System</p>
     <h1>Settings</h1>
   </div>
-  {% if has_role(user, 'super_admin') %}
+  {% if (role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit')) or has_role(user, 'super_admin') %}
   <div class="actions">
+    {% if role_can(user, 'page_tally_check') and role_can(user, 'tally_check_edit') %}
+    <a class="button" href="/tally-check">Tally Check</a>
+    {% endif %}
+    {% if has_role(user, 'super_admin') %}
     <a class="button" href="/settings/access">Role access</a>
+    {% endif %}
   </div>
   {% endif %}
 </section>

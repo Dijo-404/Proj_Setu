@@ -161,7 +161,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
                     PAGE_OPTIONS,
                 ),
-                AccessRowDefinition("page_tally_check", "Tally Check", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_tally_check", "Tally Check", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition(
                     "page_barcodes",
                     "Barcodes",

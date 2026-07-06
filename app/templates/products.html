@@ -62,8 +62,8 @@
             {{ product.category or '-' }}
             {% if product.brand %}<small>{{ product.brand }}</small>{% endif %}
           </td>
-          <td>{{ product.hsn }}</td>
-          <td>{{ product.gst_rate }}%</td>
+          <td data-product-row-hsn="{{ product.id }}">{{ product.hsn }}</td>
+          <td data-product-row-gst="{{ product.id }}">{{ product.gst_rate }}%</td>
           <td>
             <span class="status active" data-product-row-shelf="{{ product.id }}">Every {{ product.shelf_verification_interval or 1 }} scans</span>
           </td>
@@ -216,8 +216,8 @@
   </div>
   <div class="modal__body product-modal-body">
     <div class="product-summary-grid">
-      <div><span>HSN</span><strong>{{ product.hsn }}</strong></div>
-      <div><span>GST</span><strong>{{ product.gst_rate }}%</strong></div>
+      <div><span>HSN</span><strong data-product-summary-hsn="{{ product.id }}">{{ product.hsn }}</strong></div>
+      <div><span>GST</span><strong data-product-summary-gst="{{ product.id }}">{{ product.gst_rate }}%</strong></div>
       <div><span>Unit</span><strong>{{ product.unit }}</strong></div>
       <div><span>Nickname</span><strong data-product-summary-nickname="{{ product.id }}">{{ product.nickname or '-' }}</strong></div>
       <div><span>Tally item</span><strong data-product-summary-tally="{{ product.id }}">{{ product.tally_stock_item_name }}</strong></div>
@@ -244,6 +244,8 @@
         <label>Nickname<input name="nickname" value="{{ product.nickname or '' }}"></label>
         <label>Category<input name="category" value="{{ product.category or '' }}"></label>
         <label>Brand<input name="brand" value="{{ product.brand or '' }}"></label>
+        <label>HSN<input name="hsn" value="{{ product.hsn }}" required></label>
+        <label>GST %<input name="gst_rate" type="number" min="0" max="100" step="0.01" value="{{ product.gst_rate }}" required></label>
         <label>Tally stock item<input name="tally_stock_item_name" value="{{ product.tally_stock_item_name }}"></label>
         <label>Alternate Tally stock item<input name="alternate_tally_stock_item_name" value="{{ product.alternate_tally_stock_item_name or '' }}"></label>
         <label>Default rate<input name="default_rate" type="number" min="0" step="0.01" value="{{ '%.2f'|format(product.default_rate or 0) }}"></label>
@@ -261,36 +263,6 @@
         <div class="product-modal-actions">
           <span class="autosave-status" data-product-save-status aria-live="polite"></span>
           <button class="button primary" type="submit" data-product-save-button>Save settings</button>
-        </div>
-      </form>
-    </section>
-
-    <section class="product-modal-section">
-      <div class="product-modal-section__head">
-        <div>
-          <h3>Generate label batch</h3>
-          <p>Create serial QR labels for this product.</p>
-        </div>
-      </div>
-      <form method="post" action="/products/{{ product.id }}/generate" class="product-modal-form">
-        <label>Quantity<input name="quantity" type="number" min="1" max="5000" placeholder="How many" required></label>
-        <label>Batch number<input name="product_batch_number" placeholder="Optional"></label>
-        <label>Product expiry<input name="expiry_date" type="date"></label>
-        <label>Warehouse<input name="warehouse" placeholder="Optional"></label>
-        <label>Warehouse level
-          <select name="warehouse_level">
-            {% for level in warehouse_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
-          </select>
-        </label>
-        <label>Serial prefix<input name="prefix" value="{{ product.product_code }}"></label>
-        <label>Start as
-          <select name="initial_status">
-            <option value="GENERATED">Unassigned (purchase / future stock)</option>
-            <option value="IN_STOCK">Existing stock</option>
-          </select>
-        </label>
-        <div class="product-modal-actions">
-          <button class="button primary" type="submit">Generate labels</button>
         </div>
       </form>
     </section>
@@ -361,20 +333,29 @@
 
           const saved = payload.product;
           const intervalText = `Every ${saved.shelf_verification_interval} scans`;
+          const gstText = `${saved.gst_rate}%`;
           const summaryShelf = document.querySelector(`[data-product-summary-shelf="${productId}"]`);
+          const summaryHsn = document.querySelector(`[data-product-summary-hsn="${productId}"]`);
+          const summaryGst = document.querySelector(`[data-product-summary-gst="${productId}"]`);
           const summaryNickname = document.querySelector(`[data-product-summary-nickname="${productId}"]`);
           const summaryTally = document.querySelector(`[data-product-summary-tally="${productId}"]`);
           const summaryAltTally = document.querySelector(`[data-product-summary-alt-tally="${productId}"]`);
           const summaryPurchaseQr = document.querySelector(`[data-product-summary-purchase-qr="${productId}"]`);
           const rowShelf = document.querySelector(`[data-product-row-shelf="${productId}"]`);
+          const rowHsn = document.querySelector(`[data-product-row-hsn="${productId}"]`);
+          const rowGst = document.querySelector(`[data-product-row-gst="${productId}"]`);
           const rowPurchaseQr = document.querySelector(`[data-product-row-purchase-qr="${productId}"]`);
           const rowRate = document.querySelector(`[data-product-row-rate="${productId}"]`);
           if (summaryShelf) summaryShelf.textContent = intervalText;
+          if (summaryHsn) summaryHsn.textContent = saved.hsn || "-";
+          if (summaryGst) summaryGst.textContent = gstText;
           if (summaryNickname) summaryNickname.textContent = saved.nickname || "-";
           if (summaryTally) summaryTally.textContent = saved.tally_stock_item_name || "-";
           if (summaryAltTally) summaryAltTally.textContent = saved.alternate_tally_stock_item_name || "-";
           if (summaryPurchaseQr) summaryPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
           if (rowShelf) rowShelf.textContent = intervalText;
+          if (rowHsn) rowHsn.textContent = saved.hsn || "-";
+          if (rowGst) rowGst.textContent = gstText;
           if (rowPurchaseQr) {
             rowPurchaseQr.textContent = saved.purchase_qr_print_allowed ? "Allowed" : "Blocked";
             rowPurchaseQr.className = `status ${saved.purchase_qr_print_allowed ? "active" : "failed"}`;

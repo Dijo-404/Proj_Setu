@@ -84,6 +84,8 @@ def products(request: Request, q: str = "", error: str = "", db: Session = Depen
         "default_rate_invalid": "Default rate cannot be negative",
         "sales_discount_invalid": "Sales discount must be between 0 and 100%",
         "shelf_interval_invalid": "Shelf verification interval must be between 1 and 1000 scans",
+        "hsn_invalid": "HSN cannot be blank",
+        "gst_rate_invalid": "GST rate must be between 0 and 100%",
         "product_delete_blocked": "Product has serials or transaction history and cannot be deleted",
     }.get(error, error)
     query = select(Product).order_by(Product.product_code)
@@ -266,6 +268,8 @@ def update_product_pricing(
     nickname: str | None = Form(None),
     category: str | None = Form(None),
     brand: str | None = Form(None),
+    hsn: str | None = Form(None),
+    gst_rate: float | None = Form(None),
     tally_stock_item_name: str | None = Form(None),
     alternate_tally_stock_item_name: str | None = Form(None),
     db: Session = Depends(get_db),
@@ -293,6 +297,14 @@ def update_product_pricing(
                 status_code=400,
             )
         return RedirectResponse("/products?error=shelf_interval_invalid", status_code=303)
+    if hsn is not None and not hsn.strip():
+        if wants_json(request):
+            return JSONResponse({"ok": False, "error": "HSN cannot be blank"}, status_code=400)
+        return RedirectResponse("/products?error=hsn_invalid", status_code=303)
+    if gst_rate is not None and (gst_rate < 0 or gst_rate > 100):
+        if wants_json(request):
+            return JSONResponse({"ok": False, "error": "GST rate must be between 0 and 100%"}, status_code=400)
+        return RedirectResponse("/products?error=gst_rate_invalid", status_code=303)
     before = product_snapshot(product)
     product.default_rate = default_rate
     product.sales_discount_rate = sales_discount_rate
@@ -308,6 +320,10 @@ def update_product_pricing(
         product.category = category.strip() or None
     if brand is not None:
         product.brand = brand.strip() or None
+    if hsn is not None:
+        product.hsn = hsn.strip()
+    if gst_rate is not None:
+        product.gst_rate = gst_rate
     if tally_stock_item_name is not None:
         product.tally_stock_item_name = tally_stock_item_name.strip() or product.product_name
     if alternate_tally_stock_item_name is not None:
@@ -332,6 +348,8 @@ def update_product_pricing(
                     "nickname": product.nickname or "",
                     "category": product.category or "",
                     "brand": product.brand or "",
+                    "hsn": product.hsn,
+                    "gst_rate": float(product.gst_rate or 0),
                     "default_rate": float(product.default_rate or 0),
                     "sales_discount_rate": float(product.sales_discount_rate or 0),
                     "shelf_verification_interval": int(product.shelf_verification_interval),
