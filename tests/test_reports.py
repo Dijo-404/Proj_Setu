@@ -15,7 +15,6 @@ from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, I
 from app.routers.reports import (
     audit_reconciliation_excel,
     director_audit_batch_detail,
-    missing_stock_csv,
     missing_stock_excel,
     missing_stock_report,
     reports as reports_route,
@@ -217,12 +216,6 @@ def test_reports_page_includes_filterable_missing_stock():
             q="MISS100",
             db=db,
         )
-        csv_response = missing_stock_csv(
-            signed_request("/reports/missing-stock.csv", b"q=MISS100"),
-            q="MISS100",
-            db=db,
-        )
-        csv_body = csv_response.body.decode()
         xlsx_response = missing_stock_excel(
             signed_request("/reports/missing-stock.xlsx", b"q=MISS100"),
             q="MISS100",
@@ -241,8 +234,10 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "Missing masala" in response_text
     assert "AUD-001" in response_text
     assert "AUD-002" not in response_text
-    assert "Missing stock CSV" in response_text
-    assert "Missing stock XLSX" in response_text
+    assert "Missing stock CSV" not in response_text
+    assert "Missing stock Excel" in response_text
+    assert "data-xlsx-export" in response_text
+    assert "Customize missing stock export" in response_text
 
     assert detail_response.status_code == 200
     assert "<h1>Missing stock report</h1>" in detail_text
@@ -253,12 +248,6 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "MISS100-000002" not in detail_text
     assert 'href="/reports/missing-stock"' in detail_text
     assert ">Overview</a>" in detail_text
-
-    assert csv_response.status_code == 200
-    assert "setu-missing-stock.csv" in csv_response.headers["content-disposition"]
-    assert "Audit Date,Audited By,Audit Batch,Serial" in csv_body
-    assert "LOT-MISS-01,Main warehouse" in csv_body
-    assert "MISS100-000002" not in csv_body
 
     assert xlsx_response.status_code == 200
     assert xlsx_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -400,9 +389,9 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Missing in last audit" in report_text
     assert "Director expiry risk product" in report_text
     assert "Director dead stock product" in report_text
-    assert "Audit reconciliation XLSX" in report_text
+    assert "Audit reconciliation Excel" in report_text
     assert "Audit reconciliation" in report_text
-    assert "Transactions CSV" not in report_text
+    assert "Transactions Excel" not in report_text
     assert "<h2>Transactions</h2>" not in report_text
     assert 'href="/reports"' in report_text
     assert ">Dashboard</a>" not in report_text

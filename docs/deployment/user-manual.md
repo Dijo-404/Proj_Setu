@@ -7,7 +7,7 @@ Setu is used from a browser on the factory LAN. Staff sign in, scan serial QR la
 - `Dashboard`: stock counts, pending sync, recent scans, recent batches, charts, and expiry summary.
 - `Batches`: purchase, sale, audit, sales return, purchase return, issue, and all batches.
 - `Serials`: search serials, view serial history, and open label pages.
-- `Reports`: admin-only scan and transaction reports with CSV/XLSX exports.
+- `Reports`: admin-only scan and transaction reports with Excel exports.
 - `Barcodes`: admin-only assignment and replacement tools.
 - `Admin`: products, expiry, settings, maintenance, and users.
 
@@ -160,7 +160,7 @@ Admins can open `Reports` to review:
 - detailed missing-stock findings from audits, including serial, product, warehouse, storage location, product batch, and expiry
 - pending and failed sync batches
 - expiry summary context
-- CSV/XLSX exports
+- Excel exports
 
 Open a serial detail page to see the full scan and transaction history for one serial.
 

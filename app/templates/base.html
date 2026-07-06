@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#faf9f5">
   <title>{% block title %}Setu Barcode Tally Bridge{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20260705-scan-toast-1">
+  <link rel="stylesheet" href="/static/styles.css?v=20260706-xlsx-export-1">
 </head>
 <body>
   {% if user %}
@@ -197,6 +197,8 @@
   <main class="page">
     {% block content %}{% endblock %}
   </main>
+  {% include "partials/xlsx_export_dialog.html" %}
   <script src="/static/autosave.js?v=20260628-gst-2"></script>
+  <script src="/static/xlsx-export-dialog.js?v=20260706-1"></script>
 </body>
 </html>

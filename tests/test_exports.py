@@ -7,7 +7,15 @@ from sqlalchemy import select
 
 from app.models import BatchType, InventoryTransaction, Product, ScanLog, SerialStatus, TransactionType, User
 from app.services.audit import reconcile_audit_batch
-from app.services.exports import audit_report_pdf, barcode_labels_pdf, barcode_png, label_layout, scans_xlsx, transactions_xlsx
+from app.services.exports import (
+    audit_reconciliation_xlsx,
+    audit_report_pdf,
+    barcode_labels_pdf,
+    barcode_png,
+    label_layout,
+    scans_xlsx,
+    transactions_xlsx,
+)
 from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 
 
@@ -34,6 +42,40 @@ def test_scans_xlsx_escapes_formula_like_values(db_session):
     sheet = workbook.active
 
     assert sheet["D2"].value == "'=HYPERLINK(\"http://bad\")"
+
+
+def test_scans_xlsx_exports_only_selected_fields(db_session):
+    user = User(username="admin", password_hash="x", role="admin")
+    db_session.add(user)
+    db_session.commit()
+    scan = ScanLog(serial_number_raw="SG001-000001", user_id=user.id, action="AUDIT", status="SCANNED")
+    db_session.add(scan)
+    db_session.commit()
+
+    sheet = load_workbook(BytesIO(scans_xlsx([scan], ["Date", "Serial", "Status"]))).active
+
+    assert [cell.value for cell in sheet[1]] == ["Date", "Serial", "Status"]
+    assert [cell.value for cell in sheet[2]][1:] == ["SG001-000001", "SCANNED"]
+
+
+def test_audit_reconciliation_xlsx_filters_detail_fields_and_keeps_summary():
+    data = audit_reconciliation_xlsx(
+        {
+            "audit_batch_count": 1,
+            "missing": 1,
+            "batch_rows": [{"batch_number": "AUD-1", "missing": 1}],
+            "product_rows": [{"product_code": "P-1", "missing": 1}],
+            "finding_rows": [{"serial_number": "S-1"}],
+        },
+        ["Audit Batch", "Missing"],
+    )
+
+    workbook = load_workbook(BytesIO(data))
+
+    assert workbook.sheetnames == ["Summary", "Audit Batches", "Product Reconciliation", "Serial Findings"]
+    assert [cell.value for cell in workbook["Audit Batches"][1]] == ["Audit Batch", "Missing"]
+    assert [cell.value for cell in workbook["Product Reconciliation"][1]] == ["Missing"]
+    assert [cell.value for cell in workbook["Serial Findings"][1]] == ["Audit Batch"]
 
 
 def test_barcode_png_is_square_qr_code():

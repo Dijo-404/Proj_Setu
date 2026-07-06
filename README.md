@@ -19,7 +19,7 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Audit reconciliation for verified, missing, and extra serials
 - Dashboard counts, charts, recent activity, and live refresh
 - Configurable stock movement, stock-cover, slow/dead stock, overstock, and expiry-risk analysis with warehouse/franchise filters
-- CSV/XLSX reports, transaction history, scan history, and PDF audit reports
+- Excel reports, transaction history, scan history, and PDF audit reports
 - SQLite-safe backup download and restore procedure
 
 ## Prerequisites
@@ -272,8 +272,7 @@ Use `Reports` for:
 - Scan history
 - Transaction history
 - Pending sync
-- CSV export
-- XLSX export
+- Excel export
 - Expiry summary context
 
 Use batch detail pages for:

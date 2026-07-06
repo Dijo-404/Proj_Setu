@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-import csv
 from datetime import date
-from io import StringIO
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
-from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import distinct, select
 from sqlalchemy.orm import Session
 
@@ -17,11 +15,9 @@ from app.services.change_audit import record_change
 from app.services.settings import get_all_settings, update_settings
 from app.services.stock_movement import (
     FRANCHISE_LEVELS,
-    MOVEMENT_EXPORT_HEADERS,
     MovementConfig,
     MovementFilters,
     movement_config,
-    movement_export_row,
     stock_movement_pdf,
     stock_movement_rows,
     stock_movement_xlsx,
@@ -264,47 +260,6 @@ def _export_rows(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
-@router.get("/export.csv")
-def stock_movement_csv(
-    request: Request,
-    product_id: int | None = None,
-    warehouse: str = "",
-    category: str = "",
-    brand: str = "",
-    batch: str = "",
-    franchise_level: str = "",
-    expiry_period: str = "",
-    movement: str = "",
-    start: str = "",
-    end: str = "",
-    db: Session = Depends(get_db),
-):
-    require_permission(request, db, "stock_movement_export")
-    rows, _ = _export_rows(
-        db,
-        product_id=product_id,
-        warehouse=warehouse,
-        category=category,
-        brand=brand,
-        batch=batch,
-        franchise_level=franchise_level,
-        expiry_period=expiry_period,
-        movement=movement,
-        start=start,
-        end=end,
-    )
-    stream = StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(MOVEMENT_EXPORT_HEADERS)
-    for row in rows:
-        writer.writerow(movement_export_row(row))
-    return StreamingResponse(
-        iter([stream.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=setu-stock-movement.csv"},
-    )
-
-
 @router.get("/export.xlsx")
 def stock_movement_excel(
     request: Request,
@@ -318,6 +273,7 @@ def stock_movement_excel(
     movement: str = "",
     start: str = "",
     end: str = "",
+    fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "stock_movement_export")
@@ -335,7 +291,7 @@ def stock_movement_excel(
         end=end,
     )
     return Response(
-        stock_movement_xlsx(rows, summary),
+        stock_movement_xlsx(rows, summary, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-stock-movement.xlsx"},
     )

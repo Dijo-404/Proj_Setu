@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Stock Movement - Setu{% endblock %}
 {% block content %}
+{% set movement_excel_fields = "Product Code|Product Name|Category|Brand|Warehouse|Franchise Level|Batch|Current Stock|Units Sold|Movement Ratio %|Average Daily Sales|Average Weekly Sales|Average Monthly Sales|Estimated Days to Sell|Estimated Months to Sell|Movement Status|Inventory Signal|Nearest Expiry|Months Remaining|Expiry Risk|Estimated Unsold|Suggested Action" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">Inventory intelligence</p>
@@ -9,8 +10,7 @@
   </div>
   {% if role_can(user, 'stock_movement_export') %}
   <div class="actions">
-    <a class="button" href="/stock-movement/export.csv?{{ export_query }}">CSV</a>
-    <a class="button" href="/stock-movement/export.xlsx?{{ export_query }}">Excel</a>
+    <a class="button" href="/stock-movement/export.xlsx?{{ export_query }}" data-xlsx-export data-xlsx-title="Customize stock movement export" data-xlsx-parameters="product_id|warehouse|category|brand|batch|franchise_level|expiry_period|movement|start|end" data-xlsx-fields="{{ movement_excel_fields }}">Excel</a>
     <a class="button primary" href="/stock-movement/export.pdf?{{ export_query }}">PDF</a>
   </div>
   {% endif %}

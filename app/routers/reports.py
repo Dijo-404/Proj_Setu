@@ -1,11 +1,9 @@
 from collections import Counter
 from datetime import datetime, timedelta, timezone
-from io import StringIO
-import csv
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import Response
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -16,7 +14,7 @@ from app.services.audit import current_missing_stock_findings_query, refresh_exp
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
-from app.services.exports import audit_reconciliation_xlsx, missing_stock_xlsx, safe_row, scans_xlsx, transactions_xlsx
+from app.services.exports import audit_reconciliation_xlsx, missing_stock_xlsx, scans_xlsx, transactions_xlsx
 from app.services.losses import loss_summary
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
 from app.templates import templates
@@ -301,6 +299,7 @@ def audit_reconciliation_excel(
     request: Request,
     start: str = "",
     end: str = "",
+    fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_data")
@@ -314,173 +313,46 @@ def audit_reconciliation_excel(
         )
     report = director_audit_reconciliation_report(db, start_at, end_at)
     return Response(
-        audit_reconciliation_xlsx(report),
+        audit_reconciliation_xlsx(report, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-audit-reconciliation.xlsx"},
     )
 
 
-@router.get("/scans.csv")
-def scans_csv(request: Request, action: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_permission(request, db, "reports_export")
-    scans = db.scalars(scan_query(action, start, end)).all()
-    stream = StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(["Date", "User", "Action", "Serial", "Status", "Batch", "Message", "Tally Reference"])
-    for scan in scans:
-        writer.writerow(
-            safe_row(
-                [
-                    scan.created_at.isoformat(),
-                    scan.user.username,
-                    scan.action,
-                    scan.serial_number_raw,
-                    scan.status,
-                    scan.batch.batch_number if scan.batch else "",
-                    scan.message or "",
-                    scan.tally_reference or "",
-                ]
-            )
-        )
-    stream.seek(0)
-    return StreamingResponse(
-        iter([stream.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=setu-scans.csv"},
-    )
-
-
 @router.get("/scans.xlsx")
-def scans_excel(request: Request, action: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
+def scans_excel(
+    request: Request,
+    action: str = "",
+    start: str = "",
+    end: str = "",
+    fields: str = "",
+    db: Session = Depends(get_db),
+):
     require_permission(request, db, "reports_export")
     scans = db.scalars(scan_query(action, start, end)).all()
     return Response(
-        scans_xlsx(scans),
+        scans_xlsx(scans, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-scans.xlsx"},
     )
 
 
-@router.get("/transactions.csv")
-def transactions_csv(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_permission(request, db, "reports_export")
-    transactions = db.scalars(transaction_query(action, q, start, end)).all()
-    stream = StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(
-        [
-            "Date",
-            "User",
-            "Type",
-            "Serial",
-            "Product Code",
-            "Product Name",
-            "Invoice Created By",
-            "Barcode Sold By",
-            "Product Audited By",
-            "From Status",
-            "To Status",
-            "Reason",
-            "Batch/Reference",
-            "Tally Reference",
-            "Notes",
-        ]
-    )
-    for txn in transactions:
-        writer.writerow(
-            safe_row(
-                [
-                    txn.created_at.isoformat(),
-                    txn.user.username,
-                    txn.transaction_type,
-                    txn.serial_number or "",
-                    txn.product.product_code if txn.product else "",
-                    txn.product.product_name if txn.product else "",
-                    invoice_created_by(txn),
-                    barcode_sold_by(txn),
-                    product_audited_by(txn),
-                    txn.status_from or "",
-                    txn.status_to or "",
-                    txn.reason_code or "",
-                    txn.reference_number or "",
-                    txn.tally_reference or "",
-                    txn.notes or "",
-                ]
-            )
-        )
-    stream.seek(0)
-    return StreamingResponse(
-        iter([stream.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=setu-transactions.csv"},
-    )
-
-
 @router.get("/transactions.xlsx")
-def transactions_excel(request: Request, action: str = "", q: str = "", start: str = "", end: str = "", db: Session = Depends(get_db)):
-    require_permission(request, db, "reports_export")
-    transactions = db.scalars(transaction_query(action, q, start, end)).all()
-    return Response(
-        transactions_xlsx(transactions),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-transactions.xlsx"},
-    )
-
-
-@router.get("/missing-stock.csv")
-def missing_stock_csv(
+def transactions_excel(
     request: Request,
+    action: str = "",
     q: str = "",
     start: str = "",
     end: str = "",
+    fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
-    refresh_expired_audit_assignments(db)
-    findings = db.scalars(missing_stock_query(q, start, end)).all()
-    stream = StringIO()
-    writer = csv.writer(stream)
-    writer.writerow(
-        [
-            "Audit Date",
-            "Audited By",
-            "Audit Batch",
-            "Serial",
-            "Product Code",
-            "Product Name",
-            "Product Batch",
-            "Warehouse",
-            "Storage Location",
-            "Mfg Date",
-            "Expiry Date",
-            "Expected Status",
-        ]
-    )
-    for finding in findings:
-        serial = finding.serial
-        writer.writerow(
-            safe_row(
-                [
-                    finding.created_at.isoformat(),
-                    finding.batch.user.username,
-                    finding.batch.batch_number,
-                    finding.serial_number,
-                    finding.product_code or "",
-                    finding.product_name or "",
-                    serial.product_batch_number if serial else "",
-                    serial.warehouse if serial else "",
-                    serial.location.full_path if serial and serial.location else "",
-                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
-                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
-                    finding.expected_status or "",
-                ]
-            )
-        )
-    stream.seek(0)
+    transactions = db.scalars(transaction_query(action, q, start, end)).all()
     return Response(
-        stream.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.csv"},
+        transactions_xlsx(transactions, fields.split("|")),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=setu-transactions.xlsx"},
     )
 
 
@@ -490,13 +362,14 @@ def missing_stock_excel(
     q: str = "",
     start: str = "",
     end: str = "",
+    fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
     refresh_expired_audit_assignments(db)
     findings = db.scalars(missing_stock_query(q, start, end)).all()
     return Response(
-        missing_stock_xlsx(findings),
+        missing_stock_xlsx(findings, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-missing-stock.xlsx"},
     )

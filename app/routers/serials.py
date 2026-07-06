@@ -118,14 +118,19 @@ def labels_pdf(
 
 
 @router.get("/labels.xlsx")
-def labels_xlsx(request: Request, ids: str = "", db: Session = Depends(get_db)):
+def labels_xlsx(
+    request: Request,
+    ids: str = "",
+    fields: str = "",
+    db: Session = Depends(get_db),
+):
     require_permission(request, db, "label_files")
     parsed = _parse_ids(ids)
     rows = db.scalars(
         select(Serial).where(Serial.id.in_(parsed)).order_by(Serial.serial_number).options(selectinload(Serial.product))
     ).all() if parsed else []
     return Response(
-        serials_xlsx(rows),
+        serials_xlsx(rows, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=setu-barcodes.xlsx"},
     )

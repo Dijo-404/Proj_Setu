@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import AuditFinding, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, WarehouseLevel
 from app.services.audit import current_missing_stock_findings_query
-from app.services.exports import safe_row
+from app.services.exports import safe_row, select_export_columns
 from app.services.settings import get_setting
 
 
@@ -647,7 +647,11 @@ def movement_export_row(row: dict[str, object]) -> list[object]:
     )
 
 
-def stock_movement_xlsx(rows: list[dict[str, object]], summary: dict[str, object]) -> bytes:
+def stock_movement_xlsx(
+    rows: list[dict[str, object]],
+    summary: dict[str, object],
+    fields: list[str] | None = None,
+) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
@@ -655,11 +659,13 @@ def stock_movement_xlsx(rows: list[dict[str, object]], summary: dict[str, object
     sheet.title = "Stock Movement"
     sheet.append(["Analysis Period", f"{summary['start']} to {summary['end']} ({summary['analysis_days']} days)"])
     sheet.append([])
-    sheet.append(MOVEMENT_EXPORT_HEADERS)
-    for row in rows:
-        sheet.append(movement_export_row(row))
+    export_rows = [movement_export_row(row) for row in rows]
+    headers, export_rows = select_export_columns(MOVEMENT_EXPORT_HEADERS, export_rows, fields)
+    sheet.append(headers)
+    for row in export_rows:
+        sheet.append(row)
     sheet.freeze_panes = "A4"
-    sheet.auto_filter.ref = f"A3:V{max(sheet.max_row, 3)}"
+    sheet.auto_filter.ref = f"A3:{sheet.cell(3, sheet.max_column).coordinate}"
     for column in sheet.columns:
         width = max(len(str(cell.value or "")) for cell in column)
         sheet.column_dimensions[column[0].column_letter].width = min(max(width + 2, 12), 42)

@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.models import Batch, BatchItem, BatchStatus, BatchType, GstRegistrationType, ScanLog, Serial, User
 from app.services.assignment import AssignmentLine, MAX_ASSIGNMENT_QUANTITY, parse_bulk_assignment_xlsx
 from app.services.expiry import fefo_available_statuses, fefo_candidate_serials
-from app.services.exports import safe_row
+from app.services.exports import safe_row, select_export_columns
 from app.services.inventory import InventoryError
 from app.services.settings import gst_rate_key, parse_sales_gst_ledger_mappings
 from app.services.tally import (
@@ -103,18 +103,30 @@ class TallyExcelImportResult:
     quantity: int
 
 
-def batch_tally_xlsx(batch: Batch, settings: dict[str, str] | None = None) -> bytes:
+def batch_tally_xlsx(
+    batch: Batch,
+    settings: dict[str, str] | None = None,
+    fields: list[str] | None = None,
+    overrides: dict[str, str] | None = None,
+) -> bytes:
     if batch.batch_type in TALLY_ACCOUNTING_VOUCHER_BATCH_TYPES:
-        return _accounting_voucher_xlsx(batch, settings or {})
-    return _item_summary_xlsx(batch)
+        return _accounting_voucher_xlsx(batch, settings or {}, fields, overrides or {})
+    return _item_summary_xlsx(batch, fields, overrides or {})
 
 
-def _accounting_voucher_xlsx(batch: Batch, settings: dict[str, str]) -> bytes:
+def _accounting_voucher_xlsx(
+    batch: Batch,
+    settings: dict[str, str],
+    fields: list[str] | None = None,
+    overrides: dict[str, str] | None = None,
+) -> bytes:
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = TALLY_ACCOUNTING_VOUCHER_SHEET
 
-    for row in _accounting_voucher_rows(batch, settings):
+    export_rows = _accounting_voucher_rows(batch, settings, overrides or {})
+    headers, rows = select_export_columns(TALLY_ACCOUNTING_VOUCHER_HEADERS, export_rows[1:], fields)
+    for row in [headers, *rows]:
         sheet.append(safe_row(row))
 
     _format_accounting_sheet(sheet)
@@ -124,17 +136,26 @@ def _accounting_voucher_xlsx(batch: Batch, settings: dict[str, str]) -> bytes:
     return stream.getvalue()
 
 
-def _accounting_voucher_rows(batch: Batch, settings: dict[str, str]) -> list[list[object]]:
+def _accounting_voucher_rows(
+    batch: Batch,
+    settings: dict[str, str],
+    overrides: dict[str, str] | None = None,
+) -> list[list[object]]:
+    overrides = overrides or {}
     summary = calculate_voucher_summary(batch)
     batch_type = BatchType(batch.batch_type)
     is_sale = batch_type == BatchType.SALE
     is_sales_side = batch_type in {BatchType.SALE, BatchType.SALES_RETURN}
-    voucher_type = _voucher_type(settings, batch_type)
+    voucher_type = overrides.get("voucher_type", "").strip() or _voucher_type(settings, batch_type)
     change_mode = "Accounting Invoice" if is_sales_side else "As Voucher"
     common = {
         "Voucher Date": _voucher_date(batch),
         "Voucher Type Name": voucher_type,
-        "Voucher Number": batch.tally_voucher_number or batch.batch_number,
+        "Voucher Number": (
+            overrides.get("voucher_number", "").strip()
+            or batch.tally_voucher_number
+            or batch.batch_number
+        ),
         "Buyer/Supplier - Address": "",
         "Buyer/Supplier - Pincode": "",
         "Change Mode ": change_mode,
@@ -142,7 +163,7 @@ def _accounting_voucher_rows(batch: Batch, settings: dict[str, str]) -> list[lis
     }
     rows: list[dict[str, object]] = []
 
-    party_name = (batch.party_name or "").strip()
+    party_name = overrides.get("party_ledger", "").strip() or (batch.party_name or "").strip()
     party_signed_amount = -summary.final_value if is_sale else summary.final_value
     rows.append(_posting_row(common, party_name, party_signed_amount))
 
@@ -228,23 +249,27 @@ def _accounting_voucher_rows(batch: Batch, settings: dict[str, str]) -> list[lis
     ]
 
 
-def _item_summary_xlsx(batch: Batch) -> bytes:
+def _item_summary_xlsx(
+    batch: Batch,
+    fields: list[str] | None = None,
+    overrides: dict[str, str] | None = None,
+) -> bytes:
+    overrides = overrides or {}
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Tally Voucher"
     summary = calculate_voucher_summary(batch)
 
-    sheet.append(["Voucher Type", batch.batch_type])
-    sheet.append(["Voucher Number", batch.batch_number])
-    sheet.append(["Party Ledger", batch.party_name or ""])
+    sheet.append(["Voucher Type", overrides.get("voucher_type", "").strip() or batch.batch_type])
+    sheet.append(["Voucher Number", overrides.get("voucher_number", "").strip() or batch.batch_number])
+    sheet.append(["Party Ledger", overrides.get("party_ledger", "").strip() or batch.party_name or ""])
     sheet.append(["Date", (batch.submitted_at or batch.created_at).date().isoformat()])
     sheet.append([])
-    sheet.append(TALLY_ITEM_SUMMARY_HEADERS)
-
     total_quantity = 0
+    rows: list[list[object]] = []
     for index, line in enumerate(summary.lines, start=1):
         total_quantity += line.quantity
-        sheet.append(
+        rows.append(
             safe_row(
                 [
                     index,
@@ -269,7 +294,7 @@ def _item_summary_xlsx(batch: Batch) -> bytes:
             )
         )
 
-    sheet.append(
+    rows.append(
         safe_row(
             [
                 "",
@@ -293,8 +318,12 @@ def _item_summary_xlsx(batch: Batch) -> bytes:
             ]
         )
     )
+    headers, rows = select_export_columns(TALLY_ITEM_SUMMARY_HEADERS, rows, fields)
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
     sheet.freeze_panes = "A7"
-    sheet.auto_filter.ref = f"A6:R{max(sheet.max_row, 6)}"
+    sheet.auto_filter.ref = f"A6:{sheet.cell(6, sheet.max_column).coordinate}"
     _autosize(sheet)
 
     stream = BytesIO()

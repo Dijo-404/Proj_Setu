@@ -2,7 +2,7 @@ from io import BytesIO
 from types import SimpleNamespace
 
 from fastapi import HTTPException, UploadFile
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -409,6 +409,25 @@ def test_serials_xlsx_exports_generated_barcodes(db_session):
     data = serials_xlsx([batch.items[0].serial])
 
     assert data.startswith(b"PK")
+
+
+def test_serials_xlsx_exports_selected_fields(db_session):
+    user = User(username="selected-admin", password_hash="x", role="admin")
+    product = make_product("SG-SELECT")
+    db_session.add_all([user, product])
+    db_session.commit()
+    batch = assign_barcodes_to_existing_stock(
+        db_session,
+        user,
+        [AssignmentLine(product=product, quantity=1)],
+    )
+    serial = batch.items[0].serial
+
+    sheet = load_workbook(BytesIO(serials_xlsx([serial], ["Product Code", "Serial Number", "Status"]))).active
+
+    assert [cell.value for cell in sheet[1]] == ["Product Code", "Serial Number", "Status"]
+    assert sheet["A2"].value == product.product_code
+    assert sheet["B2"].value == serial.serial_number
 
 
 def test_assignment_rolls_back_every_record_when_history_write_fails(db_session, monkeypatch):

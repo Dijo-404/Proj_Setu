@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Missing Stock Report - Setu{% endblock %}
 {% block content %}
+{% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">Audit exceptions</p>
@@ -9,8 +10,7 @@
   </div>
   {% if role_can(user, 'reports_export') %}
   <div class="actions">
-    <a class="button" href="/reports/missing-stock.csv?q={{ q }}&start={{ start }}&end={{ end }}">Export CSV</a>
-    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}">Export XLSX</a>
+    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Export Excel</a>
   </div>
   {% endif %}
 </section>

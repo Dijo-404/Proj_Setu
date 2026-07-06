@@ -1510,6 +1510,75 @@ dialog.modal[open] { animation: modal-in var(--dur) var(--ease); }
   height: 0;
 }
 
+.xlsx-export-dialog {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.xlsx-export-dialog h3 {
+  margin: 0;
+}
+
+.xlsx-export-section-head,
+.xlsx-export-actions,
+.xlsx-export-field-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.xlsx-export-section-head {
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.xlsx-export-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.xlsx-export-field {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 42px;
+  padding: 9px 11px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-sm);
+  background: var(--surface-card);
+  cursor: pointer;
+}
+
+.xlsx-export-field:hover {
+  border-color: var(--primary);
+  background: var(--primary-softer);
+}
+
+.xlsx-export-field input {
+  flex: none;
+  width: 17px;
+  height: 17px;
+}
+
+.xlsx-export-actions {
+  justify-content: flex-end;
+  padding-top: 4px;
+}
+
+.xlsx-export-dialog [data-xlsx-error] {
+  margin: 12px 0 0;
+}
+
+@media (max-width: 600px) {
+  .xlsx-export-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .xlsx-export-actions .button {
+    flex: 1;
+  }
+}
+
 .col-actions { width: 1%; white-space: nowrap; }
 
 details.add-company > summary {

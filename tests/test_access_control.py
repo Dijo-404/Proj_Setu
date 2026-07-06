@@ -324,12 +324,12 @@ def test_hidden_pages_and_actions_appear_after_super_admin_grants_access():
     assert 'href="/reports"' not in dashboard_before.text
     assert 'href="/batches/new?batch_type=PURCHASE"' not in dashboard_before.text
     assert "New product" not in products_before.text
-    assert "Transactions CSV" not in reports_before.text
+    assert "Transactions Excel" not in reports_before.text
     assert "Download backup" not in maintenance_before.text
 
     assert grant.status_code == 303
     assert 'href="/reports"' in dashboard_after.text
     assert 'href="/batches/new?batch_type=PURCHASE"' in dashboard_after.text
     assert "New product" in products_after.text
-    assert "Transactions CSV" in reports_after.text
+    assert "Transactions Excel" in reports_after.text
     assert "Download backup" in maintenance_after.text

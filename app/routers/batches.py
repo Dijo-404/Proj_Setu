@@ -1110,7 +1110,15 @@ def tally_xml_preview(request: Request, batch_id: int, db: Session = Depends(get
 
 
 @router.get("/{batch_id}/tally.xlsx")
-def tally_excel_export(request: Request, batch_id: int, db: Session = Depends(get_db)):
+def tally_excel_export(
+    request: Request,
+    batch_id: int,
+    fields: str = "",
+    voucher_type: str = "",
+    voucher_number: str = "",
+    party_ledger: str = "",
+    db: Session = Depends(get_db),
+):
     batch = db.scalar(
         select(Batch)
         .where(Batch.id == batch_id)
@@ -1122,7 +1130,16 @@ def tally_excel_export(request: Request, batch_id: int, db: Session = Depends(ge
     if batch.batch_type not in TALLY_EXCEL_EXPORT_BATCH_TYPES or not batch.items:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     try:
-        data = batch_tally_xlsx(batch, get_all_settings(db))
+        data = batch_tally_xlsx(
+            batch,
+            get_all_settings(db),
+            fields.split("|"),
+            {
+                "voucher_type": voucher_type,
+                "voucher_number": voucher_number,
+                "party_ledger": party_ledger,
+            },
+        )
     except TallySyncError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return Response(

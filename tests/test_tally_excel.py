@@ -164,6 +164,39 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     assert sheet.cell(5, ledger_col).value == "Output SGST @ 2.5%"
 
 
+def test_tally_excel_export_can_include_selected_fields_only(db_session):
+    user = User(username="selected-xlsx", password_hash="x", role="sales")
+    product = _product("TALLYSELECT")
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer Ledger", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    data = batch_tally_xlsx(
+        batch,
+        VALID_TALLY_EXCEL_SETTINGS,
+        ["Voucher Type Name", "Voucher Number", "Ledger Name", "Item Name"],
+        {
+            "voucher_type": "Retail Sales",
+            "voucher_number": "INV-SELECT-1",
+            "party_ledger": "Walk-in Customer",
+        },
+    )
+    sheet = load_workbook(BytesIO(data), data_only=True).active
+
+    assert [cell.value for cell in sheet[1]] == [
+        "Voucher Type Name",
+        "Voucher Number",
+        "Ledger Name",
+        "Item Name",
+    ]
+    assert sheet["A2"].value == "Retail Sales"
+    assert sheet["B2"].value == "INV-SELECT-1"
+    assert sheet["C2"].value == "Walk-in Customer"
+    assert sheet["D3"].value == product.tally_stock_item_name
+
+
 def test_sale_tally_excel_export_has_one_item_row_and_can_be_imported_by_app(db_session):
     user = User(username="sales-xlsx-roundtrip", password_hash="x", role="sales")
     product = _product("TALLYSALE2")

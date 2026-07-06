@@ -1,6 +1,8 @@
 from datetime import date, datetime, timezone
 
 from fastapi.testclient import TestClient
+from io import BytesIO
+from openpyxl import load_workbook
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -293,6 +295,35 @@ def test_stock_movement_exports_are_valid(db_session):
     assert rows[0]["expiry_risk"] == "Not applicable"
 
 
+def test_stock_movement_xlsx_exports_only_selected_fields(db_session):
+    user = User(username="admin", password_hash="x", role="admin", active=True)
+    product = _product("DUR-2", "Selected columns chair")
+    db_session.add_all([user, product])
+    db_session.flush()
+    db_session.add(
+        Serial(
+            serial_number="DUR-STOCK-2",
+            product_id=product.id,
+            status=SerialStatus.IN_STOCK.value,
+            warehouse="Main Warehouse",
+        )
+    )
+    db_session.commit()
+    rows, summary = stock_movement_rows(
+        db_session,
+        config=MovementConfig(analysis_days=30),
+        filters=MovementFilters(start=date(2026, 5, 29), end=date(2026, 6, 27)),
+        as_of=date(2026, 6, 27),
+    )
+
+    sheet = load_workbook(
+        BytesIO(stock_movement_xlsx(rows, summary, ["Product Code", "Current Stock", "Movement Status"]))
+    ).active
+
+    assert [cell.value for cell in sheet[3]] == ["Product Code", "Current Stock", "Movement Status"]
+    assert [cell.value for cell in sheet[4]] == ["DUR-2", 1, "Dead Stock"]
+
+
 def test_stock_movement_page_and_exports_follow_role_access():
     engine = create_engine(
         "sqlite://",
@@ -331,7 +362,7 @@ def test_stock_movement_page_and_exports_follow_role_access():
         admin_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(1)})
         manager_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(2)})
         sales_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(3)})
-        csv_response = client.get(
+        removed_csv_response = client.get(
             "/stock-movement/export.csv",
             cookies={SESSION_COOKIE: create_session_token(1)},
         )
@@ -368,8 +399,12 @@ def test_stock_movement_page_and_exports_follow_role_access():
     assert manager_response.status_code == 200
     assert "Movement classification settings" not in manager_response.text
     assert sales_response.status_code == 403
-    assert csv_response.status_code == 200
-    assert "Movement Ratio %" in csv_response.text
+    assert "export.csv" not in admin_response.text
+    assert "export.xlsx" in admin_response.text
+    assert "data-xlsx-export" in admin_response.text
+    assert "Customize stock movement export" in admin_response.text
+    assert "export.pdf" in admin_response.text
+    assert removed_csv_response.status_code == 404
     assert save_response.status_code == 303
     assert saved_analysis_days == "180"
     assert manager_save_response.status_code == 403

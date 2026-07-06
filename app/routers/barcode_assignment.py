@@ -176,7 +176,12 @@ def assignment_labels_pdf(
 
 
 @router.get("/{batch_id}/serials.xlsx")
-def assignment_serials_xlsx(request: Request, batch_id: int, db: Session = Depends(get_db)):
+def assignment_serials_xlsx(
+    request: Request,
+    batch_id: int,
+    fields: str = "",
+    db: Session = Depends(get_db),
+):
     user = require_permission(request, db, "barcode_assignment")
     batch = _assignment_batch(db, batch_id)
     if not batch:
@@ -184,7 +189,7 @@ def assignment_serials_xlsx(request: Request, batch_id: int, db: Session = Depen
     _require_assignment_batch_access(user, batch)
     serials = [item.serial for item in batch.items]
     return Response(
-        serials_xlsx(serials),
+        serials_xlsx(serials, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={batch.batch_number}-barcodes.xlsx"},
     )

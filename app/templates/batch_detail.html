@@ -5,6 +5,8 @@
 {% set sale_return_pending = sale_return.pending_count|default(0)|int %}
 {% set excel_import_types = tally_excel_import_types|default(['SALE', 'ISSUE', 'PURCHASE_RETURN'], true) %}
 {% set excel_export_types = tally_excel_export_types|default(['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN', 'PURCHASE_RETURN', 'ISSUE'], true) %}
+{% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" %}
+{% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">{{ batch.batch_type }}</p>
@@ -22,7 +24,7 @@
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}
     {% if can_tally_excel_export and batch.batch_type in excel_export_types and batch.items|length > 0 %}
-    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx">Tally Excel</a>
+    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch.tally_voucher_number or batch.batch_number, "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}">Tally Excel</a>
     {% endif %}
     {% if can_view_batch_list %}
     <a class="button" href="/batches">Batches</a>

@@ -1,6 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Reports - Setu{% endblock %}
 {% block content %}
+{% set audit_excel_fields = "Audit Date|Audit Batch|Audited By|Products|Verified|Missing|Extra|Total|Pending|Product Code|Product Name|Audit Batches|Finding|Serial|Expected Status|Scanned Status" %}
+{% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
+{% set transaction_excel_fields = "Date|User|Type|Serial|Product Code|Product Name|Invoice Created By|Barcode Sold By|Product Audited By|From Status|To Status|Reason|Batch/Reference|Tally Reference|Notes" %}
+{% set scan_excel_fields = "Date|User|Action|Serial|Status|Batch|Message|Tally Reference" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">Audit trail</p>
@@ -8,15 +12,12 @@
   </div>
   {% if role_can(user, 'reports_export') %}
   <div class="actions">
-    <a class="button" href="{{ audit_reconciliation_export_url }}">Audit reconciliation XLSX</a>
+    <a class="button" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Audit reconciliation Excel</a>
     {% if action == 'MISSING' %}
-    <a class="button" href="/reports/missing-stock.csv?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock CSV</a>
-    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}">Missing stock XLSX</a>
+    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
     {% else %}
-    <a class="button" href="/reports/transactions.csv?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions CSV</a>
-    <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}">Transactions XLSX</a>
-    <a class="button" href="/reports/scans.csv?action={{ action }}&start={{ start }}&end={{ end }}">Scans CSV</a>
-    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}">Scans XLSX</a>
+    <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|q|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
+    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize scan export" data-xlsx-parameters="action|start|end" data-xlsx-fields="{{ scan_excel_fields }}">Scans Excel</a>
     {% endif %}
   </div>
   {% endif %}

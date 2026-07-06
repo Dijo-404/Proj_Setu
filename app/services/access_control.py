@@ -247,7 +247,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition(
                     "stock_movement_export",
                     "Stock movement export",
-                    "Export CSV, Excel, and PDF movement reports",
+                    "Export Excel and PDF movement reports",
                     _defaults(ACTION_OPTIONS, "yes", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
                     ACTION_OPTIONS,
                 ),

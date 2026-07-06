@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}{{ batch.batch_number }} - Setu{% endblock %}
 {% block content %}
+{% set serial_excel_fields = "Product Code|Product Name|Tally Stock Item|Serial Number|Product Batch|Mfg Date|Expiry Date|Warehouse|Warehouse Level|Status|Created At" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">QR assignment</p>
     <h1>{{ batch.batch_number }}</h1>
   </div>
   <div class="actions">
-    <a class="button" href="/barcode-assignment/{{ batch.id }}/serials.xlsx">Download Excel</a>
+    <a class="button" href="/barcode-assignment/{{ batch.id }}/serials.xlsx" data-xlsx-export data-xlsx-title="Customize barcode export" data-xlsx-fields="{{ serial_excel_fields }}">Download Excel</a>
     {% set label_pdf_action = '/barcode-assignment/' ~ batch.id ~ '/labels.pdf' %}
     <a class="button" href="{{ label_pdf_action }}" data-label-pdf-open>Download labels PDF</a>
     <a class="button" href="/barcode-assignment">Assignments</a>

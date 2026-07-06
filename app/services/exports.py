@@ -24,6 +24,23 @@ MAX_LABEL_ROWS = 11
 MIN_LABEL_COLUMNS = 1
 MAX_LABEL_COLUMNS = 4
 DANGEROUS_SPREADSHEET_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+SCAN_EXPORT_HEADERS = ["Date", "User", "Action", "Serial", "Status", "Batch", "Message", "Tally Reference"]
+TRANSACTION_EXPORT_HEADERS = [
+    "Date", "User", "Type", "Serial", "Product Code", "Product Name",
+    "Invoice Created By", "Barcode Sold By", "Product Audited By",
+    "From Status", "To Status", "Reason", "Batch/Reference",
+    "Tally Reference", "Notes",
+]
+MISSING_STOCK_EXPORT_HEADERS = [
+    "Audit Date", "Audited By", "Audit Batch", "Serial", "Product Code",
+    "Product Name", "Product Batch", "Warehouse", "Storage Location",
+    "Mfg Date", "Expiry Date", "Expected Status",
+]
+SERIAL_EXPORT_HEADERS = [
+    "Product Code", "Product Name", "Tally Stock Item", "Serial Number",
+    "Product Batch", "Mfg Date", "Expiry Date", "Warehouse",
+    "Warehouse Level", "Status", "Created At",
+]
 
 
 def spreadsheet_safe(value):
@@ -41,6 +58,23 @@ def safe_row(values):
     return [spreadsheet_safe(value) for value in values]
 
 
+def select_export_columns(
+    headers: list[str],
+    rows: list[list[object]],
+    fields: list[str] | None = None,
+) -> tuple[list[str], list[list[object]]]:
+    requested = {field.strip() for field in fields or [] if field.strip()}
+    if not requested:
+        return headers, rows
+    indexes = [index for index, header in enumerate(headers) if header.strip() in requested]
+    if not indexes:
+        return headers, rows
+    return (
+        [headers[index] for index in indexes],
+        [[row[index] if index < len(row) else "" for index in indexes] for row in rows],
+    )
+
+
 def barcode_png(value: str) -> bytes:
     qr = qrcode.QRCode(
         version=None,
@@ -56,28 +90,31 @@ def barcode_png(value: str) -> bytes:
     return stream.getvalue()
 
 
-def scans_xlsx(scans: list[ScanLog]) -> bytes:
+def scans_xlsx(scans: list[ScanLog], fields: list[str] | None = None) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Scans"
-    sheet.append(["Date", "User", "Action", "Serial", "Status", "Batch", "Message", "Tally Reference"])
-    for scan in scans:
-        sheet.append(
-            safe_row(
-                [
-                    scan.created_at.isoformat(),
-                    scan.user.username,
-                    scan.action,
-                    scan.serial_number_raw,
-                    scan.status,
-                    scan.batch.batch_number if scan.batch else "",
-                    scan.message or "",
-                    scan.tally_reference or "",
-                ]
-            )
+    rows = [
+        safe_row(
+            [
+                scan.created_at.isoformat(),
+                scan.user.username,
+                scan.action,
+                scan.serial_number_raw,
+                scan.status,
+                scan.batch.batch_number if scan.batch else "",
+                scan.message or "",
+                scan.tally_reference or "",
+            ]
         )
+        for scan in scans
+    ]
+    headers, rows = select_export_columns(SCAN_EXPORT_HEADERS, rows, fields)
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
     for column in sheet.columns:
         width = max(len(str(cell.value or "")) for cell in column)
         sheet.column_dimensions[column[0].column_letter].width = min(max(width + 2, 12), 40)
@@ -86,30 +123,16 @@ def scans_xlsx(scans: list[ScanLog]) -> bytes:
     return stream.getvalue()
 
 
-def serials_xlsx(serials: list[Serial]) -> bytes:
+def serials_xlsx(serials: list[Serial], fields: list[str] | None = None) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Barcodes"
-    sheet.append(
-        [
-            "Product Code",
-            "Product Name",
-            "Tally Stock Item",
-            "Serial Number",
-            "Product Batch",
-            "Mfg Date",
-            "Expiry Date",
-            "Warehouse",
-            "Warehouse Level",
-            "Status",
-            "Created At",
-        ]
-    )
+    rows = []
     for serial in serials:
         product = serial.product
-        sheet.append(
+        rows.append(
             safe_row(
                 [
                     product.product_code,
@@ -126,90 +149,64 @@ def serials_xlsx(serials: list[Serial]) -> bytes:
                 ]
             )
         )
+    headers, rows = select_export_columns(SERIAL_EXPORT_HEADERS, rows, fields)
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
     _autosize(sheet)
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
 
 
-def transactions_xlsx(transactions: list[InventoryTransaction]) -> bytes:
+def transactions_xlsx(transactions: list[InventoryTransaction], fields: list[str] | None = None) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Transactions"
-    sheet.append(
-        [
-            "Date",
-            "User",
-            "Type",
-            "Serial",
-            "Product Code",
-            "Product Name",
-            "Invoice Created By",
-            "Barcode Sold By",
-            "Product Audited By",
-            "From Status",
-            "To Status",
-            "Reason",
-            "Batch/Reference",
-            "Tally Reference",
-            "Notes",
-        ]
-    )
-    for txn in transactions:
-        sheet.append(
-            safe_row(
-                [
-                    txn.created_at.isoformat(),
-                    txn.user.username,
-                    txn.transaction_type,
-                    txn.serial_number or "",
-                    txn.product.product_code if txn.product else "",
-                    txn.product.product_name if txn.product else "",
-                    invoice_created_by(txn),
-                    barcode_sold_by(txn),
-                    product_audited_by(txn),
-                    txn.status_from or "",
-                    txn.status_to or "",
-                    txn.reason_code or "",
-                    txn.reference_number or "",
-                    txn.tally_reference or "",
-                    txn.notes or "",
-                ]
-            )
+    rows = [
+        safe_row(
+            [
+                txn.created_at.isoformat(),
+                txn.user.username,
+                txn.transaction_type,
+                txn.serial_number or "",
+                txn.product.product_code if txn.product else "",
+                txn.product.product_name if txn.product else "",
+                invoice_created_by(txn),
+                barcode_sold_by(txn),
+                product_audited_by(txn),
+                txn.status_from or "",
+                txn.status_to or "",
+                txn.reason_code or "",
+                txn.reference_number or "",
+                txn.tally_reference or "",
+                txn.notes or "",
+            ]
         )
+        for txn in transactions
+    ]
+    headers, rows = select_export_columns(TRANSACTION_EXPORT_HEADERS, rows, fields)
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
     _autosize(sheet)
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
 
 
-def missing_stock_xlsx(findings: list[AuditFinding]) -> bytes:
+def missing_stock_xlsx(findings: list[AuditFinding], fields: list[str] | None = None) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Missing Stock"
-    sheet.append(
-        [
-            "Audit Date",
-            "Audited By",
-            "Audit Batch",
-            "Serial",
-            "Product Code",
-            "Product Name",
-            "Product Batch",
-            "Warehouse",
-            "Storage Location",
-            "Mfg Date",
-            "Expiry Date",
-            "Expected Status",
-        ]
-    )
+    rows = []
     for finding in findings:
         serial = finding.serial
-        sheet.append(
+        rows.append(
             safe_row(
                 [
                     finding.created_at.isoformat(),
@@ -227,13 +224,20 @@ def missing_stock_xlsx(findings: list[AuditFinding]) -> bytes:
                 ]
             )
         )
+    headers, rows = select_export_columns(MISSING_STOCK_EXPORT_HEADERS, rows, fields)
+    sheet.append(headers)
+    for row in rows:
+        sheet.append(row)
     _autosize(sheet)
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
 
 
-def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
+def audit_reconciliation_xlsx(
+    report: dict[str, object],
+    fields: list[str] | None = None,
+) -> bytes:
     from openpyxl import Workbook
 
     workbook = Workbook()
@@ -315,6 +319,21 @@ def audit_reconciliation_xlsx(report: dict[str, object]) -> bytes:
                 ]
             )
         )
+
+    requested = {field.strip() for field in fields or [] if field.strip()}
+    if requested:
+        for sheet in list(workbook.worksheets[1:]):
+            indexes = [
+                cell.column
+                for cell in sheet[1]
+                if str(cell.value or "").strip() in requested
+            ]
+            if not indexes:
+                workbook.remove(sheet)
+                continue
+            for column in range(sheet.max_column, 0, -1):
+                if column not in indexes:
+                    sheet.delete_cols(column)
 
     for sheet in workbook.worksheets:
         _autosize(sheet)

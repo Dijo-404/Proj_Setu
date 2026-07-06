@@ -1,13 +1,14 @@
 {% extends "base.html" %}
 {% block title %}Directors Report - Setu{% endblock %}
 {% block content %}
+{% set audit_excel_fields = "Audit Date|Audit Batch|Audited By|Products|Verified|Missing|Extra|Total|Pending|Product Code|Product Name|Audit Batches|Finding|Serial|Expected Status|Scanned Status" %}
 <section class="page-head director-head">
   <div>
     <p class="eyebrow">Reports only</p>
     <h1>Directors Report</h1>
   </div>
   <div class="actions">
-    <a class="button" href="{{ audit_reconciliation_export_url }}">Audit reconciliation XLSX</a>
+    <a class="button" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Audit reconciliation Excel</a>
   </div>
 </section>
 
@@ -61,7 +62,7 @@
     <label>From<input name="audit_start" type="datetime-local" value="{{ audit_start }}"></label>
     <label>To<input name="audit_end" type="datetime-local" value="{{ audit_end }}"></label>
     <button class="button" type="submit">Apply</button>
-    <a class="button primary" href="{{ audit_reconciliation_export_url }}">Export Excel</a>
+    <a class="button primary" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Export Excel</a>
   </form>
   <section class="metric-grid director-detail-grid">
     <div class="metric"><span>Verified</span><strong>{{ report.reconciliation.verified }}</strong></div>
