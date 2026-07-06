@@ -194,7 +194,27 @@ function Ensure-Venv {
     }
 }
 
+function Ensure-Pip {
+    & $VenvPython -m pip --version | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Host "pip is missing from the virtual environment. Repairing pip with ensurepip..."
+    & $VenvPython -m ensurepip --upgrade | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run setup.bat again."
+    }
+
+    & $VenvPython -m pip --version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run setup.bat again."
+    }
+}
+
 function Install-Dependencies {
+    Ensure-Pip
+
     Write-Host "Installing Python packages. This can take a few minutes..."
     & $VenvPython -m pip install --upgrade pip
     if ($LASTEXITCODE -ne 0) {
@@ -204,6 +224,11 @@ function Install-Dependencies {
     & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
     if ($LASTEXITCODE -ne 0) {
         throw "Could not install project dependencies."
+    }
+
+    & $VenvPython -m pip check
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed Python dependencies are inconsistent. Check the pip message above."
     }
 }
 
@@ -677,7 +702,7 @@ Write-Section "Configuration"
 $credentials = Ensure-EnvFile
 
 Write-Section "Smoke Test"
-& $VenvPython -c "from app.main import app; print('App import OK')"
+& $VenvPython -c "import uvicorn; from app.main import app; print('App import OK')"
 if ($LASTEXITCODE -ne 0) {
     throw "The app could not be imported. Check the error above."
 }

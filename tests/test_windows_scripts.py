@@ -14,6 +14,21 @@ def test_setup_skips_stop_helper_for_fresh_install():
     assert "Fresh installation; there is no existing Setu server to stop." in stop_section
 
 
+def test_requirements_pin_direct_starlette_import():
+    requirements = (PROJECT_ROOT / "requirements.txt").read_text(encoding="utf-8")
+
+    assert "starlette==1.3.1" in requirements
+
+
+def test_setup_repairs_pip_and_checks_dependencies():
+    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+
+    assert "function Ensure-Pip" in setup_script
+    assert "& $VenvPython -m ensurepip --upgrade" in setup_script
+    assert "& $VenvPython -m pip check" in setup_script
+    assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in setup_script
+
+
 def test_updater_never_uses_pull_or_rebase():
     update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
 
@@ -30,6 +45,16 @@ def test_updater_checks_service_permissions_before_fetching():
     fetch = update_script.index("& git fetch --no-tags origin $branch")
 
     assert permission_check < fetch
+
+
+def test_updater_repairs_pip_and_checks_dependencies():
+    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+
+    assert "function Ensure-Pip" in update_script
+    assert "& $VenvPython -m ensurepip --upgrade" in update_script
+    assert "& $VenvPython -m pip install --upgrade pip" in update_script
+    assert "& $VenvPython -m pip check" in update_script
+    assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in update_script
 
 
 def test_updater_restarts_based_on_running_server_state():
@@ -54,6 +79,23 @@ def test_start_script_uses_state_aware_windows_helper():
     assert "Get-Service -Name $ServiceName" in helper
     assert "Get-SetuServerProcesses" in helper
     assert "Setu is already running in another window or background process." in helper
+
+
+def test_start_helper_repairs_missing_dependencies_before_launch():
+    helper = (PROJECT_ROOT / "deployment" / "windows" / "start_setu.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "function Ensure-AppDependencies" in helper
+    assert "import uvicorn; from app.main import app" in helper
+    assert "Set-Location $projectRoot" in helper
+    assert "Test-AppDependencies -PythonExe $PythonExe -Quiet" in helper
+    assert "& $PythonExe -m ensurepip --upgrade" in helper
+    assert "& $PythonExe -m pip install -r $RequirementsPath" in helper
+    assert "Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath" in helper
+    assert helper.index("Ensure-AppDependencies -PythonExe $pythonExe") < helper.index(
+        "Get-Service -Name $ServiceName"
+    )
 
 
 def test_stop_helper_detects_setu_process_tree_not_loopback_socket():

@@ -40,6 +40,24 @@ function Test-AdminShell {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function Ensure-Pip {
+    & $VenvPython -m pip --version | Out-Null
+    if ($LASTEXITCODE -eq 0) {
+        return
+    }
+
+    Write-Host "pip is missing from the virtual environment. Repairing pip with ensurepip..."
+    & $VenvPython -m ensurepip --upgrade | Out-Host
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run setup.bat again."
+    }
+
+    & $VenvPython -m pip --version | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run setup.bat again."
+    }
+}
+
 function Start-SetuServer {
     if ($restartAsService) {
         Start-Service -Name $ServiceName
@@ -62,6 +80,7 @@ function Start-SetuServer {
 function Restore-PreviousVersion {
     Write-Host "Rolling back to the previous version ($previousHead)..." -ForegroundColor Yellow
     & git reset --hard $previousHead | Out-Host
+    Ensure-Pip
     & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt") | Out-Host
 }
 
@@ -148,13 +167,23 @@ Write-Section "Stop Existing Server"
 # On failure the server is already down, so roll back and restart it.
 try {
     Write-Section "Update Dependencies"
+    Ensure-Pip
+    & $VenvPython -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not upgrade pip."
+    }
+
     & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
     if ($LASTEXITCODE -ne 0) {
         throw "Python dependency installation failed."
     }
+    & $VenvPython -m pip check
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installed Python dependencies are inconsistent. Check the pip message above."
+    }
 
     Write-Section "Smoke Test"
-    & $VenvPython -c "from app.main import app; print('App import OK')"
+    & $VenvPython -c "import uvicorn; from app.main import app; print('App import OK')"
     if ($LASTEXITCODE -ne 0) {
         throw "The updated app could not be imported. Check the error above."
     }
