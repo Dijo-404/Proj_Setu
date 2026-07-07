@@ -11,8 +11,10 @@ The backup uses SQLite's backup API, so WAL data is included.
 
 Automatic verified backups run by default every 24 hours into `data/backups/`.
 The app keeps the latest 14 backup files and opens every new backup for SQLite
-integrity and foreign-key checks before retaining it. Configure these `.env`
-values when needed:
+integrity and foreign-key checks before retaining it. Super admins can change
+the automatic backup switch, backup folder, schedule, retention count, and
+off-machine copy folder from `Maintenance`. These values are persisted to
+`.env`:
 
 ```text
 AUTOMATIC_BACKUPS_ENABLED=true
@@ -38,6 +40,21 @@ The `.env` file contains deployment settings such as the session secret, databas
 
 ## Restore
 
+In-app restore:
+
+1. Log in as a super admin.
+2. Open `Maintenance`.
+3. Use `Import backup` to restore a listed backup or upload a previous `.db` backup.
+4. Enter the super admin password and type `IMPORT`.
+5. Sign in again with an account from the restored backup.
+6. Check Dashboard, Products, Serials, Reports, and Settings.
+
+The import verifies that the file is a Setu SQLite backup, creates a safety
+backup of the current database, replaces `data/setu.db`, clears SQLite sidecar
+files, and reconnects the app to the restored database.
+
+Manual restore:
+
 1. Stop the Setu service or close the app window.
 2. Copy the current `data/` folder to a safe location.
 3. Replace `data/setu.db` with the backup file.
@@ -46,6 +63,6 @@ The `.env` file contains deployment settings such as the session secret, databas
 6. Start the Setu service or run `start_setu.bat`.
 7. Log in and check Dashboard, Products, Serials, Reports, and Settings.
 
-Do not restore while the app is running.
+Do not perform a manual file replacement while the app is running.
 
 If the restored database came from another machine, confirm the Tally host, port, company profile, and `SESSION_COOKIE_SECURE` value before staff start scanning.

@@ -1,3 +1,5 @@
+from io import BytesIO
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
@@ -72,6 +74,9 @@ def test_database_reset_is_visible_only_to_super_admin_and_route_is_protected():
     assert root_page.status_code == 200
     assert 'action="/maintenance/reset"' not in admin_page.text
     assert 'action="/maintenance/reset"' in root_page.text
+    assert 'action="/maintenance/restore-upload"' not in admin_page.text
+    assert 'action="/maintenance/restore-upload"' in root_page.text
+    assert 'action="/maintenance/backup-settings"' in root_page.text
     assert admin_reset.status_code == 403
 
 
@@ -172,3 +177,25 @@ def test_super_admin_database_reset_clears_database_and_preserves_current_super_
     assert company_name.value == ""
     assert tally_enabled is not None
     assert tally_enabled.value == "false"
+
+
+def test_restore_upload_rejects_invalid_backup_file():
+    engine, Session = make_session()
+    with Session() as db:
+        db.add(User(id=1, username="root", password_hash=hash_password("root-pass"), role="super_admin", active=True))
+        db.commit()
+
+    app.dependency_overrides[get_db] = override_db(Session)
+    try:
+        response = TestClient(app, follow_redirects=False).post(
+            "/maintenance/restore-upload",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+            data={"super_admin_password": "root-pass", "confirm_restore": "IMPORT"},
+            files={"upload": ("bad.db", BytesIO(b"not sqlite"), "application/octet-stream")},
+        )
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/maintenance?error=restore_failed"

@@ -330,9 +330,11 @@ Backup:
 
 Automatic verified backups run by default every 24 hours into
 `data/backups/`, retain the latest 14 files, and test each backup with SQLite
-integrity and foreign-key checks before keeping it. Set
-`BACKUP_OFFSITE_DIRECTORY` in `.env` to copy the same verified backup to
-another drive or network share. Keep a separate copy of `.env`.
+integrity and foreign-key checks before keeping it. Super admins can change the
+automatic backup switch, backup folder, schedule, retention count, and
+off-machine copy folder from `Maintenance`. Set `BACKUP_OFFSITE_DIRECTORY` to
+copy the same verified backup to another drive or network share. Keep a
+separate copy of `.env`.
 
 For an additional server-level backup such as Cobian Reflector, include the
 whole `data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar
@@ -340,11 +342,14 @@ files such as `setu.db-wal` and `setu.db-shm` while the app is running.
 
 Restore:
 
-1. Stop the app/server.
-2. Copy the current `data/` folder somewhere safe.
-3. Replace `data/setu.db` with the backup file.
-4. Start the app again.
-5. Check Dashboard, Products, Serials, and Reports.
+1. Open `Maintenance` as a super admin.
+2. Use `Import backup` to restore a listed backup or upload a previous `.db` backup.
+3. Sign in again with an account from the restored backup.
+4. Check Dashboard, Products, Serials, and Reports.
+
+Manual restore is still available when the app is stopped: copy the current
+`data/` folder somewhere safe, replace `data/setu.db`, start the app again, and
+then verify the restored data.
 
 ## 12. Run Tests
 

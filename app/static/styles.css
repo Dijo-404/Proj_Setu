@@ -1421,6 +1421,40 @@ tfoot th, tfoot td {
 
 .grid-form.compact { grid-template-columns: repeat(3, minmax(0, 1fr)) auto; }
 
+.backup-settings-grid {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(260px, 1fr) minmax(120px, 0.35fr) minmax(120px, 0.35fr);
+  gap: 14px;
+  align-items: end;
+}
+
+.backup-import-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+
+.backup-import-form {
+  display: grid;
+  gap: 15px;
+  min-width: 0;
+}
+
+.backup-import-form h3 {
+  font-size: 20px;
+}
+
+.backup-import-form--upload {
+  padding-left: 22px;
+  border-left: 1px solid var(--hairline-soft);
+}
+
+.backup-import-form .button {
+  justify-self: start;
+  min-width: 220px;
+}
+
 .stack { display: grid; gap: 15px; }
 
 .two-col {
@@ -2657,10 +2691,27 @@ small {
   .chart-grid { grid-template-columns: 1fr; }
   .split, .batch-layout { grid-template-columns: 1fr; }
   .grid-form, .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .backup-settings-grid, .two-col { grid-template-columns: 1fr; }
   .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .label-controls .grid-form.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stock-movement-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .stock-movement-filters, .formula-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 760px) {
+  .backup-import-grid { grid-template-columns: 1fr; }
+
+  .backup-import-form--upload {
+    padding-left: 0;
+    padding-top: 18px;
+    border-left: 0;
+    border-top: 1px solid var(--hairline-soft);
+  }
+
+  .backup-import-form .button {
+    width: 100%;
+    justify-self: stretch;
+  }
 }
 
 @media (max-width: 1180px) {

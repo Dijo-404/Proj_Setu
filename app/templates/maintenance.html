@@ -14,7 +14,7 @@
 {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
 {% if success %}<div class="alert success">{{ success }}</div>{% endif %}
 
-<section class="panel narrow">
+<section class="panel">
   <div class="section-title"><h2>Backup</h2></div>
   <dl class="details">
     <dt>Database</dt><dd>{{ database_path }}</dd>
@@ -35,6 +35,81 @@
 </section>
 
 {% if has_role(user, 'super_admin') and role_can(user, 'database_reset') %}
+<section class="panel">
+  <div class="section-title"><h2>Backup settings</h2></div>
+  <form method="post" action="/maintenance/backup-settings" class="stack">
+    <label class="checkline">
+      <input type="checkbox" name="automatic_backups_enabled" value="true" {{ 'checked' if backup_status.enabled else '' }}>
+      Automatic backups
+    </label>
+    <div class="backup-settings-grid">
+      <label>Backup folder
+        <input name="backup_directory" value="{{ backup_config.backup_directory }}" required>
+      </label>
+      <label>Off-machine copy
+        <input name="backup_offsite_directory" value="{{ backup_config.backup_offsite_directory }}" placeholder="Drive path or network share">
+      </label>
+      <label>Schedule
+        <input name="backup_interval_hours" type="number" min="1" max="168" step="1" value="{{ backup_config.backup_interval_hours }}" required>
+      </label>
+      <label>Retention
+        <input name="backup_retention_count" type="number" min="1" max="365" step="1" value="{{ backup_config.backup_retention_count }}" required>
+      </label>
+    </div>
+    <div class="save-row">
+      <button class="button primary" type="submit">Save backup settings</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel">
+  <div class="section-title"><h2>Import backup</h2></div>
+  <div class="backup-import-grid">
+    <form method="post" action="/maintenance/restore-existing" class="backup-import-form" onsubmit="return confirm('Import this backup now? Current data will be replaced after a safety backup is created.');">
+      <h3>From backup folder</h3>
+      <label>Previous backup
+        <select name="selected_backup" required {{ 'disabled' if not backup_status.backup_files else '' }}>
+          {% if backup_status.backup_files %}
+            {% for backup_file in backup_status.backup_files %}
+            <option value="{{ backup_file }}">{{ backup_file.name }} - {{ backup_file }}</option>
+            {% endfor %}
+          {% else %}
+            <option value="">No backups found</option>
+          {% endif %}
+        </select>
+      </label>
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_restore" required placeholder="Type IMPORT">
+      </label>
+      <button class="button danger" type="submit" {{ 'disabled' if not backup_status.backup_files else '' }}>Import selected backup</button>
+    </form>
+
+    <form method="post" action="/maintenance/restore-upload" enctype="multipart/form-data" class="backup-import-form backup-import-form--upload" onsubmit="return confirm('Import this uploaded backup now? Current data will be replaced after a safety backup is created.');">
+      <h3>Upload backup file</h3>
+      <label>Backup file
+        <input name="upload" type="file" accept=".db,application/octet-stream" required>
+      </label>
+      <label>Super admin password
+        <span class="password-field" data-password-field>
+          <input name="super_admin_password" type="password" autocomplete="current-password" required>
+          <button class="button small ghost" type="button" data-password-toggle aria-pressed="false">Show</button>
+        </span>
+      </label>
+      <label>Confirmation
+        <input name="confirm_restore" required placeholder="Type IMPORT">
+      </label>
+      <button class="button danger" type="submit">Import uploaded backup</button>
+    </form>
+  </div>
+  <p class="muted">Import verifies the backup, creates a safety backup of the current database, replaces the SQLite database, and then signs you out.</p>
+</section>
+
 <section class="panel">
   <div class="section-title"><h2>Reset database</h2></div>
   <div class="product-danger-zone">
@@ -61,7 +136,8 @@
 <section class="panel">
   <div class="section-title"><h2>Restore procedure</h2></div>
   <div class="checklist">
-    <div>Stop the Setu Windows service or FastAPI server.</div>
+    <div>Use Import backup above for a verified in-app restore from an existing backup.</div>
+    <div>For a manual restore, stop the Setu Windows service or FastAPI server.</div>
     <div>Copy the current data folder to a safe location before replacing the database.</div>
     <div>Replace the database at <strong>{{ database_path }}</strong> with the downloaded backup file.</div>
     <div>Start the Setu service again and log in as admin.</div>

@@ -62,21 +62,22 @@ def _resolve_secret_key() -> str:
 
 
 class Settings:
-    app_name: str = os.getenv("APP_NAME", "Setu Barcode Tally Bridge")
-    secret_key: str = _resolve_secret_key()
-    database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setu.db")
-    session_timeout_minutes: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))
-    bootstrap_admin_username: str = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
-    bootstrap_admin_password: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "admin123")
-    cookie_secure: bool = _flag("SESSION_COOKIE_SECURE")
-    login_max_attempts: int = int(os.getenv("LOGIN_MAX_ATTEMPTS", "8"))
-    login_lockout_minutes: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
-    automatic_backups_enabled: bool = _flag("AUTOMATIC_BACKUPS_ENABLED", "true")
-    backup_directory: str = os.getenv("BACKUP_DIRECTORY", "./data/backups")
-    backup_offsite_directory: str = os.getenv("BACKUP_OFFSITE_DIRECTORY", "").strip()
-    backup_interval_hours: int = int(os.getenv("BACKUP_INTERVAL_HOURS", "24"))
-    backup_retention_count: int = int(os.getenv("BACKUP_RETENTION_COUNT", "14"))
-    backup_startup_delay_seconds: int = int(os.getenv("BACKUP_STARTUP_DELAY_SECONDS", "60"))
+    def __init__(self) -> None:
+        self.app_name: str = os.getenv("APP_NAME", "Setu Barcode Tally Bridge")
+        self.secret_key: str = _resolve_secret_key()
+        self.database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setu.db")
+        self.session_timeout_minutes: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))
+        self.bootstrap_admin_username: str = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
+        self.bootstrap_admin_password: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "admin123")
+        self.cookie_secure: bool = _flag("SESSION_COOKIE_SECURE")
+        self.login_max_attempts: int = int(os.getenv("LOGIN_MAX_ATTEMPTS", "8"))
+        self.login_lockout_minutes: int = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
+        self.automatic_backups_enabled: bool = _flag("AUTOMATIC_BACKUPS_ENABLED", "true")
+        self.backup_directory: str = os.getenv("BACKUP_DIRECTORY", "./data/backups")
+        self.backup_offsite_directory: str = os.getenv("BACKUP_OFFSITE_DIRECTORY", "").strip()
+        self.backup_interval_hours: int = int(os.getenv("BACKUP_INTERVAL_HOURS", "24"))
+        self.backup_retention_count: int = int(os.getenv("BACKUP_RETENTION_COUNT", "14"))
+        self.backup_startup_delay_seconds: int = int(os.getenv("BACKUP_STARTUP_DELAY_SECONDS", "60"))
 
     @property
     def using_default_secret(self) -> bool:
