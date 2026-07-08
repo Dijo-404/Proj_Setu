@@ -91,6 +91,19 @@
             {% if row.progress.state == 'ACTIVE' and row.latest_batch.status != 'DRAFT' %}
             <a class="button small" href="/batches/new?batch_type=AUDIT&audit_assignment_id={{ row.assignment.id }}">New batch</a>
             {% endif %}
+            {% if can_manage %}
+            <form method="post" action="/audit-assignments/{{ row.assignment.id }}/extend" class="inline-form audit-extend-form">
+              <input
+                type="datetime-local"
+                name="ends_at"
+                aria-label="New audit deadline"
+                title="New audit deadline"
+                value="{% if form.extend_assignment_id == row.assignment.id|string %}{{ form.extend_ends_at }}{% else %}{{ row.ends_local.strftime('%Y-%m-%dT%H:%M') }}{% endif %}"
+                required
+              >
+              <button class="button small" type="submit">Extend</button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% else %}

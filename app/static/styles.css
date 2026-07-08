@@ -1859,6 +1859,15 @@ details.add-company:not([open]) { padding-block: 8px; }
 .compact-inline { justify-content: flex-start; }
 .compact-inline input { width: 96px; }
 
+.audit-extend-form {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.audit-extend-form input { width: 178px; }
+
 .product-table-scroll {
   max-height: min(680px, calc(100vh - 220px));
 }
