@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Maintenance - Setu{% endblock %}
+{% block title %}Maintenance - Setuora{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -137,10 +137,10 @@
   <div class="section-title"><h2>Restore procedure</h2></div>
   <div class="checklist">
     <div>Use Import backup above for a verified in-app restore from an existing backup.</div>
-    <div>For a manual restore, stop the Setu Windows service or FastAPI server.</div>
+    <div>For a manual restore, stop the Setuora Windows service or FastAPI server.</div>
     <div>Copy the current data folder to a safe location before replacing the database.</div>
     <div>Replace the database at <strong>{{ database_path }}</strong> with the downloaded backup file.</div>
-    <div>Start the Setu service again and log in as admin.</div>
+    <div>Start the Setuora service again and log in as admin.</div>
     <div>Open Dashboard, Products, and Reports to confirm the restored data is visible.</div>
   </div>
 </section>

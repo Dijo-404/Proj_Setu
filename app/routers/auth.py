@@ -16,7 +16,7 @@ from app.templates import templates
 router = APIRouter()
 
 # Keeps missing/inactive usernames on the normal password-verify path.
-_DUMMY_PASSWORD_HASH = hash_password("setu-dummy-password-never-matches")
+_DUMMY_PASSWORD_HASH = hash_password("setuora-dummy-password-never-matches")
 
 
 def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int:

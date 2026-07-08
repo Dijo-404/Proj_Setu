@@ -13,7 +13,7 @@ from app.services.bootstrap import bootstrap
 from app.services.schema import ensure_runtime_schema
 from app.services.sync_worker import start_retry_worker, stop_retry_worker
 
-logger = logging.getLogger("setu")
+logger = logging.getLogger("setuora")
 
 
 def create_app() -> FastAPI:

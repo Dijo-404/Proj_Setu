@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}New batch - Setu{% endblock %}
+{% block title %}New batch - Setuora{% endblock %}
 {% block content %}
 {% set sale_state_options = state_options|default([
   'Andaman and Nicobar Islands',
@@ -54,7 +54,7 @@
 
 <section class="panel narrow">
   {% if error %}<div class="alert error">{{ error }}</div>{% endif %}
-  <form method="post" action="/batches" class="stack" data-draft="setu:newbatch:{{ batch_type.value }}">
+  <form method="post" action="/batches" class="stack" data-draft="setuora:newbatch:{{ batch_type.value }}">
     <input type="hidden" name="batch_type" value="{{ batch_type.value }}">
     {% if batch_type.value == 'AUDIT' %}
     <label>Audit assignment

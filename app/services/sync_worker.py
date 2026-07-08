@@ -14,7 +14,7 @@ from app.services.settings import get_all_settings, is_tally_enabled
 from app.services.tally import SYNC_LEASE_MINUTES, TALLY_XML_SUPPORTED_BATCH_TYPES, sync_batch
 
 
-WORKER_STATE_KEY = "setu_retry_worker_task"
+WORKER_STATE_KEY = "setuora_retry_worker_task"
 
 
 def retry_pending_batches(limit: int = 10) -> int:

@@ -35,7 +35,7 @@
 
   function tick() {
     if (document.hidden) return;
-    fetch(url, { headers: { Accept: "application/json", "X-Setu-Background": "true" } })
+    fetch(url, { headers: { Accept: "application/json", "X-Setuora-Background": "true" } })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) { if (d) apply(d); })
       .catch(function () {});

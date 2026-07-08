@@ -293,7 +293,7 @@ def stock_movement_excel(
     return Response(
         stock_movement_xlsx(rows, summary, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-stock-movement.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=setuora-stock-movement.xlsx"},
     )
 
 
@@ -329,5 +329,5 @@ def stock_movement_pdf_export(
     return Response(
         stock_movement_pdf(rows, summary),
         media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=setu-stock-movement.pdf"},
+        headers={"Content-Disposition": "attachment; filename=setuora-stock-movement.pdf"},
     )

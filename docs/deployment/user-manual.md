@@ -1,6 +1,6 @@
 # User Manual
 
-Setu is used from a browser on the factory LAN. Staff sign in, scan serial QR labels, and submit stock movements. Tally remains the accounting and inventory master; Setu keeps serial-level traceability and posts only the supported voucher types after admin validation.
+Setuora is used from a browser on the factory LAN. Staff sign in, scan serial QR labels, and submit stock movements. Tally remains the accounting and inventory master; Setuora keeps serial-level traceability and posts only the supported voucher types after admin validation.
 
 ## Common Navigation
 
@@ -54,7 +54,7 @@ Labels contain only a QR code and serial text. They do not include price, GST, c
 
 ## Barcode Assignment
 
-Use `Barcodes` -> `Assignment` to inward existing stock into Setu without a purchase scan.
+Use `Barcodes` -> `Assignment` to inward existing stock into Setuora without a purchase scan.
 
 Single-product assignment:
 
@@ -71,7 +71,7 @@ Product Code or Product Name, Quantity, HSN, GST, SGST, IGST, Batch, Mfg Date, E
 
 Tally purchase/invoice exports are also accepted when the item table has `Description of Goods` and `Quantity`.
 Rows such as totals, GST ledger rows, and round-off are ignored.
-If a Tally product name is not already in Setu, Setu creates a minimal product from the imported name, HSN, GST rate, and unit before generating labels.
+If a Tally product name is not already in Setuora, Setuora creates a minimal product from the imported name, HSN, GST rate, and unit before generating labels.
 
 Download the assignment's label PDF and serial XLSX after generation.
 
@@ -119,11 +119,11 @@ It is clearly marked as provisional and is not the final statutory GST invoice.
 
 1. An admin or director opens `Audit assignments`, selects one product and
    auditor, and sets the start and end time.
-2. Setu freezes the in-stock serials expected for that product and opens the
+2. Setuora freezes the in-stock serials expected for that product and opens the
    auditor's first batch.
 3. The auditor opens `Audit assignments`, scans physical stock, and submits the
    batch. More batches may be opened during the same audit window.
-4. Setu combines scans from every batch in the assignment. Unscanned serials
+4. Setuora combines scans from every batch in the assignment. Unscanned serials
    remain pending during the window, so finding the remaining stock in a later
    batch clears it.
 5. After the deadline, only serials not scanned in any linked batch appear as
@@ -149,7 +149,7 @@ Open `Admin` -> `Expiry` to review:
 - FEFO sale shortcut
 - product batch entry shortcut
 
-For sale, issue, and purchase-return batches, Setu enforces FEFO when expiry dates are available.
+For sale, issue, and purchase-return batches, Setuora enforces FEFO when expiry dates are available.
 
 ## Reports
 
@@ -171,6 +171,6 @@ Open a serial detail page to see the full scan and transaction history for one s
 3. Click `Download backup`.
 4. Store the downloaded `.db` file safely.
 
-Setu also creates verified automatic backups into `data/backups/` by default,
+Setuora also creates verified automatic backups into `data/backups/` by default,
 keeps the latest 14 files, and can copy them to another drive or network share
 when `BACKUP_OFFSITE_DIRECTORY` is configured. Keep a separate copy of `.env`.

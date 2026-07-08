@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ batch.batch_number }} - Setu{% endblock %}
+{% block title %}{{ batch.batch_number }} - Setuora{% endblock %}
 {% block content %}
 {% set sale_return = sale_return_state|default({'pending_count': 0, 'pending_serials': []}, true) %}
 {% set sale_return_pending = sale_return.pending_count|default(0)|int %}

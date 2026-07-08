@@ -38,18 +38,18 @@ The helper:
 After setup, start the app anytime with:
 
 ```text
-start_setu.bat
+start_setuora.bat
 ```
 
-Use `start_setu.bat --port 8001` if port `8000` is already in use.
+Use `start_setuora.bat --port 8001` if port `8000` is already in use.
 
 Stop the app, including the Windows service when installed, with:
 
 ```text
-stop_setu.bat
+stop_setuora.bat
 ```
 
-Run `stop_setu.bat` as Administrator when Setu is installed as a Windows
+Run `stop_setuora.bat` as Administrator when Setuora is installed as a Windows
 service.
 
 To pull the latest version from GitHub, update dependencies, and restart the
@@ -59,14 +59,14 @@ server, run:
 update.bat
 ```
 
-Run the updater as Administrator when Setu is installed as a Windows service.
+Run the updater as Administrator when Setuora is installed as a Windows service.
 The updater fetches and applies only a fast-forward Git update. It never
 rebases and will not overwrite conflicting local code changes.
 
 Pass `-SkipCaddy` to `setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install
-`deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every
-phone that connects to Setu.
+`deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every
+phone that connects to Setuora.
 
 ## Manual Install
 
@@ -94,7 +94,7 @@ Edit `.env`:
 APP_SECRET_KEY=replace-with-a-long-random-secret
 BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_PASSWORD=replace-before-first-use
-DATABASE_URL=sqlite:///./data/setu.db
+DATABASE_URL=sqlite:///./data/setuora.db
 ```
 
 Start the app:
@@ -145,7 +145,7 @@ Expected response:
 
 ## Backup Reminder
 
-Setu creates verified automatic backups into `data/backups/` by default. For
+Setuora creates verified automatic backups into `data/backups/` by default. For
 off-machine protection, set `BACKUP_OFFSITE_DIRECTORY` in `.env` to another
 drive or network share and confirm the Maintenance page shows the latest copied
 backup.

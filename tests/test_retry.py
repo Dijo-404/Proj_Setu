@@ -85,7 +85,7 @@ def test_crash_after_tally_success_reuses_frozen_payload_and_remote_id(db_sessio
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
     settings = {
-        "company_name": "Setu Test Company",
+        "company_name": "Setuora Test Company",
         "tally_enabled": "true",
         "tally_host": "127.0.0.1",
         "tally_port": "9000",

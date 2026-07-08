@@ -63,9 +63,9 @@ def _resolve_secret_key() -> str:
 
 class Settings:
     def __init__(self) -> None:
-        self.app_name: str = os.getenv("APP_NAME", "Setu Barcode Tally Bridge")
+        self.app_name: str = os.getenv("APP_NAME", "Setuora Barcode Tally Bridge")
         self.secret_key: str = _resolve_secret_key()
-        self.database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setu.db")
+        self.database_url: str = os.getenv("DATABASE_URL", "sqlite:///./data/setuora.db")
         self.session_timeout_minutes: int = int(os.getenv("SESSION_TIMEOUT_MINUTES", "480"))
         self.bootstrap_admin_username: str = os.getenv("BOOTSTRAP_ADMIN_USERNAME", "admin")
         self.bootstrap_admin_password: str = os.getenv("BOOTSTRAP_ADMIN_PASSWORD", "admin123")

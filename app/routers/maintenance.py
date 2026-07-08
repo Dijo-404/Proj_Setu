@@ -25,7 +25,7 @@ from app.services.database_reset import reset_database_and_cache
 from app.templates import templates
 
 router = APIRouter(prefix="/maintenance")
-logger = logging.getLogger("setu")
+logger = logging.getLogger("setuora")
 MAX_BACKUP_UPLOAD_BYTES = 512 * 1024 * 1024
 
 
@@ -39,7 +39,7 @@ def maintenance_page(request: Request, error: str = "", success: str = "", db: S
         "restore_confirm_required": "Type IMPORT to confirm the backup import.",
         "restore_file_required": "Choose a backup file to import.",
         "restore_too_large": "Backup file is too large to import from the browser.",
-        "restore_failed": "Backup import failed. Choose a verified Setu backup file.",
+        "restore_failed": "Backup import failed. Choose a verified Setuora backup file.",
     }.get(error, error)
     success_message = {
         "database_reset": "Database and cache reset completed.",
@@ -135,7 +135,7 @@ def restore_uploaded_backup(
         return RedirectResponse("/maintenance?error=restore_too_large", status_code=303)
 
     with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "uploaded-setu-backup.db"
+        temp_path = Path(temp_dir) / "uploaded-setuora-backup.db"
         temp_path.write_bytes(data)
         return _restore_from_path(request, db, temp_path)
 

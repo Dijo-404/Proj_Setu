@@ -1,8 +1,8 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-set "SETU_SETUP_BAT=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETU_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
+set "SETUORA_SETUP_BAT=%~f0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
 set "SETUP_EXIT=%ERRORLEVEL%"
 echo.
 if not "%SETUP_EXIT%"=="0" echo Setup did not complete successfully.
@@ -19,17 +19,17 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$ProjectRoot = Split-Path -Parent $env:SETU_SETUP_BAT
+$ProjectRoot = Split-Path -Parent $env:SETUORA_SETUP_BAT
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
-$StartScript = Join-Path $ProjectRoot "start_setu.bat"
-$StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setu.ps1"
+$StartScript = Join-Path $ProjectRoot "start_setuora.bat"
+$StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $EnvPath = Join-Path $ProjectRoot ".env"
 $DataDir = Join-Path $ProjectRoot "data"
 $LogsDir = Join-Path $ProjectRoot "logs"
 $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
-$CaddyServiceName = "SetuCaddy"
+$CaddyServiceName = "SetuoraCaddy"
 
 function Write-Section {
     param([string]$Title)
@@ -233,17 +233,17 @@ function Install-Dependencies {
 }
 
 function Write-EnvFile {
-    $existingDatabase = Test-Path (Join-Path $DataDir "setu.db")
+    $existingDatabase = Test-Path (Join-Path $DataDir "setuora.db")
     if ($existingDatabase) {
-        Write-Host "Existing data\setu.db found. Changing bootstrap admin details will not change existing users." -ForegroundColor Yellow
+        Write-Host "Existing data\setuora.db found. Changing bootstrap admin details will not change existing users." -ForegroundColor Yellow
     }
 
-    $appName = Read-Default "App display name" "Setu QR Tally Bridge"
+    $appName = Read-Default "App display name" "Setuora QR Tally Bridge"
     $adminUser = Read-Default "First admin username" "admin"
     $adminPassword = Read-Password $adminUser
     $sessionTimeout = Read-Default "Login session timeout in minutes" "480"
     $secureCookie = Read-YesNo "Will this app be opened only through HTTPS right now?" $false
-    $databaseUrl = "sqlite:///./data/setu.db"
+    $databaseUrl = "sqlite:///./data/setuora.db"
     $secret = New-RandomSecret
 
     $secureCookieText = if ($secureCookie) { "true" } else { "false" }
@@ -427,7 +427,7 @@ function Ensure-Nssm {
     if (-not $nssmExe) {
         $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
         if (-not $winget) {
-            throw "NSSM is required for the Setu Windows service, but WinGet is unavailable. Install App Installer from Microsoft Store and run setup again."
+            throw "NSSM is required for the Setuora Windows service, but WinGet is unavailable. Install App Installer from Microsoft Store and run setup again."
         }
 
         Write-Host "NSSM was not found. Installing it automatically with WinGet..."
@@ -508,7 +508,7 @@ function Install-CaddyService {
             -MethodName Change `
             -Arguments @{
                 PathName = $serviceCommand
-                DisplayName = "Setu Caddy HTTPS Proxy"
+                DisplayName = "Setuora Caddy HTTPS Proxy"
                 StartMode = "Automatic"
             }
         if ($changeResult.ReturnValue -ne 0) {
@@ -519,12 +519,12 @@ function Install-CaddyService {
         New-Service `
             -Name $CaddyServiceName `
             -BinaryPathName $serviceCommand `
-            -DisplayName "Setu Caddy HTTPS Proxy" `
+            -DisplayName "Setuora Caddy HTTPS Proxy" `
             -StartupType Automatic `
             -ErrorAction Stop | Out-Null
     }
 
-    & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setu QR Tally Bridge" | Out-Null
+    & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setuora QR Tally Bridge" | Out-Null
     & sc.exe failure $CaddyServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     $stateDir = Join-Path $CaddyDir "state"
@@ -535,7 +535,7 @@ function Install-CaddyService {
         "XDG_CONFIG_HOME=$stateDir"
     ) -Force | Out-Null
 
-    $firewallRuleName = "Setu Caddy HTTPS"
+    $firewallRuleName = "Setuora Caddy HTTPS"
     if (-not (Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule `
             -DisplayName $firewallRuleName `
@@ -559,7 +559,7 @@ function Install-CaddyService {
 
     $exportedCertificate = $null
     if (Test-Path $rootCertificate) {
-        $exportedCertificate = Join-Path $CaddyDir "setu-caddy-root.crt"
+        $exportedCertificate = Join-Path $CaddyDir "setuora-caddy-root.crt"
         Copy-Item -LiteralPath $rootCertificate -Destination $exportedCertificate -Force
         try {
             Import-Certificate -FilePath $rootCertificate -CertStoreLocation "Cert:\LocalMachine\Root" | Out-Null
@@ -592,21 +592,21 @@ function Offer-CaddySetup {
     }
 
     $lanIp = Get-LocalIPv4
-    $defaultAddress = if ($lanIp) { $lanIp } else { "setu.local" }
+    $defaultAddress = if ($lanIp) { $lanIp } else { "setuora.local" }
     $address = Read-Default "HTTPS LAN IP address or local DNS name" $defaultAddress
     $address = $address -replace "^https://", ""
     $address = $address.TrimEnd("/")
     if ([string]::IsNullOrWhiteSpace($address) -or $address -match "^http://" -or $address -match "[/\s]") {
-        throw "Use only a LAN IP address or DNS name for Caddy, for example 192.168.1.20 or setu.local."
+        throw "Use only a LAN IP address or DNS name for Caddy, for example 192.168.1.20 or setuora.local."
     }
 
     $caddyExe = Ensure-Caddy
     Write-CaddyConfig -Address $address -UpstreamPort $Port
     $rootCertificate = Install-CaddyService -CaddyExe $caddyExe
     Set-EnvSetting -Name "SESSION_COOKIE_SECURE" -Value "true"
-    $existingSetuService = Get-Service -Name "SetuQrTallyBridge" -ErrorAction SilentlyContinue
-    if ($existingSetuService -and $existingSetuService.Status -eq "Running") {
-        Restart-Service -Name "SetuQrTallyBridge"
+    $existingSetuoraService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
+    if ($existingSetuoraService -and $existingSetuoraService.Status -eq "Running") {
+        Restart-Service -Name "SetuoraQrTallyBridge"
     }
 
     return @{
@@ -616,9 +616,9 @@ function Offer-CaddySetup {
 }
 
 function Offer-ServiceInstall {
-    $existingService = Get-Service -Name "SetuQrTallyBridge" -ErrorAction SilentlyContinue
+    $existingService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
     if ($existingService) {
-        Write-Host "Existing Setu Windows service found. Updating and restarting it."
+        Write-Host "Existing Setuora Windows service found. Updating and restarting it."
         if (-not (Test-AdminShell)) {
             throw "Updating the existing Windows service needs Administrator access. Right-click setup.bat and choose 'Run as administrator'."
         }
@@ -632,7 +632,7 @@ function Offer-ServiceInstall {
         return $true
     }
 
-    $installService = Read-YesNo "Install Setu as an auto-starting Windows service now?" $false
+    $installService = Read-YesNo "Install Setuora as an auto-starting Windows service now?" $false
     if (-not $installService) {
         return $false
     }
@@ -664,7 +664,7 @@ function Get-LocalIPv4 {
     return $null
 }
 
-Write-Section "Setu Setup"
+Write-Section "Setuora Setup"
 Write-Host "This setup will prepare Python, install packages, create .env, configure optional services, and optionally start the app."
 
 Set-Location $ProjectRoot
@@ -676,19 +676,19 @@ if (Test-Path $VenvPython) {
         throw "The server management helper is missing: '$StopScript'."
     }
 
-    $existingSetuService = Get-Service -Name "SetuQrTallyBridge" -ErrorAction SilentlyContinue
+    $existingSetuoraService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
     if (
-        $existingSetuService -and
-        $existingSetuService.Status -ne "Stopped" -and
+        $existingSetuoraService -and
+        $existingSetuoraService.Status -ne "Stopped" -and
         -not (Test-AdminShell)
     ) {
-        throw "Setu is running as a Windows service. Right-click setup.bat, choose 'Run as administrator', and try again."
+        throw "Setuora is running as a Windows service. Right-click setup.bat, choose 'Run as administrator', and try again."
     }
 
     & $StopScript -ProjectDir $ProjectRoot
 }
 else {
-    Write-Host "Fresh installation; there is no existing Setu server to stop."
+    Write-Host "Fresh installation; there is no existing Setuora server to stop."
 }
 
 Write-Section "Python"
@@ -721,7 +721,7 @@ if ($caddySetup) {
     Write-Host "Secure LAN URL: https://$($caddySetup.Address)" -ForegroundColor Green
     if ($caddySetup.RootCertificate) {
         Write-Host "Phone certificate: $($caddySetup.RootCertificate)"
-        Write-Host "Install this certificate as a trusted CA certificate on every phone that uses Setu."
+        Write-Host "Install this certificate as a trusted CA certificate on every phone that uses Setuora."
     }
 }
 elseif ($lanIp) {
@@ -737,7 +737,7 @@ if ($credentials) {
 }
 
 if ($serviceInstalled) {
-    Write-Host "Setu is running as the auto-starting Windows service." -ForegroundColor Green
+    Write-Host "Setuora is running as the auto-starting Windows service." -ForegroundColor Green
     if ($caddySetup) {
         Start-Process "https://$($caddySetup.Address)"
     }
@@ -746,7 +746,7 @@ if ($serviceInstalled) {
     }
 }
 elseif (-not $SkipStart) {
-    $startNow = Read-YesNo "Start Setu now in a new window?" $true
+    $startNow = Read-YesNo "Start Setuora now in a new window?" $true
     if ($startNow) {
         Start-Process -FilePath $StartScript -ArgumentList @("-Port", "$Port")
         Start-Sleep -Seconds 2

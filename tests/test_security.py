@@ -73,7 +73,7 @@ def test_authenticated_activity_renews_session_cookie():
 
 def test_background_dashboard_refresh_does_not_renew_session_cookie():
     middleware = SessionActivityMiddleware(app=lambda scope, receive, send: None)
-    request = _request([(b"x-setu-background", b"true")])
+    request = _request([(b"x-setuora-background", b"true")])
     request.state.session_user_id = 1
 
     async def call_next(_request):

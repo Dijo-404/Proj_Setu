@@ -6,7 +6,7 @@ Phone cameras usually require HTTPS unless the site is opened as `localhost`. Fo
 
 ```text
 Phone browser
-  -> https://setu.local
+  -> https://setuora.local
   -> Caddy
   -> http://127.0.0.1:8000
   -> FastAPI
@@ -19,19 +19,19 @@ The easiest Windows path is:
 1. Right-click `setup.bat` and choose **Run as administrator**.
 2. Accept the Caddy setup prompt.
 3. Confirm the detected LAN IP address, or enter a local DNS name.
-4. Install `deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every staff phone.
+4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every staff phone.
 
 Setup installs Caddy through WinGet, generates and validates the Caddyfile,
-registers the auto-start `SetuCaddy` service, and permits LAN traffic on ports
+registers the auto-start `SetuoraCaddy` service, and permits LAN traffic on ports
 80 and 443. Pass `-SkipCaddy` when running setup if HTTPS is managed separately.
 
 For a manual installation, use `deployment/caddy/Caddyfile.example` as the
-starting point and replace `setu.local` with the real LAN hostname or static IP.
+starting point and replace `setuora.local` with the real LAN hostname or static IP.
 
 Keep FastAPI bound to localhost behind the proxy:
 
 ```text
-start_setu.bat
+start_setuora.bat
 ```
 
 or:
@@ -43,7 +43,7 @@ or:
 ## Certificate
 
 The automated setup uses Caddy's internal certificate authority and exports its
-public root certificate to `deployment\caddy\setu-caddy-root.crt`. Install that
+public root certificate to `deployment\caddy\setuora-caddy-root.crt`. Install that
 certificate as a trusted CA on each phone. Back up `deployment\caddy\state`, but
 never distribute it because it contains private keys.
 
@@ -53,7 +53,7 @@ or you can configure certificates from another trusted certificate tool.
 The deployment should remain LAN-only unless the client explicitly asks for remote access.
 
 Automated setup sets the following value in `.env` and restarts an existing
-Setu service. For manual setup, set it yourself and restart Setu:
+Setuora service. For manual setup, set it yourself and restart Setuora:
 
 ```text
 SESSION_COOKIE_SECURE=true

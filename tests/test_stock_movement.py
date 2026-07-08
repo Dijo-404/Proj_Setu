@@ -32,7 +32,7 @@ def _product(code: str, name: str) -> Product:
         product_code=code,
         product_name=name,
         category="Furniture",
-        brand="Setu",
+        brand="Setuora",
         hsn="9401",
         gst_rate=18,
         unit="Pcs",

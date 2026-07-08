@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Products - Setu{% endblock %}
+{% block title %}Products - Setuora{% endblock %}
 {% block content %}
 {% set can_edit_products = role_can(user, 'product_create') %}
 {% set can_manage_purchase_qr_permission = has_role(user, 'admin', 'super_admin') %}
@@ -108,7 +108,7 @@
     <button class="button ghost modal__close" type="button" data-product-close aria-label="Close">&times;</button>
   </div>
   <div class="modal__body">
-    <form method="post" action="/products" class="product-modal-form new-product-form" data-draft="setu:newproduct">
+    <form method="post" action="/products" class="product-modal-form new-product-form" data-draft="setuora:newproduct">
       <label>Code<input name="product_code" required></label>
       <label>Name<input name="product_name" required></label>
       <label>Nickname<input name="nickname"></label>

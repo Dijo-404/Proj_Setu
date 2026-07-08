@@ -7,20 +7,20 @@ from app.config import get_settings
 from app.services.backup import create_scheduled_backup, create_sqlite_backup, sqlite_database_path, verify_sqlite_backup
 
 
-def _create_minimal_setu_database(path, marker: str):
+def _create_minimal_setuora_database(path, marker: str):
     connection = sqlite3.connect(path)
     connection.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
     connection.execute("CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)")
     connection.execute("CREATE TABLE marker (value TEXT)")
     connection.execute("INSERT INTO users (username) VALUES ('admin')")
-    connection.execute("INSERT INTO settings (key, value) VALUES ('company_name', 'Setu')")
+    connection.execute("INSERT INTO settings (key, value) VALUES ('company_name', 'Setuora')")
     connection.execute("INSERT INTO marker (value) VALUES (?)", (marker,))
     connection.commit()
     connection.close()
 
 
 def test_create_sqlite_backup_uses_configured_database(tmp_path, monkeypatch):
-    db_path = tmp_path / "setu.db"
+    db_path = tmp_path / "setuora.db"
     connection = sqlite3.connect(db_path)
     connection.execute("CREATE TABLE sample (id INTEGER PRIMARY KEY, name TEXT)")
     connection.execute("INSERT INTO sample (name) VALUES ('ok')")
@@ -46,7 +46,7 @@ def test_create_sqlite_backup_rejects_corrupt_backup(tmp_path):
 
 
 def test_scheduled_backup_verifies_copies_offsite_and_prunes(tmp_path, monkeypatch):
-    db_path = tmp_path / "setu.db"
+    db_path = tmp_path / "setuora.db"
     connection = sqlite3.connect(db_path)
     connection.execute("PRAGMA foreign_keys=ON")
     connection.execute("CREATE TABLE parent (id INTEGER PRIMARY KEY)")
@@ -80,8 +80,8 @@ def test_scheduled_backup_verifies_copies_offsite_and_prunes(tmp_path, monkeypat
     assert third.offsite_path.exists()
     verify_sqlite_backup(third.path)
     verify_sqlite_backup(third.offsite_path)
-    assert len(list(backup_dir.glob("setu-backup-*.db"))) == 2
-    assert len(list(offsite_dir.glob("setu-backup-*.db"))) == 2
+    assert len(list(backup_dir.glob("setuora-backup-*.db"))) == 2
+    assert len(list(offsite_dir.glob("setuora-backup-*.db"))) == 2
 
 
 def test_update_backup_settings_persists_env_and_refreshes_runtime(tmp_path, monkeypatch):
@@ -115,7 +115,7 @@ def test_update_backup_settings_persists_env_and_refreshes_runtime(tmp_path, mon
     get_settings.cache_clear()
 
 
-def test_verify_setu_backup_rejects_non_setu_sqlite(tmp_path):
+def test_verify_setuora_backup_rejects_non_setuora_sqlite(tmp_path):
     other = tmp_path / "other.db"
     connection = sqlite3.connect(other)
     connection.execute("CREATE TABLE unrelated (id INTEGER PRIMARY KEY)")
@@ -123,20 +123,20 @@ def test_verify_setu_backup_rejects_non_setu_sqlite(tmp_path):
     connection.close()
 
     try:
-        backup_service.verify_setu_backup(other)
+        backup_service.verify_setuora_backup(other)
     except RuntimeError as exc:
-        assert "not a Setu" in str(exc)
+        assert "not a Setuora" in str(exc)
     else:
-        raise AssertionError("Expected non-Setu SQLite database to be rejected")
+        raise AssertionError("Expected non-Setuora SQLite database to be rejected")
 
 
 def test_restore_sqlite_backup_replaces_database_and_keeps_safety_backup(tmp_path, monkeypatch):
-    current_db = tmp_path / "setu.db"
+    current_db = tmp_path / "setuora.db"
     backup_dir = tmp_path / "backups"
     backup_dir.mkdir()
-    restore_source = backup_dir / "setu-backup-old.db"
-    _create_minimal_setu_database(current_db, "current")
-    _create_minimal_setu_database(restore_source, "restored")
+    restore_source = backup_dir / "setuora-backup-old.db"
+    _create_minimal_setuora_database(current_db, "current")
+    _create_minimal_setuora_database(restore_source, "restored")
     os.utime(restore_source, (1, 1))
 
     monkeypatch.setattr(

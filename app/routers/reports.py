@@ -315,7 +315,7 @@ def audit_reconciliation_excel(
     return Response(
         audit_reconciliation_xlsx(report, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-audit-reconciliation.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=setuora-audit-reconciliation.xlsx"},
     )
 
 
@@ -333,7 +333,7 @@ def scans_excel(
     return Response(
         scans_xlsx(scans, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-scans.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=setuora-scans.xlsx"},
     )
 
 
@@ -352,7 +352,7 @@ def transactions_excel(
     return Response(
         transactions_xlsx(transactions, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-transactions.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=setuora-transactions.xlsx"},
     )
 
 
@@ -371,5 +371,5 @@ def missing_stock_excel(
     return Response(
         missing_stock_xlsx(findings, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=setu-missing-stock.xlsx"},
+        headers={"Content-Disposition": "attachment; filename=setuora-missing-stock.xlsx"},
     )

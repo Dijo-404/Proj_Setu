@@ -3,7 +3,7 @@ setlocal
 cd /d "%~dp0"
 
 set "PROJECT_DIR=%CD%"
-set "START_SCRIPT=%PROJECT_DIR%\deployment\windows\start_setu.ps1"
+set "START_SCRIPT=%PROJECT_DIR%\deployment\windows\start_setuora.ps1"
 set "HOST_ADDRESS=127.0.0.1"
 set "PORT=8000"
 
@@ -44,7 +44,7 @@ goto parse_args
 
 :args_done
 if not exist "%START_SCRIPT%" (
-    echo The Setu start helper was not found:
+    echo The Setuora start helper was not found:
     echo %START_SCRIPT%
     echo.
     echo Check that the deployment\windows folder is present, then try again.
@@ -53,7 +53,7 @@ if not exist "%START_SCRIPT%" (
 )
 
 if not exist "%~dp0.venv\Scripts\python.exe" (
-    echo Setu is not set up yet. Run setup.bat first.
+    echo Setuora is not set up yet. Run setup.bat first.
     echo.
     pause
     exit /b 1
@@ -62,6 +62,6 @@ if not exist "%~dp0.venv\Scripts\python.exe" (
 powershell -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -ProjectDir "%PROJECT_DIR%" -HostAddress "%HOST_ADDRESS%" -Port "%PORT%"
 set "START_EXIT=%ERRORLEVEL%"
 echo.
-if not "%START_EXIT%"=="0" echo Setu stopped with error code %START_EXIT%.
+if not "%START_EXIT%"=="0" echo Setuora stopped with error code %START_EXIT%.
 pause
 exit /b %START_EXIT%

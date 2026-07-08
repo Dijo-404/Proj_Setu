@@ -264,14 +264,14 @@ def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
             """
             BEGIN IMMEDIATE;
 
-            CREATE TABLE serials__setu_new (
+            CREATE TABLE serials__setuora_new (
                 id INTEGER NOT NULL PRIMARY KEY,
                 serial_number VARCHAR(140) NOT NULL,
                 product_id INTEGER NOT NULL REFERENCES products(id),
                 status VARCHAR(40) NOT NULL,
                 active BOOLEAN NOT NULL,
                 created_at DATETIME NOT NULL,
-                replaced_by_id INTEGER REFERENCES serials__setu_new(id),
+                replaced_by_id INTEGER REFERENCES serials__setuora_new(id),
                 label_printed_at DATETIME,
                 label_printed_by_id INTEGER REFERENCES users(id),
                 product_batch_number VARCHAR(80),
@@ -282,10 +282,10 @@ def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
                 location_id INTEGER REFERENCES storage_locations(id)
             );
 
-            CREATE TABLE batch_items__setu_new (
+            CREATE TABLE batch_items__setuora_new (
                 id INTEGER NOT NULL PRIMARY KEY,
                 batch_id INTEGER NOT NULL REFERENCES batches(id),
-                serial_id INTEGER NOT NULL REFERENCES serials__setu_new(id),
+                serial_id INTEGER NOT NULL REFERENCES serials__setuora_new(id),
                 quantity INTEGER NOT NULL,
                 rate FLOAT,
                 remarks TEXT,
@@ -297,7 +297,7 @@ def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
                 CONSTRAINT uq_batch_serial UNIQUE (batch_id, serial_id)
             );
 
-            INSERT INTO serials__setu_new (
+            INSERT INTO serials__setuora_new (
                 id, serial_number, product_id, status, active, created_at, replaced_by_id,
                 label_printed_at, label_printed_by_id, product_batch_number, mfg_date,
                 expiry_date, warehouse, warehouse_level, location_id
@@ -308,7 +308,7 @@ def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
                 expiry_date, warehouse, COALESCE(warehouse_level, 'Company Warehouse'), location_id
             FROM serials;
 
-            INSERT INTO batch_items__setu_new (
+            INSERT INTO batch_items__setuora_new (
                 id, batch_id, serial_id, quantity, rate, remarks, fefo_picked,
                 shelf_location_id, shelf_verified_by_id, shelf_verified_at, created_at
             )
@@ -319,8 +319,8 @@ def _rebuild_sqlite_inventory_tables(target: Engine) -> None:
 
             DROP TABLE batch_items;
             DROP TABLE serials;
-            ALTER TABLE serials__setu_new RENAME TO serials;
-            ALTER TABLE batch_items__setu_new RENAME TO batch_items;
+            ALTER TABLE serials__setuora_new RENAME TO serials;
+            ALTER TABLE batch_items__setuora_new RENAME TO batch_items;
 
             CREATE UNIQUE INDEX ix_serials_serial_number ON serials (serial_number);
             CREATE INDEX ix_serials_status ON serials (status);

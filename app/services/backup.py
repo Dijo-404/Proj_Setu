@@ -89,7 +89,7 @@ def verify_sqlite_backup(path: Path) -> None:
         connection.close()
 
 
-def verify_setu_backup(path: Path) -> None:
+def verify_setuora_backup(path: Path) -> None:
     verify_sqlite_backup(path)
     connection = sqlite3.connect(path)
     try:
@@ -103,7 +103,7 @@ def verify_setu_backup(path: Path) -> None:
         connection.close()
     missing = {"users", "settings"} - tables
     if missing:
-        raise RuntimeError("Backup is a valid SQLite file, but it is not a Setu database backup.")
+        raise RuntimeError("Backup is a valid SQLite file, but it is not a Setuora database backup.")
 
 
 def _copy_sqlite_database(source_path: Path, destination_path: Path) -> None:
@@ -125,12 +125,12 @@ def create_sqlite_backup() -> BackupInfo:
 
     # NamedTemporaryFile keeps an open Windows handle that sqlite3 cannot reuse.
     with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "setu-backup.db"
+        temp_path = Path(temp_dir) / "setuora-backup.db"
         _copy_sqlite_database(source_path, temp_path)
         verify_sqlite_backup(temp_path)
         data = temp_path.read_bytes()
 
-    return BackupInfo(filename="setu-backup.db", data=data)
+    return BackupInfo(filename="setuora-backup.db", data=data)
 
 
 def create_scheduled_backup() -> BackupFileInfo:
@@ -143,7 +143,7 @@ def create_scheduled_backup() -> BackupFileInfo:
     backup_dir.mkdir(parents=True, exist_ok=True)
 
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-    filename = f"setu-backup-{stamp}.db"
+    filename = f"setuora-backup-{stamp}.db"
     destination = backup_dir / filename
     temp_destination = backup_dir / f".{filename}.tmp"
     if temp_destination.exists():
@@ -266,12 +266,12 @@ def restore_sqlite_backup_file(source_path: Path, *, reload_runtime: bool = True
     database_path = sqlite_database_path()
     if not database_path.exists():
         raise RuntimeError("SQLite database file does not exist yet")
-    verify_setu_backup(source)
+    verify_setuora_backup(source)
 
     with TemporaryDirectory() as temp_dir:
-        staged_source = Path(temp_dir) / "setu-restore-source.db"
+        staged_source = Path(temp_dir) / "setuora-restore-source.db"
         shutil.copy2(source, staged_source)
-        verify_setu_backup(staged_source)
+        verify_setuora_backup(staged_source)
 
         safety_backup = create_scheduled_backup()
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
@@ -279,7 +279,7 @@ def restore_sqlite_backup_file(source_path: Path, *, reload_runtime: bool = True
         if temp_destination.exists():
             temp_destination.unlink()
         shutil.copy2(staged_source, temp_destination)
-        verify_setu_backup(temp_destination)
+        verify_setuora_backup(temp_destination)
 
         if reload_runtime:
             from app.database import engine
@@ -321,7 +321,7 @@ def _copy_to_offsite(source: Path, filename: str, settings: object) -> Path | No
 def _backup_files(directory: Path | None) -> list[Path]:
     if not directory or not directory.exists():
         return []
-    return sorted(directory.glob("setu-backup-*.db"), key=lambda path: path.stat().st_mtime, reverse=True)
+    return sorted(directory.glob("setuora-backup-*.db"), key=lambda path: path.stat().st_mtime, reverse=True)
 
 
 def _latest_backup(directory: Path | None) -> Path | None:
