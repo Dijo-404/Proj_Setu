@@ -69,6 +69,8 @@ def test_product_master_saves_and_updates_sales_discount_rate():
             nickname="Updated Alias",
             category=None,
             brand=None,
+            hsn="091099",
+            gst_rate=12,
             shelf_verification_interval=1,
             tally_stock_item_name="Discount Item Primary",
             alternate_tally_stock_item_name="Discount Item Tally Two",
@@ -88,6 +90,8 @@ def test_product_master_saves_and_updates_sales_discount_rate():
         assert saved.sales_discount_rate == 12
         assert saved.purchase_qr_print_allowed is True
         assert saved.nickname == "Updated Alias"
+        assert saved.hsn == "091099"
+        assert saved.gst_rate == 12
         assert saved.tally_stock_item_name == "Discount Item Primary"
         assert saved.alternate_tally_stock_item_name == "Discount Item Tally Two"
         assert saved.shelf_verification_interval == 1
@@ -105,6 +109,10 @@ def test_product_master_saves_and_updates_sales_discount_rate():
 
     assert "Sales discount %" in page_text
     assert "Nickname" in page_text
+    assert "Generate label batch" not in page_text
+    assert f'action="/products/{product_id}/generate"' not in page_text
+    assert f'data-product-summary-hsn="{product_id}"' in report_text
+    assert f'data-product-row-gst="{product_id}"' in report_text
     assert "Alternate Tally stock item" in page_text
     assert "Allow purchase QR printing" in page_text
     assert "Purchase QR" in report_text

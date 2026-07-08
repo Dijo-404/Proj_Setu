@@ -9,7 +9,11 @@ from app.auth import require_permission
 from app.database import get_db
 from app.models import AuditAssignment, Product, Role, User, has_role
 from app.services.access_control import configured_role_has_access
-from app.services.audit import assignment_progress, create_audit_assignment
+from app.services.audit import (
+    assignment_progress,
+    create_audit_assignment,
+    extend_audit_assignment_deadline,
+)
 from app.services.inventory import InventoryError
 from app.templates import templates
 
@@ -103,6 +107,23 @@ def _page_context(
     }
 
 
+def _assignment_for_deadline_extension(
+    db: Session,
+    assignment_id: int,
+) -> AuditAssignment | None:
+    return db.scalar(
+        select(AuditAssignment)
+        .where(AuditAssignment.id == assignment_id)
+        .options(
+            selectinload(AuditAssignment.product),
+            selectinload(AuditAssignment.auditor),
+            selectinload(AuditAssignment.assigned_by),
+            selectinload(AuditAssignment.expected_items),
+            selectinload(AuditAssignment.batches),
+        )
+    )
+
+
 @router.get("")
 def audit_assignments(request: Request, db: Session = Depends(get_db)):
     user = require_permission(request, db, "audit_assignment_manage")
@@ -151,6 +172,44 @@ def assign_audit(
             starts_at=_parse_local_datetime(starts_at, "start"),
             ends_at=_parse_local_datetime(ends_at, "end"),
             notes=notes,
+        )
+    except InventoryError as exc:
+        db.rollback()
+        return templates.TemplateResponse(
+            request,
+            "audit_assignments.html",
+            _page_context(db, request, user, error=str(exc), form=form),
+            status_code=400,
+        )
+    return RedirectResponse("/audit-assignments", status_code=303)
+
+
+@router.post("/{assignment_id}/extend")
+def extend_audit_deadline(
+    request: Request,
+    assignment_id: int,
+    ends_at: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_permission(
+        request,
+        db,
+        "audit_assignment_manage",
+        {"edit"},
+    )
+    form = {
+        "extend_assignment_id": str(assignment_id),
+        "extend_ends_at": ends_at,
+    }
+    assignment = _assignment_for_deadline_extension(db, assignment_id)
+    try:
+        if not assignment:
+            raise InventoryError("Choose an audit assignment")
+        extend_audit_assignment_deadline(
+            db,
+            assignment=assignment,
+            actor=user,
+            ends_at=_parse_local_datetime(ends_at, "end"),
         )
     except InventoryError as exc:
         db.rollback()

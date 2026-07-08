@@ -1,12 +1,12 @@
 {% extends "base.html" %}
-{% block title %}Stock Movement - Setu{% endblock %}
+{% block title %}Stock Movement - Setuora{% endblock %}
 {% block content %}
 {% set movement_excel_fields = "Product Code|Product Name|Category|Brand|Warehouse|Franchise Level|Batch|Current Stock|Units Sold|Movement Ratio %|Average Daily Sales|Average Weekly Sales|Average Monthly Sales|Estimated Days to Sell|Estimated Months to Sell|Movement Status|Inventory Signal|Nearest Expiry|Months Remaining|Expiry Risk|Estimated Unsold|Suggested Action" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">Inventory intelligence</p>
     <h1>Stock Movement</h1>
-    <p class="muted">{{ summary.start.strftime('%d %b %Y') }} to {{ summary.end.strftime('%d %b %Y') }} · {{ summary.analysis_days }} days</p>
+    <p class="muted">{{ report_date(summary.start) }} to {{ report_date(summary.end) }} · {{ summary.analysis_days }} days</p>
   </div>
   {% if role_can(user, 'stock_movement_export') %}
   <div class="actions">
@@ -161,7 +161,7 @@
           <td>
             <span class="status {{ row.expiry_css }}">{{ row.expiry_risk }}</span>
             {% if row.nearest_expiry %}
-            <small>Nearest {{ row.nearest_expiry.strftime('%d %b %Y') }} · {{ row.months_remaining }} months</small>
+            <small>Nearest {{ report_date(row.nearest_expiry) }} · {{ row.months_remaining }} months</small>
             {% endif %}
             {% if row.estimated_unsold %}<small>{{ row.estimated_unsold }} units may remain unsold</small>{% endif %}
           </td>

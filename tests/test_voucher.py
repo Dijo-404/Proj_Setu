@@ -61,7 +61,7 @@ def test_interstate_sale_uses_igst_instead_of_cgst_sgst(db_session):
     assert str(summary.final_value) == "1050.00"
 
 
-def test_sale_can_use_entered_cgst_and_sgst_rates(db_session):
+def test_sale_splits_entered_local_gst_equally_between_cgst_and_sgst(db_session):
     user = User(username="sales-local-gst", password_hash="x", role="sales")
     product = make_product("SGLGST", 500)
     product.gst_rate = 18
@@ -83,10 +83,10 @@ def test_sale_can_use_entered_cgst_and_sgst_rates(db_session):
     summary = calculate_voucher_summary(batch)
 
     assert str(summary.lines[0].gst_rate) == "5.00"
-    assert str(summary.lines[0].cgst_rate) == "2.00"
-    assert str(summary.lines[0].sgst_rate) == "3.00"
-    assert str(summary.cgst_amount) == "10.00"
-    assert str(summary.sgst_amount) == "15.00"
+    assert str(summary.lines[0].cgst_rate) == "2.50"
+    assert str(summary.lines[0].sgst_rate) == "2.50"
+    assert str(summary.cgst_amount) == "12.50"
+    assert str(summary.sgst_amount) == "12.50"
     assert str(summary.final_value) == "525.00"
 
 

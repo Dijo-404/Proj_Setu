@@ -10,9 +10,9 @@ from app.config import get_settings
 from app.services.backup import create_scheduled_backup
 
 
-logger = logging.getLogger("setu")
+logger = logging.getLogger("setuora")
 
-WORKER_STATE_KEY = "setu_backup_worker_task"
+WORKER_STATE_KEY = "setuora_backup_worker_task"
 
 
 def run_scheduled_backup_once() -> bool:

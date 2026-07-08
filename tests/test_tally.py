@@ -55,7 +55,7 @@ def test_post_to_tally_accepts_created_voucher(monkeypatch):
 
 
 VALID_SETTINGS = {
-    "company_name": "Setu Test Company",
+    "company_name": "Setuora Test Company",
     "sales_voucher_type": "Sales",
     "purchase_voucher_type": "Purchase",
     "sales_ledger_name": "Sales Ledger",

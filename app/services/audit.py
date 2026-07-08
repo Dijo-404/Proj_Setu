@@ -19,6 +19,7 @@ from app.models import (
     User,
     has_role,
 )
+from app.services.change_audit import record_change
 from app.services.expiry import STOCK_STATUSES
 from app.services.inventory import InventoryError
 
@@ -129,6 +130,56 @@ def create_audit_assignment(
             selectinload(AuditAssignment.batches),
         )
     )
+
+
+def audit_assignment_snapshot(assignment: AuditAssignment) -> dict[str, object]:
+    return {
+        "id": assignment.id,
+        "product_id": assignment.product_id,
+        "auditor_id": assignment.auditor_id,
+        "assigned_by_id": assignment.assigned_by_id,
+        "starts_at": _utc(assignment.starts_at),
+        "ends_at": _utc(assignment.ends_at),
+        "notes": assignment.notes,
+    }
+
+
+def extend_audit_assignment_deadline(
+    db: Session,
+    *,
+    assignment: AuditAssignment,
+    actor: User,
+    ends_at: datetime,
+    now: datetime | None = None,
+) -> AuditAssignment:
+    moment = _utc(now or datetime.now(timezone.utc))
+    new_end = _utc(ends_at)
+    current_end = _utc(assignment.ends_at)
+    starts_at = _utc(assignment.starts_at)
+    if new_end <= starts_at:
+        raise InventoryError("Audit end must be after audit start")
+    if new_end <= current_end:
+        raise InventoryError("Choose a deadline after the current audit end")
+    if new_end <= moment:
+        raise InventoryError("Audit end must be in the future")
+
+    before = audit_assignment_snapshot(assignment)
+    assignment.ends_at = new_end
+    if assignment.batches:
+        latest = max(assignment.batches, key=lambda row: (row.created_at, row.id))
+        reconcile_audit_assignment(db, assignment, latest, now=moment)
+    record_change(
+        db,
+        actor,
+        entity_type="audit_assignment",
+        entity_id=assignment.id,
+        action="extend_deadline",
+        before=before,
+        after=audit_assignment_snapshot(assignment),
+    )
+    db.commit()
+    db.refresh(assignment)
+    return assignment
 
 
 def assignment_progress(db: Session, assignment: AuditAssignment) -> dict[str, object]:

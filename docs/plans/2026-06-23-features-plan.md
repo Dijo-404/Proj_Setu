@@ -1,4 +1,4 @@
-# Setu - Feature & Deployment Plan (2026-06-23)
+# Setuora - Feature & Deployment Plan (2026-06-23)
 
 Phased, self-contained plan for four requests:
 1. Fix nav so Receive/Sale/Audit don't all funnel confusingly into Batches → **Batches dropdown submenu**.
@@ -45,7 +45,7 @@ Anti-patterns to avoid:
 **What to implement**
 1. Pin exact versions: rewrite [requirements.txt](../../requirements.txt) using the Phase 0 pins (`==`). Keep only packages the app imports (drop Flask-SQLAlchemy).
 2. Document/script venv setup (matches README section 2-5): create `.venv`, install, copy `.env`.
-3. Confirm SQLite needs no server: it auto-creates at `data/setu.db` (see [app/database.py](../../app/database.py):16-19) with WAL. Add a one-line note that `data/` must be writable.
+3. Confirm SQLite needs no server: it auto-creates at `data/setuora.db` (see [app/database.py](../../app/database.py):16-19) with WAL. Add a one-line note that `data/` must be writable.
 4. Generate a real `.env` from `.env.example` with a strong `APP_SECRET_KEY`; document `SESSION_COOKIE_SECURE=true` for HTTPS.
 
 **Verification**
@@ -118,15 +118,15 @@ Mirror [app/static/scanner.js](../../app/static/scanner.js): one small `app/stat
 
 **What to implement**
 1. `setup.bat`: first-time setup for non-technical users. It prepares Python/venv, installs requirements, writes `.env`, creates `data/` and `logs/`, verifies app import, and optionally starts the app.
-2. `start_setu.bat`: normal launcher after setup.
+2. `start_setuora.bat`: normal launcher after setup.
 3. Keep [deployment/windows/install_service.ps1](../../deployment/windows/install_service.ps1) for optional NSSM service installs.
 4. Keep [deployment/caddy/Caddyfile.example](../../deployment/caddy/Caddyfile.example) for optional LAN HTTPS when phone camera access requires it.
 5. Docs: [README.md](../../README.md), [docs/deployment/installation-guide.md](../deployment/installation-guide.md), and [docs/deployment/backup-restore-guide.md](../deployment/backup-restore-guide.md) document the batch-file setup and backup requirements.
 
 **Verification**
 - `setup.bat -SkipStart` succeeds against an existing `.env`.
-- App boots with `start_setu.bat`; `GET /health` returns `{"status":"ok"}`.
-- Bootstrap admin login works on a fresh `data/setu.db`.
+- App boots with `start_setuora.bat`; `GET /health` returns `{"status":"ok"}`.
+- Bootstrap admin login works on a fresh `data/setuora.db`.
 - `data/` is writable; WAL files are created.
 
 **Anti-pattern guards:** don't require container tooling for the client handoff; don't delete or reset `data/` during setup; keep `.env` and the whole `data/` folder in scheduled backups.
@@ -140,7 +140,7 @@ Mirror [app/static/scanner.js](../../app/static/scanner.js): one small `app/stat
 3. Grep guards:
    - autosave endpoint does not set `tally_enabled` (`grep -n tally_enabled app/routers/settings.py` → only in `save_settings`).
    - no `graphql`, `websocket`, `flask` imports introduced.
-4. `setup.bat -SkipStart`, then `start_setu.bat`; verify `/health` and data persistence.
+4. `setup.bat -SkipStart`, then `start_setuora.bat`; verify `/health` and data persistence.
 5. Update [CLAUDE.md](../../CLAUDE.md): nav dropdown, autosave endpoints (and the tally_enabled exclusion), live-refresh endpoints, Windows setup flow + SQLite note.
 
 ## Suggested execution order

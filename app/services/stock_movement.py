@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import AuditFinding, InventoryTransaction, Product, Serial, SerialStatus, TransactionType, WarehouseLevel
 from app.services.audit import current_missing_stock_findings_query
 from app.services.exports import safe_row, select_export_columns
+from app.services.report_format import report_date
 from app.services.settings import get_setting
 
 
@@ -458,7 +459,7 @@ def product_inventory_metrics(
         metric.update(
             {
                 "restock_label": f"In {days_remaining} days",
-                "restock_detail": f"By {(as_of + timedelta(days=days_remaining)).strftime('%d %b %Y')}",
+                "restock_detail": f"By {report_date(as_of + timedelta(days=days_remaining))}",
                 "restock_css": "pending_sync" if days_remaining <= 30 else "active",
             }
         )
@@ -516,7 +517,7 @@ def product_sales_report_pdf(
         Paragraph(escape(f"Product Sales Report: {product.product_code} - {product.product_name}"), styles["Title"]),
         Paragraph(
             escape(
-                f"Period: {as_of - timedelta(days=analysis_days - 1)} to {as_of} "
+                f"Period: {report_date(as_of - timedelta(days=analysis_days - 1))} to {report_date(as_of)} "
                 f"({analysis_days} days)"
             ),
             styles["BodyText"],
@@ -556,7 +557,7 @@ def product_sales_report_pdf(
         reference = sale.reference_number or (sale.batch.batch_number if sale.batch else "")
         sale_rows.append(
             [
-                sale.created_at.strftime("%d %b %Y %H:%M"),
+                report_date(sale.created_at),
                 sale.serial_number or "",
                 sale.user.username,
                 reference,
@@ -638,7 +639,7 @@ def movement_export_row(row: dict[str, object]) -> list[object]:
             row["estimated_months"] if row["estimated_months"] is not None else "No sales",
             row["movement_status"],
             row["inventory_signal"],
-            row["nearest_expiry"].isoformat() if row["nearest_expiry"] else "",
+            report_date(row["nearest_expiry"]) if row["nearest_expiry"] else "",
             row["months_remaining"] if row["months_remaining"] is not None else "",
             row["expiry_risk"],
             row["estimated_unsold"],
@@ -657,7 +658,12 @@ def stock_movement_xlsx(
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Stock Movement"
-    sheet.append(["Analysis Period", f"{summary['start']} to {summary['end']} ({summary['analysis_days']} days)"])
+    sheet.append(
+        [
+            "Analysis Period",
+            f"{report_date(summary['start'])} to {report_date(summary['end'])} ({summary['analysis_days']} days)",
+        ]
+    )
     sheet.append([])
     export_rows = [movement_export_row(row) for row in rows]
     headers, export_rows = select_export_columns(MOVEMENT_EXPORT_HEADERS, export_rows, fields)
@@ -688,7 +694,11 @@ def stock_movement_pdf(rows: list[dict[str, object]], summary: dict[str, object]
     story = [
         Paragraph("Stock Movement & Slow Moving Inventory", styles["Title"]),
         Paragraph(
-            escape(f"Analysis period: {summary['start']} to {summary['end']} ({summary['analysis_days']} days)"),
+            escape(
+                "Analysis period: "
+                f"{report_date(summary['start'])} to {report_date(summary['end'])} "
+                f"({summary['analysis_days']} days)"
+            ),
             styles["BodyText"],
         ),
         Spacer(1, 4 * mm),

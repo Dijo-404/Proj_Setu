@@ -21,6 +21,6 @@ docs/context/*.7z
 docs/context/*.rar
 CLAUDE.md
 deployment/caddy/caddy.exe
-deployment/caddy/setu-caddy-root.crt
+deployment/caddy/setuora-caddy-root.crt
 deployment/caddy/state/
 deployment/windows/nssm.exe

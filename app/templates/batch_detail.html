@@ -1,12 +1,13 @@
 {% extends "base.html" %}
-{% block title %}{{ batch.batch_number }} - Setu{% endblock %}
+{% block title %}{{ batch.batch_number }} - Setuora{% endblock %}
 {% block content %}
 {% set sale_return = sale_return_state|default({'pending_count': 0, 'pending_serials': []}, true) %}
 {% set sale_return_pending = sale_return.pending_count|default(0)|int %}
 {% set excel_import_types = tally_excel_import_types|default(['SALE', 'ISSUE', 'PURCHASE_RETURN'], true) %}
 {% set excel_export_types = tally_excel_export_types|default(['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN', 'PURCHASE_RETURN', 'ISSUE'], true) %}
+{% set first_summary_line = summary.lines[0] if summary.lines else none %}
 {% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" %}
-{% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount" %}
+{% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount excl. GST" %}
 <section class="page-head">
   <div>
     <p class="eyebrow">{{ batch.batch_type }}</p>
@@ -24,7 +25,7 @@
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}
     {% if can_tally_excel_export and batch.batch_type in excel_export_types and batch.items|length > 0 %}
-    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch.tally_voucher_number or batch.batch_number, "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}">Tally Excel</a>
+    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch_voucher_number(batch), "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}">Tally Excel</a>
     {% endif %}
     {% if can_view_batch_list %}
     <a class="button" href="/batches">Batches</a>
@@ -167,18 +168,19 @@
       <dt>Customer state</dt><dd>{{ batch.party_state or '-' }}</dd>
       <dt>GST type</dt><dd>{{ 'IGST' if batch.gst_treatment == 'INTER_STATE' else 'CGST + SGST' }}</dd>
       {% if batch.gst_treatment == 'INTER_STATE' %}
-      <dt>IGST %</dt><dd>{{ '%.2f'|format(batch.gst_igst_rate) if batch.gst_igst_rate is not none else '-' }}</dd>
+      <dt>IGST %</dt><dd>{{ '%.2f'|format(first_summary_line.igst_rate) if first_summary_line else '-' }}</dd>
       {% else %}
-      <dt>CGST %</dt><dd>{{ '%.2f'|format(batch.gst_cgst_rate) if batch.gst_cgst_rate is not none else '-' }}</dd>
-      <dt>SGST %</dt><dd>{{ '%.2f'|format(batch.gst_sgst_rate) if batch.gst_sgst_rate is not none else '-' }}</dd>
+      <dt>CGST %</dt><dd>{{ '%.2f'|format(first_summary_line.cgst_rate) if first_summary_line else '-' }}</dd>
+      <dt>SGST %</dt><dd>{{ '%.2f'|format(first_summary_line.sgst_rate) if first_summary_line else '-' }}</dd>
       {% endif %}
       {% endif %}
       <dt>Reason</dt><dd>{{ batch.reason_code or '-' }}</dd>
       <dt>{{ 'Sale started by' if batch.batch_type == 'SALE' else 'Created by' }}</dt><dd>{{ batch.user.username }}</dd>
-      <dt>Created</dt><dd>{{ batch.created_at.strftime('%d %b %Y %H:%M') }}</dd>
+      <dt>Created</dt><dd>{{ report_date(batch.created_at) }}</dd>
+      <dt>Voucher number</dt><dd>{{ batch_voucher_number(batch) }}</dd>
       <dt>Tally reference</dt><dd>{{ batch.tally_reference or '-' }}</dd>
       <dt>Retry count</dt><dd>{{ batch.retry_count or 0 }}</dd>
-      <dt>Last retry</dt><dd>{{ batch.last_retry_at.strftime('%d %b %Y %H:%M') if batch.last_retry_at else '-' }}</dd>
+      <dt>Last retry</dt><dd>{{ report_date(batch.last_retry_at) if batch.last_retry_at else '-' }}</dd>
     </dl>
     {% if batch.status == 'DRAFT' and can_edit_batch %}
     <form method="post" action="/batches/{{ batch.id }}/submit">
@@ -207,7 +209,7 @@
           <th>Qty</th>
           <th>Rate</th>
           <th>Discount</th>
-          <th>Taxable</th>
+          <th>Taxable (excl. GST)</th>
           <th>CGST</th>
           <th>SGST</th>
           <th>IGST</th>
@@ -305,11 +307,11 @@
             {{ item.serial.product_batch_number or '-' }}
             {% if item.fefo_picked %}<small>FEFO picked</small>{% endif %}
           </td>
-          <td>{{ item.serial.expiry_date.strftime('%d %b %Y') if item.serial.expiry_date else '-' }}</td>
+          <td>{{ report_date(item.serial.expiry_date) if item.serial.expiry_date else '-' }}</td>
           <td>
             {% if item.shelf_verified_at %}
             <strong>{{ item.shelf_location.code }}</strong>
-            <small>Verified {{ item.shelf_verified_at.strftime('%d %b %H:%M') }}</small>
+            <small>Verified {{ report_date(item.shelf_verified_at) }}</small>
             {% elif batch.batch_type in ['PURCHASE', 'RECEIVE', 'AUDIT'] and item.serial.product.shelf_verification_interval %}
             <span class="status pending_sync">PENDING</span>
             {% else %}
@@ -352,7 +354,7 @@
       <tbody>
         {% for attempt in batch.sync_attempts %}
         <tr>
-          <td>{{ attempt.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ report_date(attempt.created_at) }}</td>
           <td><span class="status {{ attempt.status|lower }}">{{ attempt.status }}</span></td>
           <td>{{ attempt.error or '-' }}</td>
           <td><a href="/batches/{{ batch.id }}/sync-attempts/{{ attempt.id }}">Details</a></td>

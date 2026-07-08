@@ -1,7 +1,8 @@
 from sqlalchemy import select
 
-from app.models import BatchStatus, BatchType, InventoryTransaction, Product, SerialStatus, TransactionType, User
-from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
+from app.models import BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, SerialStatus, TransactionType, User
+from app.services.inventory import InventoryError, add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
+from app.services.sale_returns import scan_sale_return_product
 from app.services.tally import sync_batch
 
 
@@ -43,6 +44,31 @@ def test_sales_return_damaged_marks_item_damaged(db_session):
     add_serial_to_batch(db_session, batch, user, serial.serial_number)
     apply_batch_statuses(db_session, batch, user)
     assert serial.status == SerialStatus.DAMAGED.value
+
+
+def test_draft_sale_return_rejects_inactive_replaced_qr(db_session):
+    user = User(username="sales-return-lock", password_hash="x", role="sales")
+    item = product()
+    db_session.add_all([user, item])
+    db_session.commit()
+    serial = generate_serials(db_session, item, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "Customer", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    serial.status = SerialStatus.INVALID.value
+    serial.active = False
+    db_session.commit()
+
+    try:
+        scan_sale_return_product(db_session, batch, user, serial.serial_number)
+    except InventoryError as exc:
+        assert "inactive" in str(exc)
+    else:
+        assert False, "inactive QR codes must not be accepted in sale-return mode"
+
+    assert db_session.scalar(select(BatchItem).where(BatchItem.batch_id == batch.id)) is not None
+    rejected = db_session.scalar(select(ScanLog).where(ScanLog.batch_id == batch.id, ScanLog.status == "REJECTED"))
+    assert rejected is not None
+    assert "inactive" in rejected.message
 
 
 def test_purchase_return_and_issue_statuses(db_session):

@@ -145,6 +145,10 @@ def test_assignment_page_has_searchable_alias_product_selector():
 
     assert 'id="assignment-product-search"' in html
     assert 'id="assignment-product-select"' in html
+    assert "Serial prefix" in html
+    assert "Batch number" in html
+    assert "Product expiry" in html
+    assert "Warehouse level" in html
     assert "Friendly Alias" in html
     assert "Second Tally" in html
 

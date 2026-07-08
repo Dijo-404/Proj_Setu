@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Reports - Setu{% endblock %}
+{% block title %}Reports - Setuora{% endblock %}
 {% block content %}
 {% set audit_excel_fields = "Audit Date|Audit Batch|Audited By|Products|Verified|Missing|Extra|Total|Pending|Product Code|Product Name|Audit Batches|Finding|Serial|Expected Status|Scanned Status" %}
 {% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
 {% set transaction_excel_fields = "Date|User|Type|Serial|Product Code|Product Name|Invoice Created By|Barcode Sold By|Product Audited By|From Status|To Status|Reason|Batch/Reference|Tally Reference|Notes" %}
 {% set scan_excel_fields = "Date|User|Action|Serial|Status|Batch|Message|Tally Reference" %}
+<div class="reports-page">
 <section class="page-head">
   <div>
     <p class="eyebrow">Audit trail</p>
@@ -97,7 +98,7 @@
       <tbody>
         {% for txn in transactions %}
         <tr>
-          <td>{{ txn.created_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ report_date(txn.created_at) }}</td>
           <td>{{ txn.user.username }}</td>
           <td>{{ txn.transaction_type }}</td>
           <td>{% if txn.serial %}<a href="/serials/{{ txn.serial.id }}">{{ txn.serial_number }}</a>{% else %}{{ txn.serial_number or '-' }}{% endif %}</td>
@@ -128,7 +129,7 @@
       <tbody>
         {% for finding in missing_stock %}
         <tr>
-          <td>{{ finding.created_at.strftime('%d %b %H:%M') }}</td>
+          <td>{{ report_date(finding.created_at) }}</td>
           <td>{{ finding.batch.user.username }}</td>
           <td>{% if finding.serial %}<a href="/serials/{{ finding.serial.id }}">{{ finding.serial_number }}</a>{% else %}{{ finding.serial_number }}{% endif %}</td>
           <td>
@@ -188,7 +189,7 @@
         <tbody>
           {% for scan in scans %}
           <tr>
-            <td>{{ scan.created_at.strftime('%d %b %H:%M') }}</td>
+            <td>{{ report_date(scan.created_at) }}</td>
             <td>{{ scan.user.username }}</td>
             <td>{{ scan.action }}</td>
             <td>{{ scan.serial_number_raw }}</td>
@@ -218,7 +219,7 @@
             </td>
             <td><span class="status {{ batch.status|lower }}">{{ batch.status }}</span></td>
             <td>{{ batch.retry_count or 0 }}</td>
-            <td>{{ batch.last_retry_at.strftime('%d %b %H:%M') if batch.last_retry_at else '-' }}</td>
+            <td>{{ report_date(batch.last_retry_at) or '-' }}</td>
             <td>{{ batch.last_error or '-' }}</td>
           </tr>
           {% else %}
@@ -229,4 +230,5 @@
     </div>
   </div>
 </section>
+</div>
 {% endblock %}

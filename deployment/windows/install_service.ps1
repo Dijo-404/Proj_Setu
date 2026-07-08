@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$ProjectDir,
     [Parameter(Mandatory=$true)][string]$NssmPath,
-    [string]$ServiceName = "SetuQrTallyBridge",
+    [string]$ServiceName = "SetuoraQrTallyBridge",
     [int]$Port = 8000
 )
 
@@ -38,8 +38,8 @@ elseif ($existingService.Status -ne "Stopped") {
 Invoke-Nssm set $ServiceName Application $pythonExe
 Invoke-Nssm set $ServiceName AppParameters "-m uvicorn app.main:app --host 127.0.0.1 --port $Port"
 Invoke-Nssm set $ServiceName AppDirectory $ProjectDir
-Invoke-Nssm set $ServiceName AppStdout (Join-Path $logDir "setu-out.log")
-Invoke-Nssm set $ServiceName AppStderr (Join-Path $logDir "setu-err.log")
+Invoke-Nssm set $ServiceName AppStdout (Join-Path $logDir "setuora-out.log")
+Invoke-Nssm set $ServiceName AppStderr (Join-Path $logDir "setuora-err.log")
 Invoke-Nssm set $ServiceName AppRotateFiles 1
 Invoke-Nssm set $ServiceName AppRotateBytes 10485760
 Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START

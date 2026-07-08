@@ -13,6 +13,7 @@ from app.models import Batch, BatchItem, BatchStatus, BatchType, GstRegistration
 from app.services.assignment import AssignmentLine, MAX_ASSIGNMENT_QUANTITY, parse_bulk_assignment_xlsx
 from app.services.expiry import fefo_available_statuses, fefo_candidate_serials
 from app.services.exports import safe_row, select_export_columns
+from app.services.report_format import EXCEL_DATE_FORMAT, batch_voucher_number
 from app.services.inventory import InventoryError
 from app.services.settings import gst_rate_key, parse_sales_gst_ledger_mappings
 from app.services.tally import (
@@ -92,7 +93,7 @@ TALLY_ITEM_SUMMARY_HEADERS = [
     "CGST Amount",
     "SGST Amount",
     "IGST Amount",
-    "Amount",
+    "Amount excl. GST",
 ]
 _IST = timezone(timedelta(hours=5, minutes=30))
 
@@ -151,11 +152,7 @@ def _accounting_voucher_rows(
     common = {
         "Voucher Date": _voucher_date(batch),
         "Voucher Type Name": voucher_type,
-        "Voucher Number": (
-            overrides.get("voucher_number", "").strip()
-            or batch.tally_voucher_number
-            or batch.batch_number
-        ),
+        "Voucher Number": batch_voucher_number(batch, overrides.get("voucher_number", "")),
         "Buyer/Supplier - Address": "",
         "Buyer/Supplier - Pincode": "",
         "Change Mode ": change_mode,
@@ -261,9 +258,10 @@ def _item_summary_xlsx(
     summary = calculate_voucher_summary(batch)
 
     sheet.append(["Voucher Type", overrides.get("voucher_type", "").strip() or batch.batch_type])
-    sheet.append(["Voucher Number", overrides.get("voucher_number", "").strip() or batch.batch_number])
+    sheet.append(["Voucher Number", batch_voucher_number(batch, overrides.get("voucher_number", ""))])
     sheet.append(["Party Ledger", overrides.get("party_ledger", "").strip() or batch.party_name or ""])
-    sheet.append(["Date", (batch.submitted_at or batch.created_at).date().isoformat()])
+    sheet.append(["Date", _voucher_date(batch)])
+    sheet["B4"].number_format = EXCEL_DATE_FORMAT
     sheet.append([])
     total_quantity = 0
     rows: list[list[object]] = []
@@ -289,7 +287,7 @@ def _item_summary_xlsx(
                     float(line.cgst_amount),
                     float(line.sgst_amount),
                     float(line.igst_amount),
-                    float(line.line_total),
+                    float(line.taxable_value),
                 ]
             )
         )
@@ -314,7 +312,7 @@ def _item_summary_xlsx(
                 float(summary.cgst_amount),
                 float(summary.sgst_amount),
                 float(summary.igst_amount),
-                float(summary.final_value),
+                float(summary.taxable_value),
             ]
         )
     )
@@ -442,7 +440,7 @@ def _format_accounting_sheet(sheet) -> None:
         for cell in row:
             header = sheet.cell(1, cell.column).value
             if header == "Voucher Date":
-                cell.number_format = "DD-MM-YYYY"
+                cell.number_format = EXCEL_DATE_FORMAT
             elif header in {
                 "Ledger Amount",
                 "Billed Quantity",

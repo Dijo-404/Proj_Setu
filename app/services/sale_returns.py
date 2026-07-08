@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Batch, BatchItem, BatchStatus, BatchType, ScanLog, Serial, StorageLocation, User
+from app.models import Batch, BatchItem, BatchStatus, BatchType, ScanLog, Serial, SerialStatus, StorageLocation, User
 from app.services.inventory import InventoryError, normalize_serial
 
 
@@ -95,6 +95,10 @@ def scan_sale_return_product(db: Session, batch: Batch, user: User, serial_numbe
     if not serial:
         _record_rejected_sale_return(db, batch, user, normalized, "Serial number not found")
         raise InventoryError("Serial number not found")
+    if not serial.active or serial.status in {SerialStatus.INVALID.value, SerialStatus.REPLACED.value}:
+        message = f"{serial.serial_number} is inactive"
+        _record_rejected_sale_return(db, batch, user, normalized, message, serial=serial)
+        raise InventoryError(message)
 
     item = db.scalar(
         select(BatchItem).where(

@@ -32,7 +32,7 @@ def _product(code: str, name: str) -> Product:
         product_code=code,
         product_name=name,
         category="Furniture",
-        brand="Setu",
+        brand="Setuora",
         hsn="9401",
         gst_rate=18,
         unit="Pcs",
@@ -189,7 +189,7 @@ def test_product_inventory_metrics_reports_sales_available_missing_and_restock(d
     assert metrics[product.id]["missing_stock"] == 1
     assert metrics[product.id]["available_stock"] == 3
     assert metrics[product.id]["restock_label"] == "In 45 days"
-    assert metrics[product.id]["restock_detail"] == "By 11 Aug 2026"
+    assert metrics[product.id]["restock_detail"] == "By 11-08-2026"
     sales = product_sales_transactions(db_session, {product.id}, analysis_days, as_of=as_of)
     assert len(sales) == 2
     assert product_sales_report_pdf(

@@ -359,5 +359,5 @@ def location_labels(
     return Response(
         location_labels_pdf(locations),
         media_type="application/pdf",
-        headers={"Content-Disposition": "attachment; filename=setu-location-qr-labels.pdf"},
+        headers={"Content-Disposition": "attachment; filename=setuora-location-qr-labels.pdf"},
     )

@@ -9,7 +9,7 @@ In Tally Prime:
 3. Confirm inventory is maintained.
 4. Confirm accounts and inventory are integrated.
 
-In Setu:
+In Setuora:
 
 1. Open `Settings`.
 2. Add or activate the correct company profile.
@@ -45,9 +45,9 @@ The following local workflows are implemented but their Tally XML is intentional
 
 They remain `PENDING_SYNC` with a clear message until the exact voucher XML is configured.
 
-## Required Setu Fields
+## Required Setuora Fields
 
-Setu requires these fields before it can generate supported Tally XML:
+Setuora requires these fields before it can generate supported Tally XML:
 
 - company name
 - sales voucher type
@@ -63,7 +63,7 @@ Enter the exact customer or supplier ledger on each sale, sales-return, purchase
 For sales and sales returns, enter the debtor ledger as the party name and add the buyer GST
 registration type, GST name, and GST number when available.
 
-For sale and sales-return vouchers, Setu selects the Sales, CGST, SGST, and IGST ledgers from each
+For sale and sales-return vouchers, Setuora selects the Sales, CGST, SGST, and IGST ledgers from each
 product's GST rate. A single voucher can therefore contain products at multiple
 GST rates while posting each amount to the correct ledger. Purchase vouchers
 continue to use the default Purchase, CGST, and SGST ledgers.

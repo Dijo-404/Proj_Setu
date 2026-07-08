@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Barcode Assignment - Setu{% endblock %}
+{% block title %}Barcode Assignment - Setuora{% endblock %}
 {% block content %}
 <section class="page-head">
   <div>
@@ -31,8 +31,8 @@
         </select>
       </label>
       <div class="two-col">
-        <label>Quantity<input name="quantity" type="number" min="1" max="5000" required></label>
-        <label>Prefix<input name="prefix" placeholder="Uses product code"></label>
+        <label>Quantity<input name="quantity" type="number" min="1" max="5000" placeholder="How many" required></label>
+        <label>Serial prefix<input name="prefix" placeholder="Uses product code"></label>
       </div>
       <label>Start as
         <select name="initial_status">
@@ -41,17 +41,17 @@
         </select>
       </label>
       <div class="two-col">
-        <label>Product batch<input name="product_batch_number" placeholder="CP24001"></label>
-        <label>Warehouse<input name="warehouse" placeholder="WH1"></label>
+        <label>Batch number<input name="product_batch_number" placeholder="Optional"></label>
+        <label>Warehouse<input name="warehouse" placeholder="Optional"></label>
       </div>
-      <label>Warehouse / franchise level
+      <label>Warehouse level
         <select name="warehouse_level">
           {% for level in warehouse_levels %}<option value="{{ level }}">{{ level }}</option>{% endfor %}
         </select>
       </label>
       <div class="two-col">
         <label>Mfg date<input name="mfg_date" type="date"></label>
-        <label>Expiry date<input name="expiry_date" type="date"></label>
+        <label>Product expiry<input name="expiry_date" type="date"></label>
       </div>
       <label>Notes<textarea name="notes" rows="3"></textarea></label>
       <button class="button primary full" type="submit" {{ 'disabled' if not products else '' }}>Generate QR labels</button>

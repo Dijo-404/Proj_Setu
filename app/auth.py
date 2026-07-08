@@ -6,7 +6,7 @@ from app.models import Role, User, has_any_role, normalize_role_values
 from app.security import read_session_token
 from app.services.access_control import configured_role_has_access, get_role_access_config
 
-SESSION_COOKIE = "setu_session"
+SESSION_COOKIE = "setuora_session"
 
 
 def redirect_exception(url: str) -> HTTPException:

@@ -161,7 +161,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                     _defaults(PAGE_OPTIONS, "shown", _roles(Role.ADMIN, Role.WAREHOUSE_MANAGER)),
                     PAGE_OPTIONS,
                 ),
-                AccessRowDefinition("page_tally_check", "Tally Check", "Top navigation", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
+                AccessRowDefinition("page_tally_check", "Tally Check", "Admin menu", _admin(PAGE_OPTIONS, "shown"), PAGE_OPTIONS),
                 AccessRowDefinition(
                     "page_barcodes",
                     "Barcodes",
@@ -202,7 +202,7 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition(
                     "audit_assignment_manage",
                     "Audit assignments",
-                    "Assign timed product audits; auditors can view their assigned work",
+                    "Assign timed product audits, extend deadlines; auditors can view their assigned work",
                     {
                         **_defaults(DATA_OPTIONS, "edit", _roles(Role.ADMIN, Role.DIRECTORS)),
                         Role.AUDITOR.value: "view",

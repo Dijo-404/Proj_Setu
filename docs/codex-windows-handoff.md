@@ -4,7 +4,7 @@ Read this first when continuing the project on the Windows SERVER machine.
 
 ## Project Summary
 
-Setu Barcode Tally Bridge is a LAN-only FastAPI app for Swarnagowri Foods & Beverages. It lets staff scan product barcode serials from phones, keeps serial-level traceability in SQLite, and syncs supported stock movements to Tally Prime through the XML gateway.
+Setuora Barcode Tally Bridge is a LAN-only FastAPI app for Swarnagowri Foods & Beverages. It lets staff scan product barcode serials from phones, keeps serial-level traceability in SQLite, and syncs supported stock movements to Tally Prime through the XML gateway.
 
 Tally remains the master for accounting, GST, stock reports, and inventory valuation. The app is a transaction capture and traceability layer.
 
@@ -46,13 +46,13 @@ Recommended first-time setup from PowerShell in the project folder:
 Normal startup after setup:
 
 ```powershell
-.\start_setu.bat
+.\start_setuora.bat
 ```
 
-Stop Setu, including the Windows service when installed:
+Stop Setuora, including the Windows service when installed:
 
 ```powershell
-.\stop_setu.bat
+.\stop_setuora.bat
 ```
 
 Manual fallback:
@@ -174,7 +174,7 @@ They contain Tally company data folders, not direct Excel/XML templates. Do not 
 1. Open the company data in Tally.
 2. Copy exact company, ledger, stock item, unit, and voucher type names.
 3. Export or screenshot real vouchers.
-4. Use those details in Setu Settings and Tally Check.
+4. Use those details in Setuora Settings and Tally Check.
 
 ## Tally Sync Status
 
@@ -328,5 +328,5 @@ PY
 - Do not infer exact Tally master names from screenshots or memory.
 - Do not expose the app publicly unless the client explicitly asks.
 - Do not put price, GST, customer data, or product data inside the QR payload.
-- Do not reset or delete `data/setu.db` without backing it up.
+- Do not reset or delete `data/setuora.db` without backing it up.
 - Do not revert existing uncommitted work unless the user explicitly asks.

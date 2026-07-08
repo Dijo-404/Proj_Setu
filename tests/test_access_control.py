@@ -148,6 +148,8 @@ def test_role_access_page_is_super_admin_only():
     assert ">Sales</summary>" in root_response.text
     assert ">Stock</summary>" in root_response.text
     assert ">Batches</summary>" not in root_response.text
+    assert root_response.text.count('href="/audit-assignments"') == 1
+    assert ">Audits</a>" not in root_response.text
     workflow_markers = [
         ">Dashboard</a>",
         ">Purchase</summary>",
@@ -157,11 +159,24 @@ def test_role_access_page_is_super_admin_only():
         ">Barcodes</summary>",
         ">Serials</a>",
         ">Reports</summary>",
-        ">Tally Check</a>",
+        ">Stock movement</a>",
         ">Admin</summary>",
     ]
     assert [root_response.text.index(marker) for marker in workflow_markers] == sorted(
         root_response.text.index(marker) for marker in workflow_markers
+    )
+    admin_markers = [
+        ">Admin</summary>",
+        ">Expiry</a>",
+        ">Maintenance</a>",
+        ">Products</a>",
+        ">Role access</a>",
+        ">Settings</a>",
+        ">Tally Check</a>",
+        ">Users</a>",
+    ]
+    assert [root_response.text.index(marker) for marker in admin_markers] == sorted(
+        root_response.text.index(marker) for marker in admin_markers
     )
     assert admin_response.status_code == 403
     assert purchase_response.status_code == 403

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Directors Report - Setu{% endblock %}
+{% block title %}Directors Report - Setuora{% endblock %}
 {% block content %}
 {% set audit_excel_fields = "Audit Date|Audit Batch|Audited By|Products|Verified|Missing|Extra|Total|Pending|Product Code|Product Name|Audit Batches|Finding|Serial|Expected Status|Scanned Status" %}
 <section class="page-head director-head">
@@ -38,7 +38,7 @@
   <div class="metric director-date-metric">
     <span>Last audit date and time</span>
     {% if report.latest_audit %}
-    <strong>{{ report.latest_audit.audit_at.strftime('%d %b %Y, %I:%M %p') }}</strong>
+    <strong>{{ report_date(report.latest_audit.audit_at) }}</strong>
     {% else %}
     <strong>No audit</strong>
     {% endif %}
@@ -97,7 +97,7 @@
         <tr>
           <td><a class="button primary director-open" href="/reports/audit-batches/{{ row.id }}">Open</a></td>
           <td><strong>{{ row.batch_number }}</strong></td>
-          <td>{{ row.audit_at.strftime('%d %b %Y, %I:%M %p') }}</td>
+          <td>{{ report_date(row.audit_at) }}</td>
           <td>{{ row.audited_by }}</td>
           <td>{{ row.products }}</td>
           <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
@@ -176,7 +176,7 @@
           <td><strong>{{ row.product_name }}</strong></td>
           <td>{{ row.product_code }}</td>
           <td>{{ row.stock }}</td>
-          <td>{{ row.nearest_expiry.strftime('%d %b %Y') if row.nearest_expiry else '-' }}</td>
+          <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
         </tr>
         {% else %}
         <tr><td colspan="4" class="empty">No products found</td></tr>

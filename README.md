@@ -1,6 +1,6 @@
-# Setu Barcode Tally Bridge
+# Setuora Barcode Tally Bridge
 
-Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff scan product barcodes from phones, keeps serial-level history locally, and syncs supported stock movements to Tally through its XML gateway.
+Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff scan product barcodes from phones, keeps serial-level history locally, and syncs supported stock movements to Tally through its XML gateway.
 
 ## Current Features
 
@@ -21,6 +21,30 @@ Setu is a LAN-first barcode transaction bridge for Tally Prime. It lets staff sc
 - Configurable stock movement, stock-cover, slow/dead stock, overstock, and expiry-risk analysis with warehouse/franchise filters
 - Excel reports, transaction history, scan history, and PDF audit reports
 - SQLite-safe backup download and restore procedure
+
+## Folder Structure
+
+```text
+Proj_Setu/
+|-- README.md                         Project guide and setup notes
+|-- setup.bat                         First-time Windows setup helper
+|-- start_setuora.bat                    Start the local/server app
+|-- stop_setuora.bat                     Stop the local/server app
+|-- update.bat                        Fast-forward update helper
+|-- requirements.txt                  Python dependency pins
+|-- app/                              FastAPI application
+|   |-- main.py                       App entrypoint and route registration
+|   |-- models.py                     SQLAlchemy database models
+|   |-- routers/                      Page and API route handlers
+|   |-- services/                     Business logic and integrations
+|   |-- static/                       Browser JavaScript, CSS, and assets
+|   `-- templates/                    Jinja HTML templates
+|-- deployment/                       Windows service and Caddy config
+|-- docs/                             Deployment, handoff, and context docs
+|-- tests/                            Pytest coverage
+|-- data/                             Runtime database and backups, ignored by git
+`-- logs/                             Runtime logs, ignored by git
+```
 
 ## Prerequisites
 
@@ -44,26 +68,26 @@ For the complete Caddy setup, right-click `setup.bat` and choose **Run as admini
 After setup, start the app anytime with:
 
 ```text
-start_setu.bat
+start_setuora.bat
 ```
 
 To stop the app, including the Windows service if it is installed, double-click:
 
 ```text
-stop_setu.bat
+stop_setuora.bat
 ```
 
-If Setu is installed as a Windows service, run `stop_setu.bat` as Administrator.
+If Setuora is installed as a Windows service, run `stop_setuora.bat` as Administrator.
 
-Use `setup.bat` for first-time setup, `start_setu.bat` for normal app startup, and `stop_setu.bat` when the server needs to be stopped. No root-level PowerShell helper files are needed for the client-facing flow.
+Use `setup.bat` for first-time setup, `start_setuora.bat` for normal app startup, and `stop_setuora.bat` when the server needs to be stopped. No root-level PowerShell helper files are needed for the client-facing flow.
 
-To download the latest version from GitHub and restart Setu, double-click:
+To download the latest version from GitHub and restart Setuora, double-click:
 
 ```text
 update.bat
 ```
 
-The updater fetches the latest version and applies only a safe fast-forward update (it never rebases), refreshes Python packages, runs an import check, and restarts the existing Windows service or console server. If Setu is installed as a Windows service, run `update.bat` as Administrator.
+The updater fetches the latest version and applies only a safe fast-forward update (it never rebases), refreshes Python packages, runs an import check, and restarts the existing Windows service or console server. If Setuora is installed as a Windows service, run `update.bat` as Administrator.
 
 ## 1. Open The Project Folder
 
@@ -74,7 +98,7 @@ cd /home/dj/Projects/Proj_Setu
 On Windows, use the folder where this project is copied, for example:
 
 ```powershell
-cd C:\Setu
+cd C:\Setuora
 ```
 
 ## 2. Create A Virtual Environment
@@ -129,7 +153,7 @@ Open `.env` and update these before real use:
 APP_SECRET_KEY=replace-with-a-long-random-secret
 BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_PASSWORD=change-this-password
-DATABASE_URL=sqlite:///./data/setu.db
+DATABASE_URL=sqlite:///./data/setuora.db
 ```
 
 For first local testing, the example values work, but do not use the default secret/password for production.
@@ -172,7 +196,7 @@ After logging in:
 3. Disable unused accounts or, as super admin, delete accounts that should no longer appear in the user list.
 4. Change the bootstrap admin password before production.
 
-Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setu.db` already exists does not reset an existing user. Create, disable, or delete users from the `Users` page. Deleted users with old activity are hidden from the list but kept internally for historical records.
+Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setuora.db` already exists does not reset an existing user. Create, disable, or delete users from the `Users` page. Deleted users with old activity are hidden from the list but kept internally for historical records.
 
 ## 7. Basic Setup Inside The App
 
@@ -189,7 +213,7 @@ Do this in order:
 9. Mark each required Tally master as checked only after confirming the exact spelling in Tally.
 10. Enable Tally sync only after Tally Check has no missing or unchecked items and a test XML is validated in Tally.
 
-When switching the active company profile, Setu disables Tally sync again so the new company's masters can be checked before posting.
+When switching the active company profile, Setuora disables Tally sync again so the new company's masters can be checked before posting.
 
 ## 8. Normal Workflow
 
@@ -248,7 +272,7 @@ Before enabling sync:
 2. Enable Tally as a server on port `9000`.
 3. Confirm inventory is maintained.
 4. Confirm accounts and inventory are integrated.
-5. In Setu, complete `Tally Check`.
+5. In Setuora, complete `Tally Check`.
 6. Download `Tally XML` from a purchase, sale, or sales-return batch and validate it against the real company.
 7. Enable sync in `Settings`.
 
@@ -306,21 +330,26 @@ Backup:
 
 Automatic verified backups run by default every 24 hours into
 `data/backups/`, retain the latest 14 files, and test each backup with SQLite
-integrity and foreign-key checks before keeping it. Set
-`BACKUP_OFFSITE_DIRECTORY` in `.env` to copy the same verified backup to
-another drive or network share. Keep a separate copy of `.env`.
+integrity and foreign-key checks before keeping it. Super admins can change the
+automatic backup switch, backup folder, schedule, retention count, and
+off-machine copy folder from `Maintenance`. Set `BACKUP_OFFSITE_DIRECTORY` to
+copy the same verified backup to another drive or network share. Keep a
+separate copy of `.env`.
 
 For an additional server-level backup such as Cobian Reflector, include the
 whole `data/` folder plus `.env`. The `data/` folder can contain SQLite sidecar
-files such as `setu.db-wal` and `setu.db-shm` while the app is running.
+files such as `setuora.db-wal` and `setuora.db-shm` while the app is running.
 
 Restore:
 
-1. Stop the app/server.
-2. Copy the current `data/` folder somewhere safe.
-3. Replace `data/setu.db` with the backup file.
-4. Start the app again.
-5. Check Dashboard, Products, Serials, and Reports.
+1. Open `Maintenance` as a super admin.
+2. Use `Import backup` to restore a listed backup or upload a previous `.db` backup.
+3. Sign in again with an account from the restored backup.
+4. Check Dashboard, Products, Serials, and Reports.
+
+Manual restore is still available when the app is stopped: copy the current
+`data/` folder somewhere safe, replace `data/setuora.db`, start the app again, and
+then verify the restored data.
 
 ## 12. Run Tests
 
@@ -349,14 +378,14 @@ Phone camera access usually requires HTTPS when accessed from another device on 
 1. Right-click `setup.bat` and choose **Run as administrator**.
 2. Accept the Caddy setup prompt.
 3. Confirm the detected LAN IP address, or enter a local DNS name that resolves to this server.
-4. Install `deployment\caddy\setu-caddy-root.crt` as a trusted CA certificate on every phone that will use Setu.
+4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every phone that will use Setuora.
 
-The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the auto-start `SetuCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
+The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the auto-start `SetuoraCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
 
 Recommended production shape:
 
 ```text
-Phone browser -> https://setu.local -> Caddy -> http://127.0.0.1:8000
+Phone browser -> https://setuora.local -> Caddy -> http://127.0.0.1:8000
 ```
 
 For manual setup or troubleshooting, use:
@@ -364,11 +393,11 @@ For manual setup or troubleshooting, use:
 - `docs/deployment/https-lan-guide.md`
 - `deployment/caddy/Caddyfile.example`
 
-Back up `deployment\caddy\state` with the app data, but do not share it because it contains Caddy's private keys. Only distribute `setu-caddy-root.crt`, which is the public root certificate.
+Back up `deployment\caddy\state` with the app data, but do not share it because it contains Caddy's private keys. Only distribute `setuora-caddy-root.crt`, which is the public root certificate.
 
 ## 14. Windows Service Setup
 
-For production, run Setu as a Windows service using NSSM.
+For production, run Setuora as a Windows service using NSSM.
 
 See:
 

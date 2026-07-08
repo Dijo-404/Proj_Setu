@@ -16,7 +16,7 @@ from app.templates import templates
 router = APIRouter()
 
 # Keeps missing/inactive usernames on the normal password-verify path.
-_DUMMY_PASSWORD_HASH = hash_password("setu-dummy-password-never-matches")
+_DUMMY_PASSWORD_HASH = hash_password("setuora-dummy-password-never-matches")
 
 
 def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int:
@@ -31,12 +31,13 @@ def recent_failed_logins(db: Session, username: str, window_minutes: int) -> int
 
 
 @router.get("/login")
-def login_page(request: Request, db: Session = Depends(get_db)):
+def login_page(request: Request, restored: str = "", db: Session = Depends(get_db)):
     user = current_user(request, db)
     if user:
         destination = "/account/password" if user.must_change_password else landing_path_for(get_role_access_config(db), user.role)
         return RedirectResponse(destination, status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
+    message = "Backup import completed. Sign in with an account from the restored backup." if restored else None
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None, "message": message})
 
 
 @router.post("/login")
@@ -57,6 +58,7 @@ def login(
             {
                 "request": request,
                 "error": f"Too many failed attempts. Try again in about {settings.login_lockout_minutes} minutes.",
+                "message": None,
             },
             status_code=429,
         )
@@ -80,7 +82,7 @@ def login(
         return templates.TemplateResponse(
             request,
             "login.html",
-            {"request": request, "error": "Invalid username or password"},
+            {"request": request, "error": "Invalid username or password", "message": None},
             status_code=400,
         )
     user.last_login_at = datetime.now(timezone.utc)

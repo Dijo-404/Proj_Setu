@@ -84,21 +84,19 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
             igst_amount = money(taxable_value * igst_rate / Decimal("100"))
             cgst_rate = Decimal("0.00")
             sgst_rate = Decimal("0.00")
-        elif is_sales_side and batch_cgst_rate is not None and batch_sgst_rate is not None:
-            cgst_rate = money(batch_cgst_rate)
-            sgst_rate = money(batch_sgst_rate)
+        elif is_sales_side and (batch_cgst_rate is not None or batch_sgst_rate is not None):
+            entered_gst_rate = money((batch_cgst_rate or 0) + (batch_sgst_rate or 0))
+            gst_rate = entered_gst_rate
+            cgst_rate = sgst_rate = money(entered_gst_rate / Decimal("2"))
             igst_rate = Decimal("0.00")
-            gst_rate = money(cgst_rate + sgst_rate)
             cgst_amount = money(taxable_value * cgst_rate / Decimal("100"))
-            sgst_amount = money(taxable_value * sgst_rate / Decimal("100"))
+            sgst_amount = cgst_amount
             igst_amount = Decimal("0.00")
         else:
-            gst_amount = money(taxable_value * gst_rate / Decimal("100"))
-            cgst_rate = money(gst_rate / Decimal("2"))
-            sgst_rate = money(gst_rate - cgst_rate)
+            cgst_rate = sgst_rate = money(gst_rate / Decimal("2"))
             igst_rate = Decimal("0.00")
-            cgst_amount = money(gst_amount / Decimal("2"))
-            sgst_amount = money(gst_amount - cgst_amount)
+            cgst_amount = money(taxable_value * cgst_rate / Decimal("100"))
+            sgst_amount = cgst_amount
             igst_amount = Decimal("0.00")
         line_total = money(taxable_value + cgst_amount + sgst_amount + igst_amount)
         taxable_total += taxable_value

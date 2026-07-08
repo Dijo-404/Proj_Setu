@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Missing Stock Report - Setu{% endblock %}
+{% block title %}Missing Stock Report - Setuora{% endblock %}
 {% block content %}
 {% set missing_excel_fields = "Audit Date|Audited By|Audit Batch|Serial|Product Code|Product Name|Product Batch|Warehouse|Storage Location|Mfg Date|Expiry Date|Expected Status" %}
 <section class="page-head">
@@ -58,7 +58,7 @@
         {% for finding in findings %}
         {% set serial = finding.serial %}
         <tr>
-          <td>{{ finding.created_at.strftime('%d %b %Y %H:%M') }}</td>
+          <td>{{ report_date(finding.created_at) }}</td>
           <td>{{ finding.batch.user.username }}</td>
           <td>
             {% if serial %}
@@ -84,8 +84,8 @@
             <small>{{ serial.location.full_path if serial and serial.location else 'No storage location' }}</small>
           </td>
           <td>
-            <strong>{{ serial.mfg_date.strftime('%d %b %Y') if serial and serial.mfg_date else '-' }}</strong>
-            <small>Exp: {{ serial.expiry_date.strftime('%d %b %Y') if serial and serial.expiry_date else '-' }}</small>
+            <strong>{{ report_date(serial.mfg_date) if serial and serial.mfg_date else '-' }}</strong>
+            <small>Exp: {{ report_date(serial.expiry_date) if serial and serial.expiry_date else '-' }}</small>
           </td>
           <td><span class="status missing">{{ finding.expected_status or '-' }}</span></td>
         </tr>

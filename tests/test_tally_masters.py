@@ -14,7 +14,7 @@ from app.services.settings import update_settings
 
 
 VALID_SETTINGS = {
-    "company_name": "Setu Test Company",
+    "company_name": "Setuora Test Company",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
     "sales_voucher_type": "Sales",
@@ -140,7 +140,7 @@ def test_gateway_check_accepts_successful_tally_xml():
     response = """
         <ENVELOPE>
           <HEADER><VERSION>1</VERSION><STATUS>1</STATUS></HEADER>
-          <BODY><DATA><COLLECTION><COMPANY><NAME>Setu Test Company</NAME></COMPANY></COLLECTION></DATA></BODY>
+          <BODY><DATA><COLLECTION><COMPANY><NAME>Setuora Test Company</NAME></COMPANY></COLLECTION></DATA></BODY>
         </ENVELOPE>
     """
     with patch("app.services.tally_masters.urlopen", return_value=_GatewayResponse(response)):

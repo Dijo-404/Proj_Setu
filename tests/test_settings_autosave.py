@@ -32,7 +32,7 @@ from app.services.settings import (
 
 
 VALID_SETTINGS = {
-    "company_name": "Setu Test Company",
+    "company_name": "Setuora Test Company",
     "tally_host": "127.0.0.1",
     "tally_port": "9000",
     "sales_voucher_type": "Sales",

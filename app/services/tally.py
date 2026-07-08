@@ -145,7 +145,7 @@ def tally_remote_id(batch: Batch, settings: dict[str, str]) -> str:
     if batch.sync_remote_id:
         return batch.sync_remote_id
     company = settings.get("company_name", "").strip().casefold()
-    return str(uuid5(NAMESPACE_URL, f"setu:tally:{company}:{batch.batch_number}"))
+    return str(uuid5(NAMESPACE_URL, f"setuora:tally:{company}:{batch.batch_number}"))
 
 
 def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
@@ -213,7 +213,7 @@ def build_voucher_xml(batch: Batch, settings: dict[str, str]) -> str:
         _text(voucher, "PLACEOFSUPPLY", batch.party_state)
         _text(voucher, "COUNTRYOFRESIDENCE", "India")
     _text(voucher, "PERSISTEDVIEW", "Accounting Voucher View")
-    _text(voucher, "NARRATION", f"Setu barcode batch {batch.batch_number}")
+    _text(voucher, "NARRATION", f"Setuora barcode batch {batch.batch_number}")
 
     summary = calculate_voucher_summary(batch)
     if is_sales_side:

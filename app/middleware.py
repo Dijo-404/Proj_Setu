@@ -9,7 +9,7 @@ from app.config import get_settings
 from app.security import create_session_token
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS", "TRACE"}
-BACKGROUND_REQUEST_HEADER = "x-setu-background"
+BACKGROUND_REQUEST_HEADER = "x-setuora-background"
 
 
 def _host_only(value: str | None) -> str | None:

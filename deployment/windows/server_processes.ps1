@@ -15,7 +15,7 @@ function Test-PathEquals {
     )
 }
 
-function Test-SetuServerProcess {
+function Test-SetuoraServerProcess {
     param(
         [Parameter(Mandatory=$true)]$Process,
         [Parameter(Mandatory=$true)][string]$ProjectRoot
@@ -40,7 +40,7 @@ function Test-SetuServerProcess {
     return $false
 }
 
-function Get-SetuServerProcesses {
+function Get-SetuoraServerProcesses {
     param(
         [Parameter(Mandatory=$true)][string]$ProjectRoot,
         [int[]]$ExcludeProcessIds = @()
@@ -52,12 +52,12 @@ function Get-SetuServerProcesses {
         Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
             Where-Object {
                 $ExcludeProcessIds -notcontains [int]$_.ProcessId -and
-                (Test-SetuServerProcess -Process $_ -ProjectRoot $normalizedProjectRoot)
+                (Test-SetuoraServerProcess -Process $_ -ProjectRoot $normalizedProjectRoot)
             }
     )
 }
 
-function Get-SetuProcessById {
+function Get-SetuoraProcessById {
     param([uint32]$ProcessId)
 
     if ($ProcessId -eq 0) {
@@ -72,7 +72,7 @@ function Get-SetuProcessById {
     return $null
 }
 
-function Test-SetuBatchLauncher {
+function Test-SetuoraBatchLauncher {
     param(
         [AllowNull()]$Process,
         [Parameter(Mandatory=$true)][string]$StartScript
@@ -84,11 +84,11 @@ function Test-SetuBatchLauncher {
 
     return (
         $Process.CommandLine.IndexOf($StartScript, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-        $Process.CommandLine -match "(?i)start_setu\.bat"
+        $Process.CommandLine -match "(?i)start_setuora\.bat"
     )
 }
 
-function Test-SetuPowerShellLauncher {
+function Test-SetuoraPowerShellLauncher {
     param(
         [AllowNull()]$Process,
         [Parameter(Mandatory=$true)][string]$StartHelper
@@ -104,29 +104,29 @@ function Test-SetuPowerShellLauncher {
 
     return (
         $Process.CommandLine.IndexOf($StartHelper, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
-        $Process.CommandLine -match "(?i)start_setu\.ps1"
+        $Process.CommandLine -match "(?i)start_setuora\.ps1"
     )
 }
 
-function Get-SetuLauncherProcess {
+function Get-SetuoraLauncherProcess {
     param(
         [Parameter(Mandatory=$true)]$ServerProcess,
         [Parameter(Mandatory=$true)][string]$StartScript,
         [Parameter(Mandatory=$true)][string]$StartHelper
     )
 
-    $parent = Get-SetuProcessById -ProcessId $ServerProcess.ParentProcessId
+    $parent = Get-SetuoraProcessById -ProcessId $ServerProcess.ParentProcessId
     if (-not $parent) {
         return $null
     }
 
-    if (Test-SetuBatchLauncher -Process $parent -StartScript $StartScript) {
+    if (Test-SetuoraBatchLauncher -Process $parent -StartScript $StartScript) {
         return $parent
     }
 
-    if (Test-SetuPowerShellLauncher -Process $parent -StartHelper $StartHelper) {
-        $grandparent = Get-SetuProcessById -ProcessId $parent.ParentProcessId
-        if (Test-SetuBatchLauncher -Process $grandparent -StartScript $StartScript) {
+    if (Test-SetuoraPowerShellLauncher -Process $parent -StartHelper $StartHelper) {
+        $grandparent = Get-SetuoraProcessById -ProcessId $parent.ParentProcessId
+        if (Test-SetuoraBatchLauncher -Process $grandparent -StartScript $StartScript) {
             return $grandparent
         }
 
@@ -136,7 +136,7 @@ function Get-SetuLauncherProcess {
     return $null
 }
 
-function Get-SetuCommandArgument {
+function Get-SetuoraCommandArgument {
     param(
         [Parameter(Mandatory=$true)][string]$CommandLine,
         [Parameter(Mandatory=$true)][string]$Name
@@ -159,20 +159,20 @@ function Get-SetuCommandArgument {
     return $null
 }
 
-function Get-SetuServerLaunchInfo {
+function Get-SetuoraServerLaunchInfo {
     param(
         [Parameter(Mandatory=$true)]$Process,
         [string]$DefaultHostAddress = "127.0.0.1",
         [int]$DefaultPort = 8000
     )
 
-    $hostAddress = Get-SetuCommandArgument -CommandLine $Process.CommandLine -Name "host"
+    $hostAddress = Get-SetuoraCommandArgument -CommandLine $Process.CommandLine -Name "host"
     if ([string]::IsNullOrWhiteSpace($hostAddress)) {
         $hostAddress = $DefaultHostAddress
     }
 
     $port = $DefaultPort
-    $portValue = Get-SetuCommandArgument -CommandLine $Process.CommandLine -Name "port"
+    $portValue = Get-SetuoraCommandArgument -CommandLine $Process.CommandLine -Name "port"
     if (-not [string]::IsNullOrWhiteSpace($portValue)) {
         $parsedPort = 0
         if ([int]::TryParse($portValue, [ref]$parsedPort)) {

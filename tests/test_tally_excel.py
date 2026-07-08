@@ -114,8 +114,13 @@ def test_tally_excel_export_can_be_read_back_as_import_lines(db_session):
     assert data.startswith(b"PK")
     assert sheet["B6"].value == "Description of Goods"
     assert sheet["B7"].value == product.tally_stock_item_name
+    assert sheet["B2"].value == 1
+    assert sheet["B4"].number_format == "DD-MM-YYYY"
     assert sheet["F7"].value == 2
     assert sheet["H7"].value == 88.5
+    headers = [sheet.cell(6, c).value for c in range(1, sheet.max_column + 1)]
+    amount_col = headers.index("Amount excl. GST") + 1
+    assert sheet.cell(7, amount_col).value == 177
     assert len(lines) == 1
     assert lines[0].product.id == product.id
     assert lines[0].quantity == 2
@@ -144,6 +149,8 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     rate_col = headers.index("Item Rate") + 1
     hsn_col = headers.index("HSN/SAC") + 1
     change_mode_col = headers.index("Change Mode ") + 1
+    voucher_date_col = headers.index("Voucher Date") + 1
+    voucher_number_col = headers.index("Voucher Number") + 1
 
     assert sheet.title == "Accounting Voucher"
     assert headers == TALLY_ACCOUNTING_VOUCHER_HEADERS
@@ -151,6 +158,8 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     assert "HSN Code" not in headers
     assert "GST Rate %" not in headers
     assert sheet.cell(2, ledger_col).value == "Customer Ledger"
+    assert sheet.cell(2, voucher_date_col).number_format == "DD-MM-YYYY"
+    assert sheet.cell(2, voucher_number_col).value == 1
     assert sheet.cell(2, amount_col).value == 210
     assert sheet.cell(2, drcr_col).value == "Dr"
     assert sheet.cell(3, ledger_col).value == "Sales @ 5%"
@@ -192,7 +201,7 @@ def test_tally_excel_export_can_include_selected_fields_only(db_session):
         "Item Name",
     ]
     assert sheet["A2"].value == "Retail Sales"
-    assert sheet["B2"].value == "INV-SELECT-1"
+    assert sheet["B2"].value == 1
     assert sheet["C2"].value == "Walk-in Customer"
     assert sheet["D3"].value == product.tally_stock_item_name
 

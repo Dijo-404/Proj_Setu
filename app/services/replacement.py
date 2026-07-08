@@ -8,6 +8,22 @@ from app.models import ScanLog, Serial, SerialStatus, TransactionType, User
 from app.services.inventory import InventoryError, generate_serials, log_inventory_transaction, normalize_serial
 
 
+REPLACEABLE_STOCK_STATUSES = {
+    SerialStatus.IN_STOCK,
+    SerialStatus.RETURNED,
+    SerialStatus.DAMAGED,
+}
+
+
+def replacement_status_for(original_status: SerialStatus) -> SerialStatus:
+    """Replacement labels restart as either unassigned or normal stock."""
+    if original_status == SerialStatus.GENERATED:
+        return SerialStatus.GENERATED
+    if original_status in REPLACEABLE_STOCK_STATUSES:
+        return SerialStatus.IN_STOCK
+    raise InventoryError("Only unassigned or in-stock QR codes can be replaced")
+
+
 def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_serial_number: str | None = None, reason: str | None = None) -> Serial:
     old_serial = db.scalar(select(Serial).where(Serial.serial_number == normalize_serial(old_serial_number)))
     if not old_serial:
@@ -16,11 +32,12 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
         raise InventoryError("Serial is already inactive or invalid")
 
     original_status = SerialStatus(old_serial.status)
+    replacement_status = replacement_status_for(original_status)
     if new_serial_number and new_serial_number.strip():
         replacement = Serial(
             serial_number=normalize_serial(new_serial_number),
             product_id=old_serial.product_id,
-            status=original_status.value,
+            status=replacement_status.value,
             active=True,
         )
         db.add(replacement)
@@ -35,7 +52,7 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
             old_serial.product,
             1,
             old_serial.product.product_code,
-            original_status,
+            replacement_status,
             commit=False,
         )[0]
 
@@ -65,7 +82,7 @@ def replace_barcode_serial(db: Session, user: User, old_serial_number: str, new_
             serial_number_raw=replacement.serial_number,
             user_id=user.id,
             action=TransactionType.QR_REPLACEMENT.value,
-            status="ACTIVE",
+            status=replacement.status,
             message=f"Replaces: {old_serial.serial_number}. {reason or ''}".strip(),
         )
     )
