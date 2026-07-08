@@ -30,7 +30,7 @@
 
   function parameterInputType(name) {
     if (name === "start" || name === "end") return "date";
-    if (name === "product_id") return "number";
+    if (name === "product_id" || name === "voucher_number") return "number";
     return "text";
   }
 

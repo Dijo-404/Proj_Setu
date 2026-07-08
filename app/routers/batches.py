@@ -42,6 +42,7 @@ from app.services.preinvoice import sale_preinvoice_pdf
 from app.services.access_control import role_has_access
 from app.services.settings import get_all_settings
 from app.services.relocation import find_location_by_code
+from app.services.report_format import report_date
 from app.services.sale_returns import (
     ensure_sale_scan_allowed,
     sale_return_state,
@@ -439,10 +440,10 @@ def _batch_items_payload(batch: Batch) -> list[dict[str, object]]:
             "serial_number": item.serial.serial_number,
             "product_name": item.serial.product.product_name,
             "product_batch_number": item.serial.product_batch_number or "-",
-            "expiry_date": item.serial.expiry_date.strftime("%d %b %Y") if item.serial.expiry_date else "-",
+            "expiry_date": report_date(item.serial.expiry_date) if item.serial.expiry_date else "-",
             "fefo_picked": bool(item.fefo_picked),
             "shelf_code": item.shelf_location.code if item.shelf_location else "",
-            "shelf_verified_at": item.shelf_verified_at.strftime("%d %b %H:%M") if item.shelf_verified_at else "",
+            "shelf_verified_at": report_date(item.shelf_verified_at) if item.shelf_verified_at else "",
             "shelf_pending": bool(
                 shelf_controlled
                 and item.serial.product.shelf_verification_interval

@@ -3,8 +3,12 @@ from fastapi.templating import Jinja2Templates
 from app.database import SessionLocal
 from app.models import has_any_role
 from app.services.access_control import configured_role_has_access, landing_path_for, role_has_access
+from app.services.report_format import batch_voucher_number, report_date
 
 templates = Jinja2Templates(directory="app/templates")
+templates.env.globals["batch_voucher_number"] = batch_voucher_number
+templates.env.globals["report_date"] = report_date
+templates.env.filters["report_date"] = report_date
 
 
 def role_can(subject, access_key: str) -> bool:

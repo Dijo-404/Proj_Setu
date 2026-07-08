@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from io import BytesIO
 from types import SimpleNamespace
 
@@ -56,6 +57,25 @@ def test_scans_xlsx_exports_only_selected_fields(db_session):
 
     assert [cell.value for cell in sheet[1]] == ["Date", "Serial", "Status"]
     assert [cell.value for cell in sheet[2]][1:] == ["SG001-000001", "SCANNED"]
+
+
+def test_report_exports_use_dd_mm_yyyy_dates(db_session):
+    user = User(username="admin", password_hash="x", role="admin")
+    db_session.add(user)
+    db_session.commit()
+    scan = ScanLog(
+        serial_number_raw="SG001-000001",
+        user_id=user.id,
+        action="AUDIT",
+        status="SCANNED",
+        created_at=datetime(2026, 6, 28, 9, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(scan)
+    db_session.commit()
+
+    sheet = load_workbook(BytesIO(scans_xlsx([scan]))).active
+
+    assert sheet["A2"].value == "28-06-2026"
 
 
 def test_audit_reconciliation_xlsx_filters_detail_fields_and_keeps_summary():

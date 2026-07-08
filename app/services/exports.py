@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, datetime
 from io import BytesIO
 from xml.sax.saxutils import escape
 
@@ -13,6 +14,7 @@ from PIL import Image as PILImage
 
 from app.models import AuditFinding, Batch, InventoryTransaction, ScanLog, Serial, StorageLocation
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
+from app.services.report_format import report_date
 
 LABEL_WIDTH_MM = 48.5
 LABEL_HEIGHT_MM = 25.4
@@ -46,7 +48,7 @@ SERIAL_EXPORT_HEADERS = [
 def spreadsheet_safe(value):
     if value is None:
         return ""
-    if isinstance(value, (int, float)):
+    if isinstance(value, (int, float, date, datetime)):
         return value
     text = str(value)
     if text.startswith(DANGEROUS_SPREADSHEET_PREFIXES):
@@ -99,7 +101,7 @@ def scans_xlsx(scans: list[ScanLog], fields: list[str] | None = None) -> bytes:
     rows = [
         safe_row(
             [
-                scan.created_at.isoformat(),
+                report_date(scan.created_at),
                 scan.user.username,
                 scan.action,
                 scan.serial_number_raw,
@@ -140,12 +142,12 @@ def serials_xlsx(serials: list[Serial], fields: list[str] | None = None) -> byte
                     product.tally_stock_item_name,
                     serial.serial_number,
                     serial.product_batch_number or "",
-                    serial.mfg_date.isoformat() if serial.mfg_date else "",
-                    serial.expiry_date.isoformat() if serial.expiry_date else "",
+                    report_date(serial.mfg_date),
+                    report_date(serial.expiry_date),
                     serial.warehouse or "",
                     serial.warehouse_level,
                     serial.display_status,
-                    serial.created_at.isoformat(),
+                    report_date(serial.created_at),
                 ]
             )
         )
@@ -168,7 +170,7 @@ def transactions_xlsx(transactions: list[InventoryTransaction], fields: list[str
     rows = [
         safe_row(
             [
-                txn.created_at.isoformat(),
+                report_date(txn.created_at),
                 txn.user.username,
                 txn.transaction_type,
                 txn.serial_number or "",
@@ -209,7 +211,7 @@ def missing_stock_xlsx(findings: list[AuditFinding], fields: list[str] | None = 
         rows.append(
             safe_row(
                 [
-                    finding.created_at.isoformat(),
+                    report_date(finding.created_at),
                     finding.batch.user.username,
                     finding.batch.batch_number,
                     finding.serial_number,
@@ -218,8 +220,8 @@ def missing_stock_xlsx(findings: list[AuditFinding], fields: list[str] | None = 
                     serial.product_batch_number if serial else "",
                     serial.warehouse if serial else "",
                     serial.location.full_path if serial and serial.location else "",
-                    serial.mfg_date.isoformat() if serial and serial.mfg_date else "",
-                    serial.expiry_date.isoformat() if serial and serial.expiry_date else "",
+                    report_date(serial.mfg_date) if serial else "",
+                    report_date(serial.expiry_date) if serial else "",
                     finding.expected_status or "",
                 ]
             )
@@ -343,11 +345,7 @@ def audit_reconciliation_xlsx(
 
 
 def _datetime_text(value: object) -> str:
-    if not value:
-        return ""
-    if hasattr(value, "isoformat"):
-        return value.isoformat()  # type: ignore[no-any-return]
-    return str(value)
+    return report_date(value)
 
 
 def _autosize(sheet) -> None:

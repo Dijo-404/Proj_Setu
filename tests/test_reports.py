@@ -230,6 +230,7 @@ def test_reports_page_includes_filterable_missing_stock():
     assert '<option value="MISSING" selected>MISSING</option>' in response_text
     assert "<h2>Missing stock</h2>" in response_text
     assert "MISS100-000001" in response_text
+    assert "28-06-2026" in response_text
     assert "MISS100-000002" not in response_text
     assert "Missing masala" in response_text
     assert "AUD-001" in response_text
@@ -245,6 +246,7 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "LOT-MISS-01" in detail_text
     assert "Main warehouse" in detail_text
     assert "MISS100-000001" in detail_text
+    assert "28-06-2026" in detail_text
     assert "MISS100-000002" not in detail_text
     assert 'href="/reports/missing-stock"' in detail_text
     assert ">Overview</a>" in detail_text

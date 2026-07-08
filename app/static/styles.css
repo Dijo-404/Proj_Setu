@@ -855,6 +855,45 @@ tfoot th, tfoot td {
   min-width: 96px;
 }
 
+.reports-page {
+  position: relative;
+  isolation: isolate;
+}
+
+.reports-page::before {
+  content: "";
+  position: fixed;
+  top: 88px;
+  left: max(24px, 8vw);
+  z-index: 0;
+  width: min(620px, 58vw);
+  height: min(900px, 88vh);
+  pointer-events: none;
+  background-image:
+    url("/static/img1.png"),
+    url("/static/img1.jpg"),
+    url("/static/img1.webp"),
+    url("/static/img1");
+  background-repeat: no-repeat;
+  background-position: center top;
+  background-size: contain;
+  opacity: 0.18;
+}
+
+.reports-page > * {
+  position: relative;
+  z-index: 1;
+}
+
+.reports-page .panel {
+  background: rgba(250, 249, 245, 0.86);
+}
+
+.reports-page .chart-card,
+.reports-page .split > div {
+  background: rgba(239, 233, 222, 0.82);
+}
+
 .quick-actions .button { min-width: 116px; }
 
 .search {
@@ -2761,6 +2800,14 @@ small {
   .page { width: min(100vw - 28px, 1280px); }
 
   .page { margin-top: 22px; }
+
+  .reports-page::before {
+    top: 112px;
+    left: -18vw;
+    width: 92vw;
+    height: 72vh;
+    opacity: 0.13;
+  }
 
   h1 { font-size: 28px; }
 

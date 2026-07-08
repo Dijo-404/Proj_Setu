@@ -14,7 +14,7 @@
 <section class="metric-grid director-detail-grid">
   <div class="metric director-date-metric">
     <span>Audit date and time</span>
-    <strong>{{ report.audit_at.strftime('%d %b %Y, %I:%M %p') if report.audit_at else '-' }}</strong>
+    <strong>{{ report_date(report.audit_at) if report.audit_at else '-' }}</strong>
   </div>
   <div class="metric">
     <span>Audited by</span>
