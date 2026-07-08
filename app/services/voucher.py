@@ -14,6 +14,12 @@ def money(value: float | int | str | Decimal) -> Decimal:
     return Decimal(str(value or 0)).quantize(TWOPLACES, rounding=ROUND_HALF_UP)
 
 
+def sale_taxable_value(total_including_gst: Decimal, gst_rate: Decimal) -> Decimal:
+    if gst_rate <= 0:
+        return money(total_including_gst)
+    return money(total_including_gst * Decimal("100") / (Decimal("100") + gst_rate))
+
+
 @dataclass(frozen=True)
 class VoucherLine:
     product_id: int
@@ -70,7 +76,7 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         gross_value = money(rate * quantity)
         discount_rate = money(product.sales_discount_rate if is_sales_side else 0)
         discount_amount = money(gross_value * discount_rate / Decimal("100"))
-        taxable_value = money(gross_value - discount_amount)
+        line_amount = money(gross_value - discount_amount)
         product_gst_rate = money(product.gst_rate)
         gst_rate = product_gst_rate
         batch_cgst_rate = getattr(batch, "gst_cgst_rate", None)
@@ -79,6 +85,7 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         if is_interstate_sale:
             igst_rate = money(batch_igst_rate if batch_igst_rate is not None else product_gst_rate)
             gst_rate = igst_rate
+            taxable_value = sale_taxable_value(line_amount, gst_rate)
             cgst_amount = Decimal("0.00")
             sgst_amount = Decimal("0.00")
             igst_amount = money(taxable_value * igst_rate / Decimal("100"))
@@ -87,12 +94,14 @@ def calculate_voucher_summary(batch: Batch) -> VoucherSummary:
         elif is_sales_side and (batch_cgst_rate is not None or batch_sgst_rate is not None):
             entered_gst_rate = money((batch_cgst_rate or 0) + (batch_sgst_rate or 0))
             gst_rate = entered_gst_rate
+            taxable_value = sale_taxable_value(line_amount, gst_rate)
             cgst_rate = sgst_rate = money(entered_gst_rate / Decimal("2"))
             igst_rate = Decimal("0.00")
             cgst_amount = money(taxable_value * cgst_rate / Decimal("100"))
             sgst_amount = cgst_amount
             igst_amount = Decimal("0.00")
         else:
+            taxable_value = sale_taxable_value(line_amount, gst_rate) if is_sales_side else line_amount
             cgst_rate = sgst_rate = money(gst_rate / Decimal("2"))
             igst_rate = Decimal("0.00")
             cgst_amount = money(taxable_value * cgst_rate / Decimal("100"))

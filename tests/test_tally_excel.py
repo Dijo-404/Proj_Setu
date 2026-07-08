@@ -160,7 +160,7 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     assert sheet.cell(2, ledger_col).value == "Customer Ledger"
     assert sheet.cell(2, voucher_date_col).number_format == "DD-MM-YYYY"
     assert sheet.cell(2, voucher_number_col).value == 1
-    assert sheet.cell(2, amount_col).value == 210
+    assert sheet.cell(2, amount_col).value == 200
     assert sheet.cell(2, drcr_col).value == "Dr"
     assert sheet.cell(3, ledger_col).value == "Sales @ 5%"
     assert sheet.cell(3, drcr_col).value == "Cr"

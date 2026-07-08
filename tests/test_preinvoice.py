@@ -108,7 +108,7 @@ def test_sale_preinvoice_pdf_contains_interstate_igst_context(db_session):
 
     assert b"IGST" in pdf
     assert b"Tamil Nadu" in pdf
-    assert b"12.00" in pdf
+    assert b"10.71" in pdf
 
 
 def test_preinvoice_route_is_available_only_for_nonempty_sales():

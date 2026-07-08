@@ -130,7 +130,8 @@ def test_sale_batch_xml_includes_sales_discount(db_session):
     xml = build_voucher_xml(batch, VALID_SETTINGS)
 
     assert "<DISCOUNT>10.00</DISCOUNT>" in xml
-    assert "<AMOUNT>450.00</AMOUNT>" in xml
+    assert "<AMOUNT>428.57</AMOUNT>" in xml
+    assert "<AMOUNT>-450.00</AMOUNT>" in xml
 
 
 def test_sale_batch_xml_includes_buyer_gst_details(db_session):
@@ -203,7 +204,7 @@ def test_sale_voucher_xml_is_balanced_with_tax_and_party(db_session):
     assert VALID_SETTINGS["cgst_ledger_name"] in xml
     assert VALID_SETTINGS["sgst_ledger_name"] in xml
     assert "SANGEETHA" in xml
-    assert "<AMOUNT>-525.00</AMOUNT>" in xml
+    assert "<AMOUNT>-500.00</AMOUNT>" in xml
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
@@ -255,10 +256,10 @@ def test_sale_voucher_uses_product_gst_rate_ledger_mappings(db_session):
     }
 
     assert allocation_names == ["Sales @ 5%", "Sales @ 18%"]
-    assert ledger_amounts["Output CGST @ 2.5%"] == Decimal("2.50")
-    assert ledger_amounts["Output SGST @ 2.5%"] == Decimal("2.50")
-    assert ledger_amounts["Output CGST @ 9%"] == Decimal("18.00")
-    assert ledger_amounts["Output SGST @ 9%"] == Decimal("18.00")
+    assert ledger_amounts["Output CGST @ 2.5%"] == Decimal("2.38")
+    assert ledger_amounts["Output SGST @ 2.5%"] == Decimal("2.38")
+    assert ledger_amounts["Output CGST @ 9%"] == Decimal("15.25")
+    assert ledger_amounts["Output SGST @ 9%"] == Decimal("15.25")
     assert VALID_SETTINGS["sales_ledger_name"] not in xml
     assert _accounting_sum(xml) == Decimal("0.00")
 
@@ -296,14 +297,14 @@ def test_sales_return_credit_note_xml_reverses_sales_postings(db_session):
     assert "<VOUCHERTYPENAME>Credit Note</VOUCHERTYPENAME>" in xml
     assert inventory is not None
     assert inventory.findtext("ISDEEMEDPOSITIVE") == "Yes"
-    assert inventory.findtext("AMOUNT") == "-100.00"
+    assert inventory.findtext("AMOUNT") == "-95.24"
     assert allocation is not None
     assert allocation.findtext("LEDGERNAME") == "Sales Ledger"
     assert allocation.findtext("ISDEEMEDPOSITIVE") == "Yes"
-    assert allocation.findtext("AMOUNT") == "-100.00"
-    assert ledger_amounts["CGST Ledger"] == Decimal("-2.50")
-    assert ledger_amounts["SGST Ledger"] == Decimal("-2.50")
-    assert ledger_amounts["Customer"] == Decimal("105.00")
+    assert allocation.findtext("AMOUNT") == "-95.24"
+    assert ledger_amounts["CGST Ledger"] == Decimal("-2.38")
+    assert ledger_amounts["SGST Ledger"] == Decimal("-2.38")
+    assert ledger_amounts["Customer"] == Decimal("100.00")
     assert _accounting_sum(xml) == Decimal("0.00")
 
 
@@ -406,7 +407,7 @@ def test_interstate_sale_voucher_uses_mapped_igst_ledger(db_session):
         for entry in ET.fromstring(xml).iter("LEDGERENTRIES.LIST")
     }
 
-    assert ledger_amounts["Output IGST @ 5%"] == Decimal("5.00")
+    assert ledger_amounts["Output IGST @ 5%"] == Decimal("4.76")
     assert "Output CGST @ 2.5%" not in ledger_amounts
     assert "Output SGST @ 2.5%" not in ledger_amounts
     assert "<PLACEOFSUPPLY>Tamil Nadu</PLACEOFSUPPLY>" in xml

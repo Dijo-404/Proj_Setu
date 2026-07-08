@@ -28,10 +28,29 @@ def test_voucher_summary_calculates_gst_and_round_off(db_session):
     summary = calculate_voucher_summary(batch)
     assert len(summary.lines) == 1
     assert summary.lines[0].quantity == 2
-    assert str(summary.taxable_value) == "1000.00"
-    assert str(summary.cgst_amount) == "25.00"
-    assert str(summary.sgst_amount) == "25.00"
-    assert str(summary.final_value) == "1050.00"
+    assert str(summary.taxable_value) == "952.38"
+    assert str(summary.cgst_amount) == "23.81"
+    assert str(summary.sgst_amount) == "23.81"
+    assert str(summary.final_value) == "1000.00"
+
+
+def test_sale_rate_is_treated_as_gst_inclusive_amount(db_session):
+    user = User(username="sales-inclusive", password_hash="x", role="sales")
+    product = make_product("SGINCL", 45)
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, user, BatchType.SALE, "SANGEETHA", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    summary = calculate_voucher_summary(batch)
+
+    assert str(summary.lines[0].rate) == "45.00"
+    assert str(summary.lines[0].taxable_value) == "42.86"
+    assert str(summary.lines[0].cgst_amount) == "1.07"
+    assert str(summary.lines[0].sgst_amount) == "1.07"
+    assert str(summary.lines[0].line_total) == "45.00"
+    assert str(summary.final_value) == "45.00"
 
 
 def test_interstate_sale_uses_igst_instead_of_cgst_sgst(db_session):
@@ -54,11 +73,11 @@ def test_interstate_sale_uses_igst_instead_of_cgst_sgst(db_session):
 
     summary = calculate_voucher_summary(batch)
 
-    assert str(summary.taxable_value) == "1000.00"
+    assert str(summary.taxable_value) == "952.38"
     assert str(summary.cgst_amount) == "0.00"
     assert str(summary.sgst_amount) == "0.00"
-    assert str(summary.igst_amount) == "50.00"
-    assert str(summary.final_value) == "1050.00"
+    assert str(summary.igst_amount) == "47.62"
+    assert str(summary.final_value) == "1000.00"
 
 
 def test_sale_splits_entered_local_gst_equally_between_cgst_and_sgst(db_session):
@@ -85,9 +104,9 @@ def test_sale_splits_entered_local_gst_equally_between_cgst_and_sgst(db_session)
     assert str(summary.lines[0].gst_rate) == "5.00"
     assert str(summary.lines[0].cgst_rate) == "2.50"
     assert str(summary.lines[0].sgst_rate) == "2.50"
-    assert str(summary.cgst_amount) == "12.50"
-    assert str(summary.sgst_amount) == "12.50"
-    assert str(summary.final_value) == "525.00"
+    assert str(summary.cgst_amount) == "11.90"
+    assert str(summary.sgst_amount) == "11.90"
+    assert str(summary.final_value) == "500.00"
 
 
 def test_interstate_sale_can_use_entered_igst_rate(db_session):
@@ -112,8 +131,8 @@ def test_interstate_sale_can_use_entered_igst_rate(db_session):
 
     assert str(summary.lines[0].gst_rate) == "12.00"
     assert str(summary.lines[0].igst_rate) == "12.00"
-    assert str(summary.igst_amount) == "60.00"
-    assert str(summary.final_value) == "560.00"
+    assert str(summary.igst_amount) == "53.57"
+    assert str(summary.final_value) == "500.00"
 
 
 def test_sales_discount_rate_reduces_sales_taxable_value(db_session):
@@ -132,9 +151,9 @@ def test_sales_discount_rate_reduces_sales_taxable_value(db_session):
     assert str(summary.lines[0].gross_value) == "1000.00"
     assert str(summary.lines[0].discount_rate) == "10.00"
     assert str(summary.lines[0].discount_amount) == "100.00"
-    assert str(summary.taxable_value) == "900.00"
-    assert str(summary.gst_amount) == "45.00"
-    assert str(summary.final_value) == "945.00"
+    assert str(summary.taxable_value) == "857.14"
+    assert str(summary.gst_amount) == "42.86"
+    assert str(summary.final_value) == "900.00"
 
 
 def test_sales_discount_rate_does_not_change_purchase_value(db_session):
