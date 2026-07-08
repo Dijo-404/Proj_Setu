@@ -30,6 +30,7 @@ $LogsDir = Join-Path $ProjectRoot "logs"
 $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
 $CaddyServiceName = "SetuoraCaddy"
+$LegacyCaddyServiceNames = @("SetuCaddy")
 
 function Write-Section {
     param([string]$Title)
@@ -480,10 +481,47 @@ function Write-CaddyConfig {
     )
 }
 
+function Remove-LegacyCaddyServices {
+    foreach ($legacyName in $LegacyCaddyServiceNames) {
+        if ($legacyName -eq $CaddyServiceName) {
+            continue
+        }
+
+        $legacyService = Get-Service -Name $legacyName -ErrorAction SilentlyContinue
+        if (-not $legacyService) {
+            continue
+        }
+
+        if ($legacyService.Status -ne "Stopped") {
+            Write-Host "Stopping old Caddy service '$legacyName'..."
+            Stop-Service -Name $legacyName -Force
+            $legacyService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(15))
+        }
+
+        Write-Host "Removing old Caddy service '$legacyName'..."
+        & sc.exe delete $legacyName | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not remove old Caddy service '$legacyName'."
+        }
+
+        for ($i = 0; $i -lt 20; $i++) {
+            if (-not (Get-Service -Name $legacyName -ErrorAction SilentlyContinue)) {
+                break
+            }
+            Start-Sleep -Milliseconds 500
+        }
+
+        if (Get-Service -Name $legacyName -ErrorAction SilentlyContinue) {
+            throw "Old Caddy service '$legacyName' is still registered. Reboot Windows, then run setup.bat again."
+        }
+    }
+}
+
 function Install-CaddyService {
     param([string]$CaddyExe)
 
     $serviceCaddyExe = Join-Path $CaddyDir "caddy.exe"
+    Remove-LegacyCaddyServices
     $existingService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
     if ($existingService -and $existingService.Status -ne "Stopped") {
         Stop-Service -Name $CaddyServiceName -Force
