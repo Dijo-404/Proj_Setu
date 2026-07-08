@@ -31,12 +31,20 @@
 
   function restoreDraftField(field, value) {
     if (!field || field.type === "hidden") return;
+    if (!field.tagName && typeof field.value !== "undefined") {
+      field.value = value == null ? "" : String(value);
+      return;
+    }
     if (field.tagName === "SELECT") {
       const savedValue = value == null ? "" : String(value);
       const hasOption = Array.prototype.some.call(field.options, function (option) {
         return option.value === savedValue;
       });
       if (hasOption) field.value = savedValue;
+      return;
+    }
+    if (field.type === "checkbox" || field.type === "radio") {
+      field.checked = field.value === String(value);
       return;
     }
     field.value = value;
@@ -76,7 +84,9 @@
     const save = debounce(function () {
       const draft = {};
       fields(form).forEach(function (field) {
-        if (field.name && field.type !== "password") draft[field.name] = field.value;
+        if (!field.name || field.type === "password") return;
+        if ((field.type === "checkbox" || field.type === "radio") && !field.checked) return;
+        draft[field.name] = field.value;
       });
       try {
         localStorage.setItem(key, JSON.stringify(draft));

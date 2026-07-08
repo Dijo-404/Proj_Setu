@@ -198,6 +198,16 @@ def sale_gst_treatment_for_state(party_state: str | None) -> str:
     return GstTreatment.INTRA_STATE.value
 
 
+def normalize_sale_gst_treatment(value: str | None, party_state: str | None) -> str:
+    treatment = value.strip().upper() if value else ""
+    if not treatment:
+        return sale_gst_treatment_for_state(party_state)
+    valid_treatments = {GstTreatment.INTRA_STATE.value, GstTreatment.INTER_STATE.value}
+    if treatment not in valid_treatments:
+        raise ValueError("Choose either CGST + SGST or IGST for this sale.")
+    return treatment
+
+
 def fefo_product_options_for_type(db: Session, batch_type: str) -> list[dict[str, object]]:
     statuses = fefo_available_statuses(batch_type)
     if not statuses:
@@ -335,6 +345,7 @@ def batch_form_context(
     party_gst_registration_type: str | None = None,
     party_gst_name: str = "",
     party_gstin: str = "",
+    gst_treatment: str = "",
     party_name_options: list[str] | None = None,
     sale_product_options: list[dict[str, object]] | None = None,
     sale_product_id: str = "",
@@ -348,6 +359,11 @@ def batch_form_context(
     selected_state = party_state
     if batch_type == BatchType.SALE and not selected_state and selected_registration == GstRegistrationType.UNREGISTERED_CONSUMER.value:
         selected_state = DEFAULT_UNREGISTERED_SALE_STATE
+    selected_gst_treatment = (
+        gst_treatment or sale_gst_treatment_for_state(selected_state)
+        if batch_type == BatchType.SALE
+        else ""
+    )
     return {
         "request": request,
         "user": user,
@@ -359,6 +375,7 @@ def batch_form_context(
         ),
         "party_gst_name": party_gst_name,
         "party_gstin": party_gstin,
+        "gst_treatment": selected_gst_treatment,
         "party_name_options": party_name_options or [],
         "sale_product_options": sale_product_options or [],
         "sale_product_id": sale_product_id,
@@ -555,6 +572,7 @@ def create_batch_route(
     party_gst_registration_type: str = Form(""),
     party_gst_name: str = Form(""),
     party_gstin: str = Form(""),
+    gst_treatment: str = Form(""),
     reason_code: str = Form(""),
     audit_assignment_id: str = Form(""),
     notes: str = Form(""),
@@ -624,7 +642,7 @@ def create_batch_route(
                 party_state = DEFAULT_UNREGISTERED_SALE_STATE
             if gst_registration_requires_gstin(selected_gst_registration_type):
                 normalize_gstin(party_gstin)
-            selected_gst_treatment = sale_gst_treatment_for_state(party_state)
+            selected_gst_treatment = normalize_sale_gst_treatment(gst_treatment, party_state)
         except ValueError as exc:
             return templates.TemplateResponse(
                 request,
@@ -640,6 +658,7 @@ def create_batch_route(
                     ),
                     party_gst_name=party_gst_name,
                     party_gstin=party_gstin,
+                    gst_treatment=selected_gst_treatment or gst_treatment,
                     party_name_options=party_ledger_options(db, parsed),
                     notes=notes,
                     error=str(exc),
@@ -669,6 +688,7 @@ def create_batch_route(
                 ),
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
+                gst_treatment=selected_gst_treatment or gst_treatment,
                 party_name_options=party_ledger_options(db, parsed),
                 notes=notes,
                 error=f"{party_label} is required.",
@@ -711,6 +731,7 @@ def create_batch_route(
                 ),
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
+                gst_treatment=selected_gst_treatment or gst_treatment,
                 party_name_options=party_ledger_options(db, parsed),
                 audit_assignments=open_audit_assignments(db, user) if parsed == BatchType.AUDIT else [],
                 audit_assignment_id=audit_assignment_id,

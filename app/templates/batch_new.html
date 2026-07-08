@@ -44,6 +44,7 @@
 {% if batch_type.value == 'SALE' and selected_gst_registration == 'Unregistered/Consumer' and not selected_party_state %}
   {% set selected_party_state = 'Karnataka' %}
 {% endif %}
+{% set selected_gst_treatment = gst_treatment|default('INTRA_STATE', true) %}
 {% set gst_number_visible = selected_gst_registration in ['Composition', 'Regular'] %}
 <section class="page-head">
   <div>
@@ -128,6 +129,29 @@
           {% endfor %}
         </datalist>
       </label>
+      <div class="choice-field span-all" role="radiogroup" aria-label="GST type">
+        <span class="choice-field__label">GST type</span>
+        <div class="choice-grid" data-gst-treatment-choice>
+          <label class="choice-option">
+            <input
+              type="radio"
+              name="gst_treatment"
+              value="INTRA_STATE"
+              {% if selected_gst_treatment != 'INTER_STATE' %}checked{% endif %}
+            >
+            <span>CGST + SGST</span>
+          </label>
+          <label class="choice-option">
+            <input
+              type="radio"
+              name="gst_treatment"
+              value="INTER_STATE"
+              {% if selected_gst_treatment == 'INTER_STATE' %}checked{% endif %}
+            >
+            <span>IGST</span>
+          </label>
+        </div>
+      </div>
     </div>
     {% endif %}
     {% if batch_type.value == 'SALES_RETURN' %}

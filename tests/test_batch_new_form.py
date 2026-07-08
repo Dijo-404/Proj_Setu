@@ -51,7 +51,11 @@ def test_sale_new_batch_has_fallback_state_and_scan_driven_products():
     assert 'name="party_gstin"' in html
     assert "disabled" in html
     assert '<option value="Karnataka"></option>' in html
-    assert 'name="gst_treatment"' not in html
+    assert 'name="gst_treatment"' in html
+    assert 'value="INTRA_STATE"' in html
+    assert 'value="INTER_STATE"' in html
+    assert "CGST + SGST" in html
+    assert "IGST" in html
     assert 'name="gst_cgst_rate"' not in html
     assert 'name="gst_sgst_rate"' not in html
     assert 'name="gst_igst_rate"' not in html
@@ -78,6 +82,22 @@ def test_registered_sale_new_batch_shows_gst_number():
     assert 'data-gst-number-field hidden' not in html
     assert 'name="party_gst_name"' in html
     assert 'name="party_gstin"' in html
+
+
+def test_sale_new_batch_preserves_selected_igst_treatment():
+    html = templates.env.get_template("batch_new.html").render(
+        user=None,
+        batch_type=SimpleNamespace(value="SALE"),
+        party_name="",
+        party_state="Tamil Nadu",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+        notes="",
+        error=None,
+    )
+
+    assert 'name="gst_treatment"' in html
+    inter_state_input = html.split('value="INTER_STATE"', 1)[1].split(">", 1)[0]
+    assert "checked" in inter_state_input
 
 
 def test_sale_gst_treatment_is_inferred_from_customer_state():
@@ -135,6 +155,7 @@ def test_new_sale_batch_starts_empty_and_records_logged_in_user(db_session):
         party_gst_registration_type="Unregistered/Consumer",
         party_gst_name="",
         party_gstin="",
+        gst_treatment=GstTreatment.INTRA_STATE.value,
         reason_code="",
         notes="",
         db=db_session,
@@ -146,7 +167,33 @@ def test_new_sale_batch_starts_empty_and_records_logged_in_user(db_session):
     assert response.status_code == 303
     assert response.headers["location"] == f"/batches/{batch.id}"
     assert batch.user_id == user.id
+    assert batch.gst_treatment == GstTreatment.INTRA_STATE.value
     assert items == []
+
+
+def test_new_sale_batch_records_selected_igst_treatment(db_session):
+    user = User(username="sales", password_hash="x", role="sales", active=True)
+    db_session.add(user)
+    db_session.commit()
+
+    response = create_batch_route(
+        signed_request(user.id),
+        batch_type=BatchType.SALE.value,
+        party_name="Customer Ledger",
+        party_state="Karnataka",
+        party_gst_registration_type="Unregistered/Consumer",
+        party_gst_name="",
+        party_gstin="",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+        reason_code="",
+        notes="",
+        db=db_session,
+    )
+
+    batch = db_session.scalar(select(Batch).where(Batch.party_name == "Customer Ledger"))
+
+    assert response.status_code == 303
+    assert batch.gst_treatment == GstTreatment.INTER_STATE.value
 
 
 def test_sale_form_does_not_show_product_dropdown_even_when_stock_exists(db_session):

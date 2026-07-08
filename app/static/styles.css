@@ -1502,6 +1502,74 @@ tfoot th, tfoot td {
   gap: 14px;
 }
 
+.span-all { grid-column: 1 / -1; }
+
+.choice-field {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  color: var(--ink-80);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.84);
+}
+
+.choice-field__label {
+  display: block;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice-option {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 10px 13px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  background: var(--canvas);
+  color: var(--ink-48);
+  cursor: pointer;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: inset 0 2px 3px rgba(20, 20, 19, 0.08),
+    0 1px 0 rgba(255, 255, 255, 0.76);
+  transition: border-color 0.12s ease, box-shadow 0.12s ease, color 0.12s ease;
+}
+
+.choice-option:hover {
+  border-color: var(--muted-soft);
+  color: var(--ink);
+}
+
+.choice-option input[type="radio"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+.choice-option:has(input[type="radio"]:checked) {
+  border-color: var(--primary);
+  color: var(--ink);
+  background: var(--primary-softer);
+  box-shadow: var(--pressed-shadow), 0 0 0 3px var(--primary-ring);
+}
+
+.choice-option:has(input[type="radio"]:focus-visible) {
+  outline: 2px solid var(--primary-focus);
+  outline-offset: 2px;
+}
+
 .row-actions { display: flex; align-items: center; gap: 8px; }
 .row-actions form { display: inline; }
 
@@ -2843,6 +2911,10 @@ small {
   .chart-body {
     grid-template-columns: 1fr;
     justify-items: start;
+  }
+
+  .choice-grid {
+    grid-template-columns: 1fr;
   }
 
   .donut {
