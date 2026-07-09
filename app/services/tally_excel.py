@@ -75,6 +75,22 @@ TALLY_ACCOUNTING_VOUCHER_HEADERS = [
     "SGST/UTGST Rate",
     "Taxable Value",
 ]
+TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS = [
+    "Voucher Date",
+    "Voucher Type Name",
+    "Voucher Number",
+    "Ledger Name",
+    "Ledger Amount",
+    "Item Name",
+    "Billed Quantity",
+    "Item Rate",
+    "Item Amount",
+    "Change Mode",
+    "Buyer/Supplier - Place of Supply",
+    "HSN/SAC",
+    "GST Nature of Transaction",
+    "Taxable Value",
+]
 TALLY_ITEM_SUMMARY_HEADERS = [
     "Sl",
     "Description of Goods",
@@ -102,6 +118,50 @@ _IST = timezone(timedelta(hours=5, minutes=30))
 class TallyExcelImportResult:
     product_lines: int
     quantity: int
+
+
+def tally_accounting_default_deselected_fields(batch: Batch) -> list[str]:
+    if batch.batch_type not in TALLY_ACCOUNTING_VOUCHER_BATCH_TYPES:
+        return []
+    batch_type = BatchType(batch.batch_type)
+    if batch_type not in {BatchType.SALE, BatchType.SALES_RETURN}:
+        return []
+
+    registration_type = (batch.party_gst_registration_type or "").strip()
+    if not registration_type:
+        registration_type = GstRegistrationType.UNREGISTERED_CONSUMER.value
+    gst_treatment = (batch.gst_treatment or "").strip().upper()
+    deselected: set[str] = set()
+
+    if registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value:
+        deselected.update(
+            {
+                "Buyer/Supplier - Address",
+                "Buyer/Supplier - Pincode",
+                "Buyer/Supplier - GST Registration Type",
+                "Buyer/Supplier - GSTIN/UIN",
+                "HSN/SAC Details",
+            }
+        )
+
+    if gst_treatment == "INTER_STATE":
+        deselected.update({"CGST Rate", "SGST/UTGST Rate"})
+    else:
+        deselected.add("IGST Rate")
+
+    if registration_type == GstRegistrationType.COMPOSITION.value:
+        deselected.update(
+            {
+                "GST Rate Details",
+                "GST Taxability Type",
+                "IGST Rate",
+                "CGST Rate",
+                "SGST/UTGST Rate",
+            }
+        )
+
+    deselected.difference_update(TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS)
+    return _ordered_accounting_fields(deselected)
 
 
 def batch_tally_xlsx(
@@ -244,6 +304,10 @@ def _accounting_voucher_rows(
     return [TALLY_ACCOUNTING_VOUCHER_HEADERS] + [
         [row.get(header, "") for header in TALLY_ACCOUNTING_VOUCHER_HEADERS] for row in rows
     ]
+
+
+def _ordered_accounting_fields(fields: set[str]) -> list[str]:
+    return [header.strip() for header in TALLY_ACCOUNTING_VOUCHER_HEADERS if header.strip() in fields]
 
 
 def _item_summary_xlsx(

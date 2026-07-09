@@ -8,6 +8,8 @@
 {% set first_summary_line = summary.lines[0] if summary.lines else none %}
 {% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" %}
 {% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount excl. GST" %}
+{% set tally_required_fields = tally_accounting_required_fields|default([], true) %}
+{% set tally_deselected_fields = tally_accounting_deselected_fields|default([], true) %}
 <section class="page-head">
   <div>
     <p class="eyebrow">{{ batch.batch_type }}</p>
@@ -25,7 +27,7 @@
     <a class="button" href="/batches/{{ batch.id }}/tally.xml">Tally XML</a>
     {% endif %}
     {% if can_tally_excel_export and batch.batch_type in excel_export_types and batch.items|length > 0 %}
-    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch_voucher_number(batch), "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}">Tally Excel</a>
+    <a class="button" href="/batches/{{ batch.id }}/tally.xlsx" data-xlsx-export data-xlsx-title="Customize Tally Excel export" data-xlsx-parameters="voucher_type|voucher_number|party_ledger" data-xlsx-defaults='{{ {"voucher_number": batch_voucher_number(batch), "party_ledger": batch.party_name or ""}|tojson }}' data-xlsx-fields="{{ tally_accounting_excel_fields if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else tally_summary_excel_fields }}" data-xlsx-required-fields="{{ tally_required_fields|join('|') if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else '' }}" data-xlsx-deselected-fields="{{ tally_deselected_fields|join('|') if batch.batch_type in ['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN'] else '' }}">Tally Excel</a>
     {% endif %}
     {% if can_view_batch_list %}
     <a class="button" href="/batches">Batches</a>

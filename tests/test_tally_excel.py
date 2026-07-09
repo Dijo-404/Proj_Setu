@@ -6,11 +6,26 @@ import pytest
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import select
 
-from app.models import BatchItem, BatchType, Product, ScanLog, SerialStatus, User
+from app.models import (
+    BatchItem,
+    BatchType,
+    GstRegistrationType,
+    GstTreatment,
+    Product,
+    ScanLog,
+    SerialStatus,
+    User,
+)
 from app.services.assignment import parse_bulk_assignment_xlsx
 from app.services.inventory import InventoryError, add_serial_to_batch, create_batch, generate_serials
 from app.services.sale_returns import scan_sale_return_product
-from app.services.tally_excel import TALLY_ACCOUNTING_VOUCHER_HEADERS, batch_tally_xlsx, import_tally_excel_to_batch
+from app.services.tally_excel import (
+    TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS,
+    TALLY_ACCOUNTING_VOUCHER_HEADERS,
+    batch_tally_xlsx,
+    import_tally_excel_to_batch,
+    tally_accounting_default_deselected_fields,
+)
 
 
 VALID_TALLY_EXCEL_SETTINGS = {
@@ -46,6 +61,131 @@ def _product(code: str = "TALLYXL") -> Product:
         default_rate=100,
         tally_stock_item_name="Tally Excel Product",
     )
+
+
+def test_tally_excel_default_fields_for_registered_interstate_sale(db_session):
+    user = User(username="registered-interstate-xlsx", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Registered Buyer",
+        "",
+        party_state="Tamil Nadu",
+        party_gst_registration_type=GstRegistrationType.REGULAR.value,
+        party_gstin="33ABCDE1234F1Z5",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+    )
+
+    fields = tally_accounting_default_deselected_fields(batch)
+
+    assert fields == ["CGST Rate", "SGST/UTGST Rate"]
+
+
+def test_tally_excel_default_fields_for_registered_intrastate_sale(db_session):
+    user = User(username="registered-intrastate-xlsx", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Registered Buyer",
+        "",
+        party_state="Karnataka",
+        party_gst_registration_type=GstRegistrationType.REGULAR.value,
+        party_gstin="29ABCDE1234F1Z5",
+        gst_treatment=GstTreatment.INTRA_STATE.value,
+    )
+
+    fields = tally_accounting_default_deselected_fields(batch)
+
+    assert fields == ["IGST Rate"]
+
+
+def test_tally_excel_default_fields_for_unregistered_intrastate_sale(db_session):
+    user = User(username="b2c-intrastate-xlsx", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Walk-in Buyer",
+        "",
+        party_state="Karnataka",
+        party_gst_registration_type=GstRegistrationType.UNREGISTERED_CONSUMER.value,
+        gst_treatment=GstTreatment.INTRA_STATE.value,
+    )
+
+    fields = tally_accounting_default_deselected_fields(batch)
+
+    assert fields == [
+        "Buyer/Supplier - Address",
+        "Buyer/Supplier - Pincode",
+        "Buyer/Supplier - GST Registration Type",
+        "Buyer/Supplier - GSTIN/UIN",
+        "HSN/SAC Details",
+        "IGST Rate",
+    ]
+    assert not set(fields) & set(TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS)
+
+
+def test_tally_excel_default_fields_for_unregistered_interstate_sale(db_session):
+    user = User(username="b2c-interstate-xlsx", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Walk-in Buyer",
+        "",
+        party_state="Tamil Nadu",
+        party_gst_registration_type=GstRegistrationType.UNREGISTERED_CONSUMER.value,
+        gst_treatment=GstTreatment.INTER_STATE.value,
+    )
+
+    fields = tally_accounting_default_deselected_fields(batch)
+
+    assert fields == [
+        "Buyer/Supplier - Address",
+        "Buyer/Supplier - Pincode",
+        "Buyer/Supplier - GST Registration Type",
+        "Buyer/Supplier - GSTIN/UIN",
+        "HSN/SAC Details",
+        "CGST Rate",
+        "SGST/UTGST Rate",
+    ]
+
+
+def test_tally_excel_default_fields_for_composition_sale(db_session):
+    user = User(username="composition-xlsx", password_hash="x", role="sales")
+    db_session.add(user)
+    db_session.commit()
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Composition Buyer",
+        "",
+        party_state="Tamil Nadu",
+        party_gst_registration_type=GstRegistrationType.COMPOSITION.value,
+        party_gstin="33ABCDE1234F1Z5",
+        gst_treatment=GstTreatment.INTER_STATE.value,
+    )
+
+    fields = tally_accounting_default_deselected_fields(batch)
+
+    assert fields == [
+        "GST Rate Details",
+        "GST Taxability Type",
+        "IGST Rate",
+        "CGST Rate",
+        "SGST/UTGST Rate",
+    ]
 
 
 def test_tally_excel_import_picks_fefo_stock_and_keeps_rate(db_session):

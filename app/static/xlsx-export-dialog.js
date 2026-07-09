@@ -47,14 +47,25 @@
     return label;
   }
 
-  function makeField(field, index) {
+  function parseFieldSet(value) {
+    return new Set(
+      (value || "")
+        .split("|")
+        .map((field) => field.trim())
+        .filter(Boolean)
+    );
+  }
+
+  function makeField(field, index, deselectedFields, requiredFields) {
     const label = document.createElement("label");
     label.className = "xlsx-export-field";
     const input = document.createElement("input");
+    const required = requiredFields.has(field);
     input.type = "checkbox";
     input.name = "xlsx_field";
     input.value = field;
-    input.checked = true;
+    input.checked = required || !deselectedFields.has(field);
+    input.disabled = required;
     input.id = `xlsx-export-field-${index}`;
     const text = document.createElement("span");
     text.textContent = field;
@@ -73,6 +84,8 @@
       .split("|")
       .map((field) => field.trim())
       .filter(Boolean);
+    const deselectedFields = parseFieldSet(link.dataset.xlsxDeselectedFields);
+    const requiredFields = parseFieldSet(link.dataset.xlsxRequiredFields);
     let defaults = {};
     try {
       defaults = JSON.parse(link.dataset.xlsxDefaults || "{}");
@@ -85,7 +98,9 @@
       ...parameterNames.map((name) => makeParameter(name, url.searchParams.get(name) || defaults[name] || ""))
     );
     parameterSection.hidden = parameterNames.length === 0;
-    fieldContainer.replaceChildren(...fields.map(makeField));
+    fieldContainer.replaceChildren(
+      ...fields.map((field, index) => makeField(field, index, deselectedFields, requiredFields))
+    );
     error.hidden = true;
     if (dialog.showModal) dialog.showModal();
     else dialog.setAttribute("open", "");
@@ -110,7 +125,7 @@
     error.hidden = true;
   });
   dialog.querySelector("[data-xlsx-clear-all]").addEventListener("click", () => {
-    fieldContainer.querySelectorAll("input").forEach((input) => { input.checked = false; });
+    fieldContainer.querySelectorAll("input").forEach((input) => { input.checked = input.disabled; });
   });
 
   form.addEventListener("submit", (event) => {

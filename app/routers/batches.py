@@ -59,10 +59,12 @@ from app.services.shelf_verification import (
 from app.services.tally import TALLY_XML_SUPPORTED_BATCH_TYPES, TallySyncError, build_voucher_xml, sync_batch
 from app.services.tally_excel import (
     MAX_TALLY_EXCEL_UPLOAD_BYTES,
+    TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS,
     TALLY_EXCEL_EXPORT_BATCH_TYPES,
     TALLY_EXCEL_IMPORT_BATCH_TYPES,
     batch_tally_xlsx,
     import_tally_excel_to_batch,
+    tally_accounting_default_deselected_fields,
 )
 from app.services.voucher import calculate_voucher_summary, validate_priced_batch
 from app.templates import templates
@@ -774,6 +776,8 @@ def batch_detail(request: Request, batch_id: int, db: Session = Depends(get_db))
             "can_manual_scan": can_use_manual_scan(db, user),
             "tally_excel_import_types": TALLY_EXCEL_IMPORT_BATCH_TYPES,
             "tally_excel_export_types": TALLY_EXCEL_EXPORT_BATCH_TYPES,
+            "tally_accounting_required_fields": TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS,
+            "tally_accounting_deselected_fields": tally_accounting_default_deselected_fields(batch),
             "tally_excel_message": tally_excel_import_message(request),
             **batch_permission_context(db, user, batch),
             "error": None,
