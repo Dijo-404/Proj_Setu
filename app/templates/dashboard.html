@@ -37,40 +37,36 @@
 {% include "partials/expiry_summary.html" %}
 
 <section class="split">
-  <div>
+  <div class="panel split-card">
     <div class="section-title">
       <h2>Recent batches</h2>
       {% if role_can(user, 'batch_list') %}
       <a href="/batches">View all</a>
       {% endif %}
     </div>
-    <div class="panel">
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
-          <tbody data-live-batches>
-            {% include "partials/dashboard_batches.html" %}
-          </tbody>
-        </table>
-      </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Batch</th><th>Type</th><th>Status</th><th>Items</th></tr></thead>
+        <tbody data-live-batches>
+          {% include "partials/dashboard_batches.html" %}
+        </tbody>
+      </table>
     </div>
   </div>
-  <div>
+  <div class="panel split-card">
     <div class="section-title">
       <h2>Recent scans</h2>
       {% if role_can(user, 'page_reports') and role_can(user, 'reports_data') %}
       <a href="/reports">Reports</a>
       {% endif %}
     </div>
-    <div class="panel">
-      <div class="table-scroll">
-        <table>
-          <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
-          <tbody data-live-scans>
-            {% include "partials/dashboard_scans.html" %}
-          </tbody>
-        </table>
-      </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Serial</th><th>Action</th><th>Status</th></tr></thead>
+        <tbody data-live-scans>
+          {% include "partials/dashboard_scans.html" %}
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
