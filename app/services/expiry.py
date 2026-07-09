@@ -59,20 +59,29 @@ def expiring_band(days_left: int) -> ExpiryBand:
     return ExpiryBand("Expiring within 90 days", "generated")
 
 
-def stock_serials(db: Session) -> list[Serial]:
+def stock_serials(db: Session, product_id: int | None = None) -> list[Serial]:
+    query = select(Serial).where(Serial.active == True, Serial.status.in_(STOCK_STATUSES))
+    if product_id is not None:
+        query = query.where(Serial.product_id == product_id)
     return db.scalars(
-        select(Serial)
-        .where(Serial.active == True, Serial.status.in_(STOCK_STATUSES))
-        .options(selectinload(Serial.product))
-        .order_by(Serial.expiry_date.is_(None), Serial.expiry_date, Serial.created_at)
+        query.options(selectinload(Serial.product)).order_by(
+            Serial.expiry_date.is_(None),
+            Serial.expiry_date,
+            Serial.created_at,
+        )
     ).all()
 
 
-def expiry_batch_rows(db: Session, horizon_days: int = 90, as_of: date | None = None) -> list[dict[str, object]]:
+def expiry_batch_rows(
+    db: Session,
+    horizon_days: int = 90,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> list[dict[str, object]]:
     as_of = as_of or today()
     deadline = as_of + timedelta(days=horizon_days)
     grouped: dict[tuple[int, str, date, str], dict[str, object]] = {}
-    for serial in stock_serials(db):
+    for serial in stock_serials(db, product_id=product_id):
         if not serial.expiry_date or serial.expiry_date > deadline:
             continue
         key = (
@@ -108,27 +117,39 @@ def expiry_batch_rows(db: Session, horizon_days: int = 90, as_of: date | None = 
     return sorted(rows, key=lambda item: (item["days_left"], item["product_name"], item["batch"]))
 
 
-def sales_velocity_by_product(db: Session, months: int = 3, as_of: date | None = None) -> dict[int, float]:
+def sales_velocity_by_product(
+    db: Session,
+    months: int = 3,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> dict[int, float]:
     as_of = as_of or today()
     start_at = datetime.combine(as_of - timedelta(days=months * 30), datetime.min.time(), tzinfo=timezone.utc)
+    conditions = [
+        InventoryTransaction.transaction_type == TransactionType.SALE.value,
+        InventoryTransaction.status_to == SerialStatus.SOLD.value,
+        InventoryTransaction.product_id.is_not(None),
+        InventoryTransaction.created_at >= start_at,
+    ]
+    if product_id is not None:
+        conditions.append(InventoryTransaction.product_id == product_id)
     rows = db.execute(
         select(InventoryTransaction.product_id, func.count(InventoryTransaction.id))
-        .where(
-            InventoryTransaction.transaction_type == TransactionType.SALE.value,
-            InventoryTransaction.status_to == SerialStatus.SOLD.value,
-            InventoryTransaction.product_id.is_not(None),
-            InventoryTransaction.created_at >= start_at,
-        )
+        .where(*conditions)
         .group_by(InventoryTransaction.product_id)
     ).all()
     return {int(product_id): count / max(months, 1) for product_id, count in rows if product_id is not None}
 
 
-def expiry_risk_rows(db: Session, as_of: date | None = None) -> list[dict[str, object]]:
+def expiry_risk_rows(
+    db: Session,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> list[dict[str, object]]:
     as_of = as_of or today()
-    velocity = sales_velocity_by_product(db, as_of=as_of)
+    velocity = sales_velocity_by_product(db, as_of=as_of, product_id=product_id)
     rows: list[dict[str, object]] = []
-    for row in expiry_batch_rows(db, horizon_days=365, as_of=as_of):
+    for row in expiry_batch_rows(db, horizon_days=365, as_of=as_of, product_id=product_id):
         product: Product = row["product"]  # type: ignore[assignment]
         qty = int(row["qty"])
         days_left = int(row["days_left"])
@@ -164,9 +185,13 @@ def expiry_risk_rows(db: Session, as_of: date | None = None) -> list[dict[str, o
     return sorted(rows, key=lambda item: (item["risk_class"] != "failed", item["days_left"], -int(item["unsold_stock"])))
 
 
-def sleeping_stock_rows(db: Session, as_of: date | None = None) -> list[dict[str, object]]:
+def sleeping_stock_rows(
+    db: Session,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> list[dict[str, object]]:
     as_of = as_of or today()
-    stock_counts = Counter(serial.product_id for serial in stock_serials(db))
+    stock_counts = Counter(serial.product_id for serial in stock_serials(db, product_id=product_id))
     if not stock_counts:
         return []
     last_sale_rows = db.execute(
@@ -223,10 +248,14 @@ def sleeping_stock_rows(db: Session, as_of: date | None = None) -> list[dict[str
     return sorted(rows, key=lambda item: (-int(item["days_since_last_sale"]), item["product_name"]))
 
 
-def warehouse_heatmap_rows(db: Session, as_of: date | None = None) -> list[dict[str, object]]:
+def warehouse_heatmap_rows(
+    db: Session,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> list[dict[str, object]]:
     totals: dict[str, float] = defaultdict(float)
     qty_by_warehouse: dict[str, int] = defaultdict(int)
-    for row in expiry_batch_rows(db, horizon_days=90, as_of=as_of):
+    for row in expiry_batch_rows(db, horizon_days=90, as_of=as_of, product_id=product_id):
         warehouse = str(row["warehouse"])
         totals[warehouse] += float(row["value"])
         qty_by_warehouse[warehouse] += int(row["qty"])
@@ -325,12 +354,15 @@ def add_fefo_serials_to_batch(db: Session, batch: Batch, user: User, product_id:
     return items
 
 
-def fefo_compliance_percent(db: Session) -> int:
-    rows = db.execute(
+def fefo_compliance_percent(db: Session, product_id: int | None = None) -> int:
+    query = (
         select(func.count(BatchItem.id), func.sum(case((BatchItem.fefo_picked == True, 1), else_=0)))
         .join(Batch, BatchItem.batch_id == Batch.id)
         .where(Batch.batch_type.in_(FEFO_BATCH_TYPES), Batch.status != "DRAFT")
-    ).one()
+    )
+    if product_id is not None:
+        query = query.join(Serial, BatchItem.serial_id == Serial.id).where(Serial.product_id == product_id)
+    rows = db.execute(query).one()
     total = rows[0] or 0
     picked = rows[1] or 0
     if not total:
@@ -338,17 +370,24 @@ def fefo_compliance_percent(db: Session) -> int:
     return round((picked / total) * 100)
 
 
-def expiry_loss_avoided_this_month(db: Session, as_of: date | None = None) -> float:
+def expiry_loss_avoided_this_month(
+    db: Session,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> float:
     as_of = as_of or today()
     start_at = datetime.combine(as_of.replace(day=1), datetime.min.time(), tzinfo=timezone.utc)
     deadline = as_of + timedelta(days=90)
+    conditions = [
+        InventoryTransaction.transaction_type == TransactionType.SALE.value,
+        InventoryTransaction.status_to == SerialStatus.SOLD.value,
+        InventoryTransaction.created_at >= start_at,
+    ]
+    if product_id is not None:
+        conditions.append(InventoryTransaction.product_id == product_id)
     transactions = db.scalars(
         select(InventoryTransaction)
-        .where(
-            InventoryTransaction.transaction_type == TransactionType.SALE.value,
-            InventoryTransaction.status_to == SerialStatus.SOLD.value,
-            InventoryTransaction.created_at >= start_at,
-        )
+        .where(*conditions)
         .options(selectinload(InventoryTransaction.serial).selectinload(Serial.product))
     ).all()
     value = 0.0
@@ -359,12 +398,16 @@ def expiry_loss_avoided_this_month(db: Session, as_of: date | None = None) -> fl
     return value
 
 
-def expiry_summary(db: Session, as_of: date | None = None) -> dict[str, object]:
+def expiry_summary(
+    db: Session,
+    as_of: date | None = None,
+    product_id: int | None = None,
+) -> dict[str, object]:
     as_of = as_of or today()
-    critical = expiry_batch_rows(db, as_of=as_of)
-    risk = expiry_risk_rows(db, as_of=as_of)
-    sleeping = sleeping_stock_rows(db, as_of=as_of)
-    warehouse = warehouse_heatmap_rows(db, as_of=as_of)
+    critical = expiry_batch_rows(db, as_of=as_of, product_id=product_id)
+    risk = expiry_risk_rows(db, as_of=as_of, product_id=product_id)
+    sleeping = sleeping_stock_rows(db, as_of=as_of, product_id=product_id)
+    warehouse = warehouse_heatmap_rows(db, as_of=as_of, product_id=product_id)
     expiring_30 = sum(1 for row in critical if int(row["days_left"]) <= 30)
     expiring_60 = sum(1 for row in critical if int(row["days_left"]) <= 60)
     high_risk = [row for row in risk if row["risk"] == "High Expiry Risk"]
@@ -373,7 +416,7 @@ def expiry_summary(db: Session, as_of: date | None = None) -> dict[str, object]:
     batch_count = len(
         {
             (row["product_code"], row["batch"], row["expiry_date"], row["warehouse"])
-            for row in expiry_batch_rows(db, horizon_days=365, as_of=as_of)
+            for row in expiry_batch_rows(db, horizon_days=365, as_of=as_of, product_id=product_id)
         }
     )
     return {
@@ -388,7 +431,7 @@ def expiry_summary(db: Session, as_of: date | None = None) -> dict[str, object]:
             "dead_stock_value": dead_stock_value,
             "slow_stock_value": slow_stock_value,
             "batch_wise_stock": batch_count,
-            "fefo_compliance": fefo_compliance_percent(db),
-            "expiry_loss_avoided": expiry_loss_avoided_this_month(db, as_of=as_of),
+            "fefo_compliance": fefo_compliance_percent(db, product_id=product_id),
+            "expiry_loss_avoided": expiry_loss_avoided_this_month(db, as_of=as_of, product_id=product_id),
         },
     }

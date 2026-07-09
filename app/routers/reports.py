@@ -60,10 +60,12 @@ def export_url(path: str, params: dict[str, str]) -> str:
     return f"{path}?{urlencode(filtered)}" if filtered else path
 
 
-def scan_query(action: str = "", start: str = "", end: str = ""):
+def scan_query(action: str = "", start: str = "", end: str = "", product_id: int | None = None):
     conditions = []
     if action:
         conditions.append(ScanLog.action == action)
+    if product_id is not None:
+        conditions.append(Serial.product_id == product_id)
     start_dt = parse_filter_date(start, "start")
     if start_dt:
         conditions.append(ScanLog.created_at >= start_dt)
@@ -78,14 +80,23 @@ def scan_query(action: str = "", start: str = "", end: str = ""):
         .options(
             selectinload(ScanLog.user),
             selectinload(ScanLog.batch),
+            selectinload(ScanLog.serial),
         )
     )
+    if product_id is not None:
+        query = query.join(Serial, ScanLog.serial_id == Serial.id)
     if conditions:
         query = query.where(and_(*conditions))
     return query
 
 
-def transaction_query(action: str = "", q: str = "", start: str = "", end: str = ""):
+def transaction_query(
+    action: str = "",
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    product_id: int | None = None,
+):
     conditions = []
     if action:
         conditions.append(InventoryTransaction.transaction_type == action)
@@ -100,6 +111,8 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
                 Product.product_name.ilike(like),
             )
         )
+    if product_id is not None:
+        conditions.append(InventoryTransaction.product_id == product_id)
     start_dt = parse_filter_date(start, "start")
     if start_dt:
         conditions.append(InventoryTransaction.created_at >= start_dt)
@@ -124,7 +137,12 @@ def transaction_query(action: str = "", q: str = "", start: str = "", end: str =
     return query
 
 
-def missing_stock_query(q: str = "", start: str = "", end: str = ""):
+def missing_stock_query(
+    q: str = "",
+    start: str = "",
+    end: str = "",
+    product_id: int | None = None,
+):
     conditions = []
     if q:
         like = f"%{q.strip()}%"
@@ -142,6 +160,8 @@ def missing_stock_query(q: str = "", start: str = "", end: str = ""):
     end_dt = parse_filter_date(end, "end")
     if end_dt:
         conditions.append(AuditFinding.created_at < end_dt + timedelta(days=1))
+    if product_id is not None:
+        conditions.append(Serial.product_id == product_id)
     query = current_missing_stock_findings_query().join(Batch, AuditFinding.batch_id == Batch.id)
     if conditions:
         query = query.where(and_(*conditions))
@@ -156,6 +176,7 @@ def reports(
     request: Request,
     action: str = "",
     q: str = "",
+    product_id: int | None = None,
     start: str = "",
     end: str = "",
     audit_start: str = "",
@@ -188,10 +209,12 @@ def reports(
     if end_dt:
         end_dt = end_dt + timedelta(days=1)
     missing_stock_selected = action == MISSING_STOCK_ACTION
-    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end)).all()
-    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, q, start, end)).all()
+    products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
+    selected_product = db.get(Product, product_id) if product_id is not None else None
+    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end, product_id)).all()
+    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, q, start, end, product_id)).all()
     missing_stock = (
-        db.scalars(missing_stock_query(q, start, end)).all()
+        db.scalars(missing_stock_query(q, start, end, product_id)).all()
         if not action or missing_stock_selected
         else []
     )
@@ -217,14 +240,17 @@ def reports(
             "pending": pending,
             "transaction_chart": bar_chart(transaction_counts.items()),
             "scan_status_chart": donut_chart(scan_status_counts.items()),
-            "expiry": expiry_summary(db),
+            "expiry": expiry_summary(db, product_id=product_id),
             "losses": (
-                loss_summary(db, action=action, q=q, start=start_dt, end=end_dt)
+                loss_summary(db, action=action, q=q, start=start_dt, end=end_dt, product_id=product_id)
                 if has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN})
                 else None
             ),
             "action": action,
             "q": q,
+            "product_id": product_id or "",
+            "products": products,
+            "selected_product": selected_product,
             "start": start,
             "end": end,
             "transaction_types": [item.value for item in TransactionType] + [MISSING_STOCK_ACTION],
@@ -235,6 +261,18 @@ def reports(
                 "/reports/audit-reconciliation.xlsx",
                 {"start": start, "end": end},
             ),
+            "missing_stock_export_url": export_url(
+                "/reports/missing-stock.xlsx",
+                {"q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+            ),
+            "transaction_export_url": export_url(
+                "/reports/transactions.xlsx",
+                {"action": action, "q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+            ),
+            "scan_export_url": export_url(
+                "/reports/scans.xlsx",
+                {"action": action, "product_id": str(product_id or ""), "start": start, "end": end},
+            ),
         },
     )
 
@@ -243,13 +281,16 @@ def reports(
 def missing_stock_report(
     request: Request,
     q: str = "",
+    product_id: int | None = None,
     start: str = "",
     end: str = "",
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
     refresh_expired_audit_assignments(db)
-    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
+    selected_product = db.get(Product, product_id) if product_id is not None else None
+    findings = db.scalars(missing_stock_query(q, start, end, product_id)).all()
     return templates.TemplateResponse(
         request,
         "missing_stock_report.html",
@@ -270,6 +311,13 @@ def missing_stock_report(
                 ),
             },
             "q": q,
+            "product_id": product_id or "",
+            "products": products,
+            "selected_product": selected_product,
+            "missing_stock_export_url": export_url(
+                "/reports/missing-stock.xlsx",
+                {"q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+            ),
             "start": start,
             "end": end,
         },
@@ -323,13 +371,14 @@ def audit_reconciliation_excel(
 def scans_excel(
     request: Request,
     action: str = "",
+    product_id: int | None = None,
     start: str = "",
     end: str = "",
     fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
-    scans = db.scalars(scan_query(action, start, end)).all()
+    scans = db.scalars(scan_query(action, start, end, product_id)).all()
     return Response(
         scans_xlsx(scans, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -342,13 +391,14 @@ def transactions_excel(
     request: Request,
     action: str = "",
     q: str = "",
+    product_id: int | None = None,
     start: str = "",
     end: str = "",
     fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
-    transactions = db.scalars(transaction_query(action, q, start, end)).all()
+    transactions = db.scalars(transaction_query(action, q, start, end, product_id)).all()
     return Response(
         transactions_xlsx(transactions, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -360,6 +410,7 @@ def transactions_excel(
 def missing_stock_excel(
     request: Request,
     q: str = "",
+    product_id: int | None = None,
     start: str = "",
     end: str = "",
     fields: str = "",
@@ -367,7 +418,7 @@ def missing_stock_excel(
 ):
     require_permission(request, db, "reports_export")
     refresh_expired_audit_assignments(db)
-    findings = db.scalars(missing_stock_query(q, start, end)).all()
+    findings = db.scalars(missing_stock_query(q, start, end, product_id)).all()
     return Response(
         missing_stock_xlsx(findings, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

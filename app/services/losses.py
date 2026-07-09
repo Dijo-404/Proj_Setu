@@ -42,6 +42,7 @@ def loss_summary(
     q: str = "",
     start: datetime | None = None,
     end: datetime | None = None,
+    product_id: int | None = None,
 ) -> LossSummary:
     loss_reason_codes = {code for code, _ in LOSS_FACTORS} | set(LOSS_REASON_ALIASES)
     conditions = [
@@ -69,6 +70,8 @@ def loss_summary(
                 Product.product_name.ilike(like),
             )
         )
+    if product_id is not None:
+        conditions.append(InventoryTransaction.product_id == product_id)
     if start:
         conditions.append(InventoryTransaction.created_at >= start)
     if end:

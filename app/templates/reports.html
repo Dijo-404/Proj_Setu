@@ -15,17 +15,17 @@
   <div class="actions">
     <a class="button" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Audit reconciliation Excel</a>
     {% if action == 'MISSING' %}
-    <a class="button" href="/reports/missing-stock.xlsx?q={{ q }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
+    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
     {% else %}
-    <a class="button" href="/reports/transactions.xlsx?action={{ action }}&q={{ q }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|q|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
-    <a class="button" href="/reports/scans.xlsx?action={{ action }}&start={{ start }}&end={{ end }}" data-xlsx-export data-xlsx-title="Customize scan export" data-xlsx-parameters="action|start|end" data-xlsx-fields="{{ scan_excel_fields }}">Scans Excel</a>
+    <a class="button" href="{{ transaction_export_url }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|q|product_id|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
+    <a class="button" href="{{ scan_export_url }}" data-xlsx-export data-xlsx-title="Customize scan export" data-xlsx-parameters="action|product_id|start|end" data-xlsx-fields="{{ scan_excel_fields }}">Scans Excel</a>
     {% endif %}
   </div>
   {% endif %}
 </section>
 
 <section class="panel">
-  <form method="get" class="filters">
+  <form method="get" class="filters reports-filters">
     <label>Action
       <select name="action">
         <option value="">All</option>
@@ -34,7 +34,15 @@
         {% endfor %}
       </select>
     </label>
-    <label>Search<input name="q" value="{{ q }}" placeholder="Serial, product, reference"></label>
+    <label>Product
+      <select name="product_id">
+        <option value="">All products</option>
+        {% for product in products %}
+        <option value="{{ product.id }}" {{ 'selected' if product_id == product.id else '' }}>{{ product.product_code }} - {{ product.product_name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Search<input name="q" value="{{ q }}" placeholder="Serial or reference"></label>
     <label>From<input name="start" type="date" value="{{ start }}"></label>
     <label>To<input name="end" type="date" value="{{ end }}"></label>
     <button class="button" type="submit">Apply</button>
@@ -46,7 +54,7 @@
     <div class="chart-head">
       <div>
         <h2>Transaction mix</h2>
-        <p>Current filters</p>
+        <p>{{ selected_product.product_code if selected_product else 'Current filters' }}</p>
       </div>
       <strong>{{ transaction_chart.total }}</strong>
     </div>
@@ -66,7 +74,7 @@
     <div class="chart-head">
       <div>
         <h2>Scan outcomes</h2>
-        <p>Current filters</p>
+        <p>{{ selected_product.product_code if selected_product else 'Current filters' }}</p>
       </div>
     </div>
     <div class="chart-body">

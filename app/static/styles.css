@@ -855,6 +855,44 @@ tfoot th, tfoot td {
   min-width: 96px;
 }
 
+.reports-filters {
+  grid-template-columns:
+    minmax(96px, 0.65fr)
+    minmax(190px, 1.25fr)
+    minmax(150px, 0.9fr)
+    minmax(132px, 0.72fr)
+    minmax(132px, 0.72fr)
+    minmax(86px, 0.45fr);
+  gap: 10px;
+}
+
+.reports-filters input,
+.reports-filters select,
+.reports-filters .button {
+  min-height: 38px;
+}
+
+.reports-filters input,
+.reports-filters select {
+  padding: 8px 11px;
+}
+
+.reports-filters .button {
+  width: 100%;
+  min-width: 0;
+  padding: 8px 12px;
+}
+
+.missing-stock-filters {
+  grid-template-columns:
+    minmax(240px, 1.4fr)
+    minmax(200px, 1.1fr)
+    minmax(130px, 0.7fr)
+    minmax(130px, 0.7fr)
+    auto
+    auto;
+}
+
 .reports-page {
   position: relative;
   isolation: isolate;
@@ -862,22 +900,7 @@ tfoot th, tfoot td {
 
 .reports-page::before {
   content: "";
-  position: fixed;
-  top: 88px;
-  left: max(24px, 8vw);
-  z-index: 0;
-  width: min(620px, 58vw);
-  height: min(900px, 88vh);
-  pointer-events: none;
-  background-image:
-    url("/static/img1.png"),
-    url("/static/img1.jpg"),
-    url("/static/img1.webp"),
-    url("/static/img1");
-  background-repeat: no-repeat;
-  background-position: center top;
-  background-size: contain;
-  opacity: 0.18;
+  display: none;
 }
 
 .reports-page > * {
@@ -890,7 +913,7 @@ tfoot th, tfoot td {
 }
 
 .reports-page .chart-card,
-.reports-page .split > div {
+.reports-page .split:not(.expiry-alert-grid) > div {
   background: rgba(239, 233, 222, 0.82);
 }
 
@@ -1207,6 +1230,33 @@ tfoot th, tfoot td {
 .expiry-metric-grid .metric strong {
   font-size: 24px;
   letter-spacing: 0;
+}
+
+.expiry-alert-grid {
+  align-items: stretch;
+  margin-bottom: 26px;
+}
+
+.expiry-alert-card {
+  min-width: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+}
+
+.expiry-alert-card .section-title {
+  margin-top: 0;
+}
+
+.expiry-alert-card h2 {
+  font-size: 24px;
+}
+
+.expiry-alert-card .table-scroll {
+  max-height: 320px;
+}
+
+.expiry-alert-card table {
+  min-width: 560px;
 }
 
 .director-head {

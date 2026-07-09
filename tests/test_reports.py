@@ -101,6 +101,166 @@ def test_reports_page_renders_scan_and_transaction_rows():
     assert "BATCH-001" in response.text
 
 
+def test_reports_product_dropdown_filters_product_specific_rows_and_exports():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        user = User(id=1, username="admin", password_hash="x", role="admin", active=True)
+        selected = Product(
+            product_code="SEL100",
+            product_name="Selected Masala",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Selected Masala",
+        )
+        other = Product(
+            product_code="OTH200",
+            product_name="Other Pepper",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=120,
+            tally_stock_item_name="Other Pepper",
+        )
+        db.add_all([user, selected, other])
+        db.flush()
+        selected_serial = Serial(
+            serial_number="SEL100-000001",
+            product_id=selected.id,
+            status=SerialStatus.IN_STOCK.value,
+            product_batch_number="SEL-EXP-BATCH",
+            expiry_date=today() + timedelta(days=20),
+        )
+        other_serial = Serial(
+            serial_number="OTH200-000001",
+            product_id=other.id,
+            status=SerialStatus.IN_STOCK.value,
+            product_batch_number="OTH-EXP-BATCH",
+            expiry_date=today() + timedelta(days=20),
+        )
+        db.add_all([selected_serial, other_serial])
+        db.flush()
+        selected_batch = Batch(
+            batch_number="SEL-BATCH-001",
+            batch_type=BatchType.SALE.value,
+            user_id=user.id,
+            status=BatchStatus.SUBMITTED.value,
+        )
+        other_batch = Batch(
+            batch_number="OTH-BATCH-001",
+            batch_type=BatchType.SALE.value,
+            user_id=user.id,
+            status=BatchStatus.SUBMITTED.value,
+        )
+        db.add_all([selected_batch, other_batch])
+        db.flush()
+        db.add_all(
+            [
+                InventoryTransaction(
+                    transaction_type=TransactionType.SALE.value,
+                    product_id=selected.id,
+                    serial_id=selected_serial.id,
+                    batch_id=selected_batch.id,
+                    user_id=user.id,
+                    serial_number=selected_serial.serial_number,
+                    status_from=SerialStatus.IN_STOCK.value,
+                    status_to=SerialStatus.SOLD.value,
+                    reference_number=selected_batch.batch_number,
+                    tally_reference="SEL-TALLY-001",
+                ),
+                InventoryTransaction(
+                    transaction_type=TransactionType.SALE.value,
+                    product_id=other.id,
+                    serial_id=other_serial.id,
+                    batch_id=other_batch.id,
+                    user_id=user.id,
+                    serial_number=other_serial.serial_number,
+                    status_from=SerialStatus.IN_STOCK.value,
+                    status_to=SerialStatus.SOLD.value,
+                    reference_number=other_batch.batch_number,
+                    tally_reference="OTH-TALLY-001",
+                ),
+                ScanLog(
+                    serial_id=selected_serial.id,
+                    serial_number_raw=selected_serial.serial_number,
+                    user_id=user.id,
+                    action=BatchType.SALE.value,
+                    status="SCANNED",
+                ),
+                ScanLog(
+                    serial_id=other_serial.id,
+                    serial_number_raw=other_serial.serial_number,
+                    user_id=user.id,
+                    action=BatchType.SALE.value,
+                    status="SCANNED",
+                ),
+                AuditFinding(
+                    batch_id=selected_batch.id,
+                    serial_id=selected_serial.id,
+                    serial_number=selected_serial.serial_number,
+                    product_code=selected.product_code,
+                    product_name=selected.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
+                AuditFinding(
+                    batch_id=other_batch.id,
+                    serial_id=other_serial.id,
+                    serial_number=other_serial.serial_number,
+                    product_code=other.product_code,
+                    product_name=other.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
+            ]
+        )
+        selected_id = selected.id
+        db.commit()
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False)
+        response = client.get(f"/reports?product_id={selected_id}", cookies={SESSION_COOKIE: create_session_token(1)})
+        export = client.get(
+            f"/reports/transactions.xlsx?product_id={selected_id}",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    assert response.status_code == 200
+    assert f'<option value="{selected_id}" selected>SEL100 - Selected Masala</option>' in response.text
+    assert "SEL100-000001" in response.text
+    assert "SEL-TALLY-001" in response.text
+    assert "SEL-EXP-BATCH" in response.text
+    assert "OTH200-000001" not in response.text
+    assert "OTH-TALLY-001" not in response.text
+    assert "OTH-EXP-BATCH" not in response.text
+    assert "product_id" in response.text
+
+    workbook = load_workbook(BytesIO(export.content))
+    sheet = workbook["Transactions"]
+    rows = list(sheet.iter_rows(values_only=True))
+    assert rows[1][3] == "SEL100-000001"
+    assert all("OTH200-000001" not in row for row in rows if row)
+
+
 def test_reports_page_includes_filterable_missing_stock():
     engine = create_engine(
         "sqlite://",
