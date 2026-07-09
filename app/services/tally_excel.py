@@ -75,6 +75,7 @@ TALLY_ACCOUNTING_VOUCHER_HEADERS = [
     "SGST/UTGST Rate",
     "Taxable Value",
 ]
+TALLY_ACCOUNTING_UNREGISTERED_CONSUMER_HEADER = "img"
 TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS = [
     "Voucher Date",
     "Voucher Type Name",
@@ -186,7 +187,7 @@ def _accounting_voucher_xlsx(
     sheet.title = TALLY_ACCOUNTING_VOUCHER_SHEET
 
     export_rows = _accounting_voucher_rows(batch, settings, overrides or {})
-    headers, rows = select_export_columns(TALLY_ACCOUNTING_VOUCHER_HEADERS, export_rows[1:], fields)
+    headers, rows = select_export_columns(export_rows[0], export_rows[1:], fields)
     for row in [headers, *rows]:
         sheet.append(safe_row(row))
 
@@ -301,9 +302,20 @@ def _accounting_voucher_rows(
         round_off_signed_amount = summary.round_off if is_sale else -summary.round_off
         rows.append(_posting_row(common, round_off_ledger, round_off_signed_amount))
 
-    return [TALLY_ACCOUNTING_VOUCHER_HEADERS] + [
-        [row.get(header, "") for header in TALLY_ACCOUNTING_VOUCHER_HEADERS] for row in rows
-    ]
+    headers = _accounting_voucher_headers(rows)
+    return [headers] + [[row.get(header, "") for header in headers] for row in rows]
+
+
+def _accounting_voucher_headers(rows: list[dict[str, object]]) -> list[str]:
+    headers = list(TALLY_ACCOUNTING_VOUCHER_HEADERS)
+    if any(_has_unregistered_consumer_gst_registration(row) for row in rows):
+        headers.append(TALLY_ACCOUNTING_UNREGISTERED_CONSUMER_HEADER)
+    return headers
+
+
+def _has_unregistered_consumer_gst_registration(row: dict[str, object]) -> bool:
+    registration_type = str(row.get("Buyer/Supplier - GST Registration Type") or "").strip()
+    return registration_type == GstRegistrationType.UNREGISTERED_CONSUMER.value
 
 
 def _ordered_accounting_fields(fields: set[str]) -> list[str]:

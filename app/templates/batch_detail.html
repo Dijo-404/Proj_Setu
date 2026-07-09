@@ -6,7 +6,8 @@
 {% set excel_import_types = tally_excel_import_types|default(['SALE', 'ISSUE', 'PURCHASE_RETURN'], true) %}
 {% set excel_export_types = tally_excel_export_types|default(['PURCHASE', 'RECEIVE', 'SALE', 'SALES_RETURN', 'PURCHASE_RETURN', 'ISSUE'], true) %}
 {% set first_summary_line = summary.lines[0] if summary.lines else none %}
-{% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" %}
+{% set tally_accounting_is_unregistered = batch.party_gst_registration_type == "Unregistered/Consumer" or (batch.batch_type == "SALE" and not batch.party_gst_registration_type) %}
+{% set tally_accounting_excel_fields = "Voucher Date|Voucher Type Name|Voucher Number|Buyer/Supplier - Address|Buyer/Supplier - Pincode|Ledger Name|Ledger Amount|Ledger Amount Dr/Cr|Item Name|Billed Quantity|Item Rate|Item Rate per|Disc%|Item Amount|Change Mode|Buyer/Supplier - GST Registration Type|Buyer/Supplier - GSTIN/UIN|Buyer/Supplier - Place of Supply|HSN/SAC Details|HSN/SAC|GST Rate Details|GST Taxability Type|GST Nature of Transaction|IGST Rate|CGST Rate|SGST/UTGST Rate|Taxable Value" ~ ("|img" if tally_accounting_is_unregistered else "") %}
 {% set tally_summary_excel_fields = "Sl|Description of Goods|Product Code|Tally Stock Item|HSN/SAC|Quantity|Unit|Rate|Discount %|GST %|CGST %|SGST %|IGST %|Taxable Value|CGST Amount|SGST Amount|IGST Amount|Amount excl. GST" %}
 {% set tally_required_fields = tally_accounting_required_fields|default([], true) %}
 {% set tally_deselected_fields = tally_accounting_deselected_fields|default([], true) %}

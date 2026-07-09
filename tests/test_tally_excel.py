@@ -293,7 +293,7 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     voucher_number_col = headers.index("Voucher Number") + 1
 
     assert sheet.title == "Accounting Voucher"
-    assert headers == TALLY_ACCOUNTING_VOUCHER_HEADERS
+    assert headers == [*TALLY_ACCOUNTING_VOUCHER_HEADERS, "img"]
     assert "Description of Goods" not in headers
     assert "HSN Code" not in headers
     assert "GST Rate %" not in headers
@@ -311,6 +311,57 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     assert sheet.cell(3, change_mode_col).value == "Accounting Invoice"
     assert sheet.cell(4, ledger_col).value == "Output CGST @ 2.5%"
     assert sheet.cell(5, ledger_col).value == "Output SGST @ 2.5%"
+
+
+def test_unregistered_purchase_tally_excel_export_appends_img_column(db_session):
+    user = User(username="purchase-img-xlsx", password_hash="x", role="purchase")
+    product = _product("TALLYIMG")
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.PURCHASE,
+        "Farmer Supplier",
+        "",
+        party_gst_registration_type=GstRegistrationType.UNREGISTERED_CONSUMER.value,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    data = batch_tally_xlsx(batch, VALID_TALLY_EXCEL_SETTINGS)
+    sheet = load_workbook(BytesIO(data), data_only=True).active
+    headers = [sheet.cell(1, c).value for c in range(1, sheet.max_column + 1)]
+
+    assert headers[-1] == "img"
+    assert sheet.cell(2, headers.index("Buyer/Supplier - GST Registration Type") + 1).value == "Unregistered/Consumer"
+    assert all(sheet.cell(row, sheet.max_column).value in (None, "") for row in range(2, sheet.max_row + 1))
+
+
+def test_registered_sale_tally_excel_export_does_not_append_img_column(db_session):
+    user = User(username="registered-img-xlsx", password_hash="x", role="sales")
+    product = _product("TALLYNOIMG")
+    db_session.add_all([user, product])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(
+        db_session,
+        user,
+        BatchType.SALE,
+        "Registered Buyer",
+        "",
+        party_state="Karnataka",
+        party_gst_registration_type=GstRegistrationType.REGULAR.value,
+        party_gstin="29ABCDE1234F1Z5",
+        gst_treatment=GstTreatment.INTRA_STATE.value,
+    )
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+
+    data = batch_tally_xlsx(batch, VALID_TALLY_EXCEL_SETTINGS)
+    sheet = load_workbook(BytesIO(data), data_only=True).active
+    headers = [sheet.cell(1, c).value for c in range(1, sheet.max_column + 1)]
+
+    assert headers == TALLY_ACCOUNTING_VOUCHER_HEADERS
 
 
 def test_tally_excel_export_can_include_selected_fields_only(db_session):
