@@ -372,8 +372,7 @@ def test_reports_page_includes_filterable_missing_stock():
             db=db,
         )
         detail_response = missing_stock_report(
-            signed_request("/reports/missing-stock", b"q=MISS100"),
-            q="MISS100",
+            signed_request("/reports/missing-stock"),
             db=db,
         )
         xlsx_response = missing_stock_excel(
@@ -399,6 +398,8 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "Missing stock Excel" in response_text
     assert "data-xlsx-export" in response_text
     assert "Customize missing stock export" in response_text
+    assert "Serial or reference" not in response_text
+    assert 'data-xlsx-parameters="q|product_id|start|end"' not in response_text
 
     assert detail_response.status_code == 200
     assert "<h1>Missing stock report</h1>" in detail_text
@@ -410,6 +411,8 @@ def test_reports_page_includes_filterable_missing_stock():
     assert "MISS100-000002" not in detail_text
     assert 'href="/reports/missing-stock"' in detail_text
     assert ">Overview</a>" in detail_text
+    assert "Serial or audit batch" not in detail_text
+    assert 'data-xlsx-parameters="q|product_id|start|end"' not in detail_text
 
     assert xlsx_response.status_code == 200
     assert xlsx_response.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"

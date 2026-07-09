@@ -175,7 +175,6 @@ def missing_stock_query(
 def reports(
     request: Request,
     action: str = "",
-    q: str = "",
     product_id: int | None = None,
     start: str = "",
     end: str = "",
@@ -212,9 +211,9 @@ def reports(
     products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
     selected_product = db.get(Product, product_id) if product_id is not None else None
     scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end, product_id)).all()
-    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, q, start, end, product_id)).all()
+    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, "", start, end, product_id)).all()
     missing_stock = (
-        db.scalars(missing_stock_query(q, start, end, product_id)).all()
+        db.scalars(missing_stock_query("", start, end, product_id)).all()
         if not action or missing_stock_selected
         else []
     )
@@ -242,12 +241,11 @@ def reports(
             "scan_status_chart": donut_chart(scan_status_counts.items()),
             "expiry": expiry_summary(db, product_id=product_id),
             "losses": (
-                loss_summary(db, action=action, q=q, start=start_dt, end=end_dt, product_id=product_id)
+                loss_summary(db, action=action, q="", start=start_dt, end=end_dt, product_id=product_id)
                 if has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN})
                 else None
             ),
             "action": action,
-            "q": q,
             "product_id": product_id or "",
             "products": products,
             "selected_product": selected_product,
@@ -263,11 +261,11 @@ def reports(
             ),
             "missing_stock_export_url": export_url(
                 "/reports/missing-stock.xlsx",
-                {"q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+                {"product_id": str(product_id or ""), "start": start, "end": end},
             ),
             "transaction_export_url": export_url(
                 "/reports/transactions.xlsx",
-                {"action": action, "q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+                {"action": action, "product_id": str(product_id or ""), "start": start, "end": end},
             ),
             "scan_export_url": export_url(
                 "/reports/scans.xlsx",
@@ -280,7 +278,6 @@ def reports(
 @router.get("/missing-stock")
 def missing_stock_report(
     request: Request,
-    q: str = "",
     product_id: int | None = None,
     start: str = "",
     end: str = "",
@@ -290,7 +287,7 @@ def missing_stock_report(
     refresh_expired_audit_assignments(db)
     products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
     selected_product = db.get(Product, product_id) if product_id is not None else None
-    findings = db.scalars(missing_stock_query(q, start, end, product_id)).all()
+    findings = db.scalars(missing_stock_query("", start, end, product_id)).all()
     return templates.TemplateResponse(
         request,
         "missing_stock_report.html",
@@ -310,13 +307,12 @@ def missing_stock_report(
                     }
                 ),
             },
-            "q": q,
             "product_id": product_id or "",
             "products": products,
             "selected_product": selected_product,
             "missing_stock_export_url": export_url(
                 "/reports/missing-stock.xlsx",
-                {"q": q, "product_id": str(product_id or ""), "start": start, "end": end},
+                {"product_id": str(product_id or ""), "start": start, "end": end},
             ),
             "start": start,
             "end": end,

@@ -10,7 +10,7 @@
   </div>
   {% if role_can(user, 'reports_export') %}
   <div class="actions">
-    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Export Excel</a>
+    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Export Excel</a>
   </div>
   {% endif %}
 </section>
@@ -24,9 +24,6 @@
         <option value="{{ product.id }}" {{ 'selected' if product_id == product.id else '' }}>{{ product.product_code }} - {{ product.product_name }}</option>
         {% endfor %}
       </select>
-    </label>
-    <label>Search
-      <input name="q" value="{{ q }}" placeholder="Serial or audit batch">
     </label>
     <label>From<input name="start" type="date" value="{{ start }}"></label>
     <label>To<input name="end" type="date" value="{{ end }}"></label>

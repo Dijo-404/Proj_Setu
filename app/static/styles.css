@@ -859,7 +859,6 @@ tfoot th, tfoot td {
   grid-template-columns:
     minmax(96px, 0.65fr)
     minmax(190px, 1.25fr)
-    minmax(150px, 0.9fr)
     minmax(132px, 0.72fr)
     minmax(132px, 0.72fr)
     minmax(86px, 0.45fr);
@@ -886,7 +885,6 @@ tfoot th, tfoot td {
 .missing-stock-filters {
   grid-template-columns:
     minmax(240px, 1.4fr)
-    minmax(200px, 1.1fr)
     minmax(130px, 0.7fr)
     minmax(130px, 0.7fr)
     auto

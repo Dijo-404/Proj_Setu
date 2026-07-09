@@ -15,9 +15,9 @@
   <div class="actions">
     <a class="button" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Audit reconciliation Excel</a>
     {% if action == 'MISSING' %}
-    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="q|product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
+    <a class="button" href="{{ missing_stock_export_url }}" data-xlsx-export data-xlsx-title="Customize missing stock export" data-xlsx-parameters="product_id|start|end" data-xlsx-fields="{{ missing_excel_fields }}">Missing stock Excel</a>
     {% else %}
-    <a class="button" href="{{ transaction_export_url }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|q|product_id|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
+    <a class="button" href="{{ transaction_export_url }}" data-xlsx-export data-xlsx-title="Customize transaction export" data-xlsx-parameters="action|product_id|start|end" data-xlsx-fields="{{ transaction_excel_fields }}">Transactions Excel</a>
     <a class="button" href="{{ scan_export_url }}" data-xlsx-export data-xlsx-title="Customize scan export" data-xlsx-parameters="action|product_id|start|end" data-xlsx-fields="{{ scan_excel_fields }}">Scans Excel</a>
     {% endif %}
   </div>
@@ -42,7 +42,6 @@
         {% endfor %}
       </select>
     </label>
-    <label>Search<input name="q" value="{{ q }}" placeholder="Serial or reference"></label>
     <label>From<input name="start" type="date" value="{{ start }}"></label>
     <label>To<input name="end" type="date" value="{{ end }}"></label>
     <button class="button" type="submit">Apply</button>
