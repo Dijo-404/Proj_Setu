@@ -1,11 +1,43 @@
+import asyncio
+from contextlib import suppress
 from datetime import timedelta
+from types import SimpleNamespace
 
 from sqlalchemy import event
 
 from app.models import BatchStatus, BatchType, Product, SerialStatus, Setting, User, utc_now
+from app.services import sync_worker
 from app.services import tally as tally_service
 from app.services.inventory import add_serial_to_batch, apply_batch_statuses, create_batch, generate_serials
 from app.services.tally import TallyResult, sync_batch
+
+
+def test_retry_worker_start_replaces_finished_task(monkeypatch):
+    async def scenario():
+        app = SimpleNamespace(state=SimpleNamespace())
+
+        async def already_done():
+            return None
+
+        finished = asyncio.create_task(already_done())
+        await finished
+        setattr(app.state, sync_worker.WORKER_STATE_KEY, finished)
+
+        async def replacement_loop():
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(sync_worker, "retry_worker_loop", replacement_loop)
+        sync_worker.start_retry_worker(app)
+        replacement = getattr(app.state, sync_worker.WORKER_STATE_KEY)
+
+        assert replacement is not finished
+        assert replacement.done() is False
+
+        replacement.cancel()
+        with suppress(asyncio.CancelledError):
+            await replacement
+
+    asyncio.run(scenario())
 
 
 def test_retry_sync_records_retry_metadata_when_still_queued(db_session):

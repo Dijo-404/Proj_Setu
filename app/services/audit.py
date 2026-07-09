@@ -82,7 +82,7 @@ def create_audit_assignment(
         select(Serial)
         .where(
             Serial.product_id == product.id,
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.status == SerialStatus.IN_STOCK.value,
         )
         .order_by(Serial.serial_number)
@@ -257,10 +257,10 @@ def reconcile_audit_batch(
     db.execute(delete(AuditFinding).where(AuditFinding.batch_id == batch.id))
     scanned = {item.serial_id: item.serial for item in batch.items}
     expected = db.scalars(
-        select(Serial).where(
-            Serial.status == SerialStatus.IN_STOCK.value,
-            Serial.active == True,
-        )
+            select(Serial).where(
+                Serial.status == SerialStatus.IN_STOCK.value,
+                Serial.active.is_(True),
+            )
     ).all()
     expected_ids = {serial.id for serial in expected}
     findings = []
@@ -471,7 +471,7 @@ def current_missing_stock_findings_query():
         .where(
             AuditFinding.finding_type == "MISSING",
             AuditFinding.serial_id.is_not(None),
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.status.in_(STOCK_STATUSES),
             ~newer_for_same_serial,
         )

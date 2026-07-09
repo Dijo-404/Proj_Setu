@@ -3,7 +3,9 @@
   if (!dialog) return;
 
   const form = dialog.querySelector("[data-xlsx-form]");
-  const parameterSection = dialog.querySelector("[data-xlsx-parameter-section]");
+  const parameterSection = dialog.querySelector(
+    "[data-xlsx-parameter-section]",
+  );
   const parameterContainer = dialog.querySelector("[data-xlsx-parameters]");
   const fieldContainer = dialog.querySelector("[data-xlsx-fields]");
   const error = dialog.querySelector("[data-xlsx-error]");
@@ -52,7 +54,7 @@
       (value || "")
         .split("|")
         .map((field) => field.trim())
-        .filter(Boolean)
+        .filter(Boolean),
     );
   }
 
@@ -95,11 +97,15 @@
 
     title.textContent = link.dataset.xlsxTitle || "Customize Excel export";
     parameterContainer.replaceChildren(
-      ...parameterNames.map((name) => makeParameter(name, url.searchParams.get(name) || defaults[name] || ""))
+      ...parameterNames.map((name) =>
+        makeParameter(name, url.searchParams.get(name) || defaults[name] || ""),
+      ),
     );
     parameterSection.hidden = parameterNames.length === 0;
     fieldContainer.replaceChildren(
-      ...fields.map((field, index) => makeField(field, index, deselectedFields, requiredFields))
+      ...fields.map((field, index) =>
+        makeField(field, index, deselectedFields, requiredFields),
+      ),
     );
     error.hidden = true;
     if (dialog.showModal) dialog.showModal();
@@ -108,7 +114,14 @@
 
   document.querySelectorAll("[data-xlsx-export]").forEach((link) => {
     link.addEventListener("click", (event) => {
-      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      )
+        return;
       event.preventDefault();
       openDialog(link);
     });
@@ -120,19 +133,28 @@
   dialog.addEventListener("click", (event) => {
     if (event.target === dialog) dialog.close();
   });
-  dialog.querySelector("[data-xlsx-select-all]").addEventListener("click", () => {
-    fieldContainer.querySelectorAll("input").forEach((input) => { input.checked = true; });
-    error.hidden = true;
-  });
-  dialog.querySelector("[data-xlsx-clear-all]").addEventListener("click", () => {
-    fieldContainer.querySelectorAll("input").forEach((input) => { input.checked = input.disabled; });
-  });
+  dialog
+    .querySelector("[data-xlsx-select-all]")
+    .addEventListener("click", () => {
+      fieldContainer.querySelectorAll("input").forEach((input) => {
+        input.checked = true;
+      });
+      error.hidden = true;
+    });
+  dialog
+    .querySelector("[data-xlsx-clear-all]")
+    .addEventListener("click", () => {
+      fieldContainer.querySelectorAll("input").forEach((input) => {
+        input.checked = input.disabled;
+      });
+    });
 
   form.addEventListener("submit", (event) => {
     event.preventDefault();
     if (!activeLink) return;
-    const selectedFields = Array.from(fieldContainer.querySelectorAll("input:checked"))
-      .map((input) => input.value);
+    const selectedFields = Array.from(
+      fieldContainer.querySelectorAll("input:checked"),
+    ).map((input) => input.value);
     if (!selectedFields.length) {
       error.hidden = false;
       return;

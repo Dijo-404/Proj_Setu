@@ -332,7 +332,7 @@ def _resolve_import_product(
     allow_product_create: bool,
 ) -> Product:
     if line.product_code:
-        product = db.scalar(select(Product).where(Product.product_code == line.product_code, Product.active == True))
+        product = db.scalar(select(Product).where(Product.product_code == line.product_code, Product.active.is_(True)))
         if not product:
             raise InventoryError(f"Row {line.row_number}: product {line.product_code} was not found")
         return product
@@ -371,7 +371,7 @@ def _find_active_product_by_name(db: Session, product_name: str) -> Product | No
     key = _normalize_lookup(product_name)
     if not key:
         return None
-    rows = db.scalars(select(Product).where(Product.active == True)).all()
+    rows = db.scalars(select(Product).where(Product.active.is_(True))).all()
     for product in rows:
         if key in {
             _normalize_lookup(product.product_name),

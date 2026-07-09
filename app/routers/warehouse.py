@@ -70,7 +70,7 @@ def _device_used(request: Request) -> str:
 def _active_locations(db: Session) -> list[StorageLocation]:
     return db.scalars(
         select(StorageLocation)
-        .where(StorageLocation.active == True)
+        .where(StorageLocation.active.is_(True))
         .order_by(
             StorageLocation.warehouse,
             StorageLocation.zone,
@@ -345,7 +345,7 @@ def location_labels(
     if parsed_ids:
         query = query.where(StorageLocation.id.in_(parsed_ids))
     else:
-        query = query.where(StorageLocation.active == True)
+        query = query.where(StorageLocation.active.is_(True))
     locations = db.scalars(
         query.order_by(
             StorageLocation.warehouse,

@@ -67,7 +67,7 @@ def collect_master_requirements(db: Session) -> list[MasterRequirement]:
         if ledgers["igst"]:
             _add(requirements, "Ledger", ledgers["igst"], source, "IGST posting ledger")
 
-    products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
+    products = db.scalars(select(Product).where(Product.active.is_(True)).order_by(Product.product_code)).all()
     for product in products:
         source = f"Product {product.product_code}"
         _add(requirements, "Stock Item", product.tally_stock_item_name, source, product.product_name)

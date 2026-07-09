@@ -1,14 +1,28 @@
 from io import BytesIO
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, func, select
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import app.routers.maintenance as maintenance_router
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Batch, BatchItem, BatchType, Company, LoginAudit, Product, Serial, Setting, User
+from app.models import (
+    Batch,
+    BatchItem,
+    BatchType,
+    Company,
+    LoginAudit,
+    Product,
+    RelocationSerial,
+    Serial,
+    Setting,
+    StockRelocation,
+    StorageLocation,
+    User,
+)
 from app.security import create_session_token, hash_password, verify_password
 
 
@@ -179,6 +193,89 @@ def test_super_admin_database_reset_clears_database_and_preserves_current_super_
     assert tally_enabled.value == "false"
 
 
+def test_database_reset_clears_relocation_history_despite_delete_guards():
+    engine, Session = make_session()
+    root_hash = hash_password("root-pass")
+    with Session() as db:
+        root = User(id=1, username="root", password_hash=root_hash, role="super_admin", active=True)
+        db.add(root)
+        product = seed_product(db)
+        location = StorageLocation(
+            code="MAIN-A-1-1-1-1",
+            warehouse="MAIN",
+            zone="A",
+            section="1",
+            rack="1",
+            shelf="1",
+            bin="1",
+        )
+        db.add(location)
+        db.flush()
+        serial = Serial(serial_number="SER-1", product_id=product.id, location_id=location.id)
+        relocation = StockRelocation(
+            reference_number="MOVE-1",
+            product_id=product.id,
+            quantity=1,
+            previous_location_id=None,
+            new_location_id=location.id,
+            previous_location_snapshot="",
+            new_location_snapshot=location.full_path,
+            user_id=root.id,
+            device_used="test",
+        )
+        db.add_all([serial, relocation])
+        db.flush()
+        db.add(RelocationSerial(relocation_id=relocation.id, serial_id=serial.id))
+        db.commit()
+
+    with engine.begin() as connection:
+        for trigger_name, table_name in {
+            "prevent_relocation_serials_delete": "relocation_serials",
+            "prevent_stock_relocations_delete": "stock_relocations",
+        }.items():
+            connection.execute(
+                text(
+                    f"""
+                    CREATE TRIGGER {trigger_name}
+                    BEFORE DELETE ON {table_name}
+                    BEGIN
+                        SELECT RAISE(ABORT, 'Relocation history is permanent');
+                    END
+                    """
+                )
+            )
+
+    app.dependency_overrides[get_db] = override_db(Session)
+    try:
+        response = TestClient(app, follow_redirects=False).post(
+            "/maintenance/reset",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+            data={"super_admin_password": "root-pass", "confirm_reset": "RESET"},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    with Session() as db:
+        relocation_count = db.scalar(select(func.count(StockRelocation.id)))
+        relocation_serial_count = db.scalar(select(func.count(RelocationSerial.id)))
+        trigger_names = set(
+            db.execute(
+                text(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'trigger' AND name LIKE 'prevent_%_delete'"
+                )
+            ).scalars()
+        )
+    engine.dispose()
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/maintenance?success=database_reset"
+    assert relocation_count == 0
+    assert relocation_serial_count == 0
+    assert "prevent_relocation_serials_delete" in trigger_names
+    assert "prevent_stock_relocations_delete" in trigger_names
+
+
 def test_restore_upload_rejects_invalid_backup_file():
     engine, Session = make_session()
     with Session() as db:
@@ -199,3 +296,27 @@ def test_restore_upload_rejects_invalid_backup_file():
 
     assert response.status_code == 303
     assert response.headers["location"] == "/maintenance?error=restore_failed"
+
+
+def test_download_backup_failure_redirects_to_maintenance(monkeypatch):
+    engine, Session = make_session()
+    with Session() as db:
+        db.add(User(id=1, username="root", password_hash=hash_password("root-pass"), role="super_admin", active=True))
+        db.commit()
+
+    def fail_backup():
+        raise RuntimeError("backup failed")
+
+    monkeypatch.setattr(maintenance_router, "create_sqlite_backup", fail_backup)
+    app.dependency_overrides[get_db] = override_db(Session)
+    try:
+        response = TestClient(app, follow_redirects=False).get(
+            "/maintenance/backup.db",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/maintenance?error=backup_failed"

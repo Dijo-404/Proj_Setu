@@ -9,8 +9,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.auth import require_permission
 from app.database import get_db
-from app.models import AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
-from app.services.audit import current_missing_stock_findings_query, refresh_expired_audit_assignments
+from app.models import AuditAssignment, AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
+from app.services.audit import assignment_progress, current_missing_stock_findings_query, refresh_expired_audit_assignments
 from app.services.charts import bar_chart, donut_chart
 from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
 from app.services.expiry import expiry_summary
@@ -171,6 +171,45 @@ def missing_stock_query(
     )
 
 
+def audit_assignment_rows(
+    db: Session,
+    start: str = "",
+    end: str = "",
+    product_id: int | None = None,
+) -> list[dict[str, object]]:
+    conditions = []
+    if product_id is not None:
+        conditions.append(AuditAssignment.product_id == product_id)
+    start_dt = parse_filter_date(start, "start")
+    if start_dt:
+        conditions.append(AuditAssignment.ends_at >= start_dt)
+    end_dt = parse_filter_date(end, "end")
+    if end_dt:
+        conditions.append(AuditAssignment.starts_at < end_dt + timedelta(days=1))
+    query = (
+        select(AuditAssignment)
+        .order_by(desc(AuditAssignment.ends_at), desc(AuditAssignment.id))
+        .limit(50)
+        .options(
+            selectinload(AuditAssignment.product),
+            selectinload(AuditAssignment.auditor),
+            selectinload(AuditAssignment.expected_items),
+            selectinload(AuditAssignment.batches),
+        )
+    )
+    if conditions:
+        query = query.where(and_(*conditions))
+    assignments = db.scalars(query).all()
+    return [
+        {
+            "assignment": assignment,
+            "progress": assignment_progress(db, assignment),
+            "latest_batch": max(assignment.batches, key=lambda batch: (batch.created_at, batch.id), default=None),
+        }
+        for assignment in assignments
+    ]
+
+
 @router.get("")
 def reports(
     request: Request,
@@ -212,6 +251,7 @@ def reports(
     selected_product = db.get(Product, product_id) if product_id is not None else None
     scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end, product_id)).all()
     transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, "", start, end, product_id)).all()
+    audit_assignments = audit_assignment_rows(db, start, end, product_id)
     missing_stock = (
         db.scalars(missing_stock_query("", start, end, product_id)).all()
         if not action or missing_stock_selected
@@ -235,6 +275,7 @@ def reports(
             "user": user,
             "scans": scans,
             "transactions": transactions,
+            "audit_assignments": audit_assignments,
             "missing_stock": missing_stock,
             "pending": pending,
             "transaction_chart": bar_chart(transaction_counts.items()),

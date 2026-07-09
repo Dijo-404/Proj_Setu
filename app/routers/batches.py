@@ -224,8 +224,8 @@ def fefo_product_options_for_type(db: Session, batch_type: str) -> list[dict[str
         select(Product, available_count.label("available_quantity"))
         .join(Serial, Serial.product_id == Product.id)
         .where(
-            Product.active == True,
-            Serial.active == True,
+            Product.active.is_(True),
+            Serial.active.is_(True),
             Serial.status.in_(statuses),
             ~Serial.id.in_(selected_in_draft_batch),
         )
@@ -259,7 +259,7 @@ def sale_product_options_for_type(db: Session, batch_type: str) -> list[dict[str
     available = (
         select(Serial.product_id, func.count(Serial.id).label("available_quantity"))
         .where(
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.status.in_(statuses),
             ~Serial.id.in_(selected_in_draft_batch),
         )
@@ -269,7 +269,7 @@ def sale_product_options_for_type(db: Session, batch_type: str) -> list[dict[str
     rows = db.execute(
         select(Product, func.coalesce(available.c.available_quantity, 0).label("available_quantity"))
         .outerjoin(available, Product.id == available.c.product_id)
-        .where(Product.active == True)
+        .where(Product.active.is_(True))
         .order_by(Product.product_code)
     ).all()
     return [

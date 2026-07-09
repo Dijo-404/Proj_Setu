@@ -476,7 +476,9 @@ def configured_role_has_access(
 
 
 def landing_path_for(config: dict[str, dict[str, str]], role: Role | str) -> str:
-    can = lambda key: _role_can_open_access_key(config, role, key)
+    def can(key: str) -> bool:
+        return _role_can_open_access_key(config, role, key)
+
     destinations = [
         ("page_dashboard", "dashboard_data", "/"),
         ("page_batches", "batch_list", "/batches"),

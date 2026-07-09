@@ -37,9 +37,12 @@
     }
     if (field.tagName === "SELECT") {
       const savedValue = value == null ? "" : String(value);
-      const hasOption = Array.prototype.some.call(field.options, function (option) {
-        return option.value === savedValue;
-      });
+      const hasOption = Array.prototype.some.call(
+        field.options,
+        function (option) {
+          return option.value === savedValue;
+        },
+      );
       if (hasOption) field.value = savedValue;
       return;
     }
@@ -57,14 +60,34 @@
       const data = new FormData();
       fields(form).forEach(function (field) {
         if (!field.name || field.hasAttribute("data-no-autosave")) return;
-        if ((field.type === "checkbox" || field.type === "radio") && !field.checked) return;
+        if (
+          (field.type === "checkbox" || field.type === "radio") &&
+          !field.checked
+        )
+          return;
         data.append(field.name, field.value);
       });
       setStatus(status, "Saving...", "saving");
-      fetch(url, { method: "POST", body: data, headers: { Accept: "application/json" } })
-        .then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
-        .then(function (p) { setStatus(status, p.ok ? "Saved" : (p.error || "Save failed"), p.ok ? "ok" : "error"); })
-        .catch(function () { setStatus(status, "Save failed", "error"); });
+      fetch(url, {
+        method: "POST",
+        body: data,
+        headers: { Accept: "application/json" },
+      })
+        .then(function (r) {
+          return r.json().catch(function () {
+            return { ok: r.ok };
+          });
+        })
+        .then(function (p) {
+          setStatus(
+            status,
+            p.ok ? "Saved" : p.error || "Save failed",
+            p.ok ? "ok" : "error",
+          );
+        })
+        .catch(function () {
+          setStatus(status, "Save failed", "error");
+        });
     }, DEBOUNCE);
     fields(form).forEach(function (field) {
       if (field.hasAttribute("data-no-autosave")) return;
@@ -76,7 +99,11 @@
   function initDraft(form) {
     const key = form.getAttribute("data-draft");
     let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) { saved = {}; }
+    try {
+      saved = JSON.parse(localStorage.getItem(key) || "{}");
+    } catch (e) {
+      saved = {};
+    }
     Object.keys(saved).forEach(function (name) {
       restoreDraftField(form.elements[name], saved[name]);
     });
@@ -85,7 +112,11 @@
       const draft = {};
       fields(form).forEach(function (field) {
         if (!field.name || field.type === "password") return;
-        if ((field.type === "checkbox" || field.type === "radio") && !field.checked) return;
+        if (
+          (field.type === "checkbox" || field.type === "radio") &&
+          !field.checked
+        )
+          return;
         draft[field.name] = field.value;
       });
       try {
@@ -98,7 +129,9 @@
       field.addEventListener("change", save);
     });
     form.addEventListener("submit", function () {
-      try { localStorage.removeItem(key); } catch (e) {}
+      try {
+        localStorage.removeItem(key);
+      } catch (e) {}
     });
   }
 

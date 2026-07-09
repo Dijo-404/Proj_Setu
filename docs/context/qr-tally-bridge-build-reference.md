@@ -14,11 +14,11 @@ Strip away the scope creep across the three drafts and the real ask is small: a 
 
 The three drafts represent three different ambition levels of the same idea:
 
-| Doc | Scope |
-|---|---|
-| Revised Developer Requirement | True MVP. 4 roles, 3 actions (receive/sell/audit), no returns. |
-| Additional Requirements & Workflow | Adds returns, QR replacement, status state machine, dashboard. |
-| SRS v1.0 | Formalizes everything into 30 sections: Super Admin tier, multi-warehouse-ready architecture, e-way bill / GST billing as future scope. |
+| Doc                                | Scope                                                                                                                                   |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| Revised Developer Requirement      | True MVP. 4 roles, 3 actions (receive/sell/audit), no returns.                                                                          |
+| Additional Requirements & Workflow | Adds returns, QR replacement, status state machine, dashboard.                                                                          |
+| SRS v1.0                           | Formalizes everything into 30 sections: Super Admin tier, multi-warehouse-ready architecture, e-way bill / GST billing as future scope. |
 
 Build against Doc 1's workflow first. Treat Doc 2 and Doc 3 as a backlog, not a spec to build against on day one.
 
@@ -26,13 +26,13 @@ Build against Doc 1's workflow first. Treat Doc 2 and Doc 3 as a backlog, not a 
 
 ## 2. Confirmed facts (client Q&A)
 
-| Question | Answer | Implication |
-|---|---|---|
-| One company or multiple? | Single TallyPrime company | Hardcode the company name in config. No company-switching logic needed in the XML envelope. |
-| Network scope | LAN only, inside the factory | No need for Tailscale, VPN, or public exposure. Solve HTTPS for camera access with a local cert only (see section 8). |
-| Number of sites | Single factory | Drop the Godown/multi-location dimension from the schema for now. Cheap to add later, not worth building speculatively. |
-| Tally edition | Unconfirmed | Check via TallyPrime → F1 (Help) → About. Silver is fine if Tally Prime is only ever opened on the SERVER machine itself. Gold is required only if a second physical PC (e.g. the accountant's desktop) also opens the same company data. |
-| Was the test voucher scripted or typed manually, and what are the exact ledger names in Tally? | Unconfirmed, message sent to friend | Blocking item. Do not start writing the XML converter until this comes back. See section 12. |
+| Question                                                                                       | Answer                              | Implication                                                                                                                                                                                                                               |
+| ---------------------------------------------------------------------------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One company or multiple?                                                                       | Single TallyPrime company           | Hardcode the company name in config. No company-switching logic needed in the XML envelope.                                                                                                                                               |
+| Network scope                                                                                  | LAN only, inside the factory        | No need for Tailscale, VPN, or public exposure. Solve HTTPS for camera access with a local cert only (see section 8).                                                                                                                     |
+| Number of sites                                                                                | Single factory                      | Drop the Godown/multi-location dimension from the schema for now. Cheap to add later, not worth building speculatively.                                                                                                                   |
+| Tally edition                                                                                  | Unconfirmed                         | Check via TallyPrime → F1 (Help) → About. Silver is fine if Tally Prime is only ever opened on the SERVER machine itself. Gold is required only if a second physical PC (e.g. the accountant's desktop) also opens the same company data. |
+| Was the test voucher scripted or typed manually, and what are the exact ledger names in Tally? | Unconfirmed, message sent to friend | Blocking item. Do not start writing the XML converter until this comes back. See section 12.                                                                                                                                              |
 
 ---
 
@@ -83,7 +83,7 @@ No official REST API exists. The real mechanism:
 
 1. In TallyPrime: **F1 (Help) → Settings → Connectivity → Client/Server configuration** → set "Act as: Server" → port **9000** (default; some builds expose the same toggle under F12 → Data Synchronization).
 2. The backend POSTs an XML `ENVELOPE` (`HEADER` + `BODY` + `IMPORTDATA`) to `http://<tally-host>:9000`. Tally replies with an XML response containing created/altered counts and per-line errors.
-3. **Hard prerequisite:** every Ledger, Stock Item, Unit, and GST/HSN reference in the XML must already exist in Tally with an *exact* name match (case, spacing) before import. Tally does not auto-create masters from a voucher post. This is the actual failure mode to expect in practice, not network issues.
+3. **Hard prerequisite:** every Ledger, Stock Item, Unit, and GST/HSN reference in the XML must already exist in Tally with an _exact_ name match (case, spacing) before import. Tally does not auto-create masters from a voucher post. This is the actual failure mode to expect in practice, not network issues.
 4. Confirm company F11 features: `Maintain Inventory: Yes` and `Integrate Accounts with Inventory: Yes`. If either is off, "stock movement" silently degrades to accounting-only entries with no inventory effect.
 5. Parse the XML response on every push. Capture the Tally voucher number/ID back into the local `transactions` table (the original drafts call this field "Tally Reference") so failures are traceable and a retry doesn't double-post.
 
@@ -100,23 +100,23 @@ No official REST API exists. The real mechanism:
 
 ## 6. Recommended tech stack
 
-| Layer | Choice | Why |
-|---|---|---|
-| Backend | FastAPI + Uvicorn | Already the right call in the drafts. Async-friendly, good for a thin transaction-capture layer. |
-| ORM | SQLModel or SQLAlchemy | Makes SQLite → Postgres/MySQL later a connection-string change, not a rewrite. |
-| Database | SQLite, WAL mode | 10 concurrent users and 100k+ rows is comfortably inside SQLite's range. No need for Postgres at this scale. |
-| Auth | PyJWT + passlib[bcrypt] | 5 fixed roles. A JWT + role-check dependency is the entire auth layer needed. Skip a full framework. |
-| QR scanning (client) | Native `BarcodeDetector` API (Shape Detection API) | Browser support is already locked to Chrome/Edge on Android plus Chrome desktop, so the native API works directly with no dependency. Falls back to `html5-qrcode` only if Safari/iOS support is ever needed. |
-| QR generation (server) | `qrcode` + Pillow | Standard, lightweight. |
-| Label PDFs | `reportlab` | For the bulk QR label sheet export. |
-| Frontend | Jinja2 templates + vanilla JS, or htmx | The UI is a login screen, a big scan button, and a confirm screen. A React build pipeline is the most likely way this timeline balloons for no real benefit. |
-| PWA | `manifest.json` + thin service worker | Static-asset caching and "Add to Home Screen" only. Don't attempt offline transaction queuing client-side, the drafts already place retry logic server-side. |
-| XML building | `lxml` | Easier to debug malformed envelopes than stdlib ElementTree. |
-| Tally HTTP client | `requests`/`httpx` with a timeout + retry wrapper | Catch `ConnectionRefusedError` explicitly and surface "Tally Connection Failed" per the original spec. |
-| Background retry | APScheduler | Polls `status = PENDING_SYNC` rows every N minutes. No need for Celery/Redis at this scale. |
-| Excel/CSV export | `openpyxl` | Matches the column shape already proven against this client's Tally setup. |
-| Reverse proxy / TLS | Caddy or nginx + mkcert | See section 8. |
-| Deployment | Windows Service via NSSM | See section 9. |
+| Layer                  | Choice                                             | Why                                                                                                                                                                                                           |
+| ---------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Backend                | FastAPI + Uvicorn                                  | Already the right call in the drafts. Async-friendly, good for a thin transaction-capture layer.                                                                                                              |
+| ORM                    | SQLModel or SQLAlchemy                             | Makes SQLite → Postgres/MySQL later a connection-string change, not a rewrite.                                                                                                                                |
+| Database               | SQLite, WAL mode                                   | 10 concurrent users and 100k+ rows is comfortably inside SQLite's range. No need for Postgres at this scale.                                                                                                  |
+| Auth                   | PyJWT + passlib[bcrypt]                            | 5 fixed roles. A JWT + role-check dependency is the entire auth layer needed. Skip a full framework.                                                                                                          |
+| QR scanning (client)   | Native `BarcodeDetector` API (Shape Detection API) | Browser support is already locked to Chrome/Edge on Android plus Chrome desktop, so the native API works directly with no dependency. Falls back to `html5-qrcode` only if Safari/iOS support is ever needed. |
+| QR generation (server) | `qrcode` + Pillow                                  | Standard, lightweight.                                                                                                                                                                                        |
+| Label PDFs             | `reportlab`                                        | For the bulk QR label sheet export.                                                                                                                                                                           |
+| Frontend               | Jinja2 templates + vanilla JS, or htmx             | The UI is a login screen, a big scan button, and a confirm screen. A React build pipeline is the most likely way this timeline balloons for no real benefit.                                                  |
+| PWA                    | `manifest.json` + thin service worker              | Static-asset caching and "Add to Home Screen" only. Don't attempt offline transaction queuing client-side, the drafts already place retry logic server-side.                                                  |
+| XML building           | `lxml`                                             | Easier to debug malformed envelopes than stdlib ElementTree.                                                                                                                                                  |
+| Tally HTTP client      | `requests`/`httpx` with a timeout + retry wrapper  | Catch `ConnectionRefusedError` explicitly and surface "Tally Connection Failed" per the original spec.                                                                                                        |
+| Background retry       | APScheduler                                        | Polls `status = PENDING_SYNC` rows every N minutes. No need for Celery/Redis at this scale.                                                                                                                   |
+| Excel/CSV export       | `openpyxl`                                         | Matches the column shape already proven against this client's Tally setup.                                                                                                                                    |
+| Reverse proxy / TLS    | Caddy or nginx + mkcert                            | See section 8.                                                                                                                                                                                                |
+| Deployment             | Windows Service via NSSM                           | See section 9.                                                                                                                                                                                                |
 
 ---
 

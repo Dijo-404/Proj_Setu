@@ -41,13 +41,19 @@
     try {
       const response = await fetch(button.dataset.printUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
         body: JSON.stringify({ ids }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
         button.textContent = "Print unavailable";
-        setStatus(payload.error || "Print option is unavailable for these labels.", true);
+        setStatus(
+          payload.error || "Print option is unavailable for these labels.",
+          true,
+        );
         return;
       }
       button.textContent = "Print used";
@@ -56,7 +62,10 @@
     } catch (error) {
       button.disabled = false;
       button.textContent = originalText;
-      setStatus("Could not start print. Check the connection and try again.", true);
+      setStatus(
+        "Could not start print. Check the connection and try again.",
+        true,
+      );
     }
   });
 })();

@@ -92,7 +92,7 @@ def create_location(
 def find_location_by_code(db: Session, code: str, *, active_only: bool = True) -> StorageLocation | None:
     query = select(StorageLocation).where(StorageLocation.code == _clean(code))
     if active_only:
-        query = query.where(StorageLocation.active == True)
+        query = query.where(StorageLocation.active.is_(True))
     return db.scalar(query)
 
 
@@ -110,7 +110,7 @@ def search_stock(db: Session, query_text: str, limit: int = 80) -> list[dict[str
         select(Serial)
         .join(Product)
         .where(
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.status.in_(MOVABLE_STATUSES),
             func.upper(Serial.serial_number) == query_text.upper(),
         )
@@ -162,7 +162,7 @@ def search_stock(db: Session, query_text: str, limit: int = 80) -> list[dict[str
         )
         .select_from(Serial)
         .join(Product)
-        .where(Serial.active == True, Serial.status.in_(MOVABLE_STATUSES), or_(*filters))
+        .where(Serial.active.is_(True), Serial.status.in_(MOVABLE_STATUSES), or_(*filters))
         .group_by(
             Product.id,
             Product.product_code,
@@ -213,7 +213,7 @@ def search_stock(db: Session, query_text: str, limit: int = 80) -> list[dict[str
 
 def _candidate_query(item: MoveItem):
     query = select(Serial).where(
-        Serial.active == True,
+        Serial.active.is_(True),
         Serial.status.in_(MOVABLE_STATUSES),
         Serial.product_id == item.product_id,
     )
@@ -301,7 +301,7 @@ def relocate_stock(
                 update(Serial)
                 .where(
                     Serial.id.in_(serial_ids),
-                    Serial.active == True,
+                    Serial.active.is_(True),
                     Serial.status.in_(MOVABLE_STATUSES),
                     Serial.location_id == item.source_location_id
                     if item.source_location_id is not None
@@ -370,7 +370,7 @@ def warehouse_map_rows(db: Session) -> list[dict[str, object]]:
         db.execute(
             select(Serial.location_id, func.count(Serial.id))
             .where(
-                Serial.active == True,
+                Serial.active.is_(True),
                 Serial.status.in_(MOVABLE_STATUSES),
                 Serial.location_id.is_not(None),
             )

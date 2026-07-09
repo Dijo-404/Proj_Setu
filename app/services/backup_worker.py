@@ -40,9 +40,11 @@ async def backup_worker_loop() -> None:
 
 
 def start_backup_worker(app: FastAPI) -> None:
-    if getattr(app.state, WORKER_STATE_KEY, None):
+    task = getattr(app.state, WORKER_STATE_KEY, None)
+    if task and not task.done():
         return
     if not getattr(get_settings(), "automatic_backups_enabled", True):
+        setattr(app.state, WORKER_STATE_KEY, None)
         return
     setattr(app.state, WORKER_STATE_KEY, asyncio.create_task(backup_worker_loop()))
 

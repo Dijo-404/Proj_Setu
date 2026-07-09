@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -22,6 +23,7 @@ from app.services.backup import (
 )
 from app.services.backup_worker import start_backup_worker, stop_backup_worker
 from app.services.database_reset import reset_database_and_cache
+from app.services.sync_worker import start_retry_worker, stop_retry_worker
 from app.templates import templates
 
 router = APIRouter(prefix="/maintenance")
@@ -40,6 +42,8 @@ def maintenance_page(request: Request, error: str = "", success: str = "", db: S
         "restore_file_required": "Choose a backup file to import.",
         "restore_too_large": "Backup file is too large to import from the browser.",
         "restore_failed": "Backup import failed. Choose a verified Setuora backup file.",
+        "backup_failed": "Backup could not be created. Check the database file and try again.",
+        "reset_failed": "Database reset failed. No data was cleared. Check the server logs and try again.",
     }.get(error, error)
     success_message = {
         "database_reset": "Database and cache reset completed.",
@@ -91,7 +95,11 @@ async def save_backup_settings(
 @router.get("/backup.db")
 def download_backup(request: Request, db: Session = Depends(get_db)):
     require_permission(request, db, "backup_download")
-    backup = create_sqlite_backup()
+    try:
+        backup = create_sqlite_backup()
+    except Exception:
+        logger.exception("Backup download failed")
+        return RedirectResponse("/maintenance?error=backup_failed", status_code=303)
     return Response(
         backup.data,
         media_type="application/octet-stream",
@@ -100,7 +108,7 @@ def download_backup(request: Request, db: Session = Depends(get_db)):
 
 
 @router.post("/restore-existing")
-def restore_existing_backup(
+async def restore_existing_backup(
     request: Request,
     selected_backup: str = Form(...),
     super_admin_password: str = Form(...),
@@ -114,11 +122,11 @@ def restore_existing_backup(
         backup_path = backup_choice_path(selected_backup)
     except RuntimeError:
         return RedirectResponse("/maintenance?error=restore_failed", status_code=303)
-    return _restore_from_path(request, db, backup_path)
+    return await _restore_from_path(request, db, backup_path)
 
 
 @router.post("/restore-upload")
-def restore_uploaded_backup(
+async def restore_uploaded_backup(
     request: Request,
     upload: UploadFile = File(...),
     super_admin_password: str = Form(...),
@@ -137,11 +145,11 @@ def restore_uploaded_backup(
     with TemporaryDirectory() as temp_dir:
         temp_path = Path(temp_dir) / "uploaded-setuora-backup.db"
         temp_path.write_bytes(data)
-        return _restore_from_path(request, db, temp_path)
+        return await _restore_from_path(request, db, temp_path)
 
 
 @router.post("/reset")
-def reset_database(
+async def reset_database(
     request: Request,
     super_admin_password: str = Form(...),
     confirm_reset: str = Form(...),
@@ -162,7 +170,14 @@ def reset_database(
         db.commit()
         return RedirectResponse("/maintenance?error=bad_password", status_code=303)
 
-    reset_database_and_cache(db, user.id)
+    await _stop_maintenance_workers(request)
+    try:
+        reset_database_and_cache(db, user.id)
+    except Exception:
+        logger.exception("Database reset failed")
+        return RedirectResponse("/maintenance?error=reset_failed", status_code=303)
+    finally:
+        _start_maintenance_workers(request)
     return RedirectResponse("/maintenance?success=database_reset", status_code=303)
 
 
@@ -184,13 +199,16 @@ def _require_restore_authorization(request: Request, db: Session, password: str,
     return user
 
 
-def _restore_from_path(request: Request, db: Session, backup_path: Path):
+async def _restore_from_path(request: Request, db: Session, backup_path: Path):
     db.close()
+    await _stop_maintenance_workers(request)
     try:
-        restore_sqlite_backup_file(backup_path)
+        await asyncio.to_thread(restore_sqlite_backup_file, backup_path)
     except Exception:
         logger.exception("Backup import failed")
         return RedirectResponse("/maintenance?error=restore_failed", status_code=303)
+    finally:
+        _start_maintenance_workers(request)
 
     request.state.session_user_id = None
     settings = get_settings()
@@ -203,3 +221,13 @@ def _restore_from_path(request: Request, db: Session, backup_path: Path):
         secure=settings.cookie_secure,
     )
     return response
+
+
+async def _stop_maintenance_workers(request: Request) -> None:
+    await stop_retry_worker(request.app)
+    await stop_backup_worker(request.app)
+
+
+def _start_maintenance_workers(request: Request) -> None:
+    start_retry_worker(request.app)
+    start_backup_worker(request.app)

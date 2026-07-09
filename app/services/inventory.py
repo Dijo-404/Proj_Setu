@@ -369,7 +369,7 @@ def apply_batch_statuses(db: Session, batch: Batch, user: User) -> None:
         if batch_type != BatchType.AUDIT:
             claimed = db.execute(
                 update(Serial)
-                .where(Serial.id == item.serial.id, Serial.status == previous_status, Serial.active == True)
+                .where(Serial.id == item.serial.id, Serial.status == previous_status, Serial.active.is_(True))
                 .values(status=target_status)
                 .execution_options(synchronize_session=False)
             ).rowcount

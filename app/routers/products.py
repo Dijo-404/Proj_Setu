@@ -408,5 +408,5 @@ def generate_product_serials(
             initial_status=parsed_status,
         )
     except (InventoryError, ValueError):
-        return RedirectResponse(f"/products?error=serial_generation_failed", status_code=303)
+        return RedirectResponse("/products?error=serial_generation_failed", status_code=303)
     return RedirectResponse(f"/barcode-assignment/{batch.id}", status_code=303)

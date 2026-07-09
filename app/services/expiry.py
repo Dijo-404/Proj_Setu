@@ -60,7 +60,7 @@ def expiring_band(days_left: int) -> ExpiryBand:
 
 
 def stock_serials(db: Session, product_id: int | None = None) -> list[Serial]:
-    query = select(Serial).where(Serial.active == True, Serial.status.in_(STOCK_STATUSES))
+    query = select(Serial).where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
     if product_id is not None:
         query = query.where(Serial.product_id == product_id)
     return db.scalars(
@@ -286,7 +286,7 @@ def fefo_candidate_serials(
     query = (
         select(Serial)
         .where(
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.product_id == product_id,
             Serial.status.in_(available_statuses),
         )
@@ -356,7 +356,7 @@ def add_fefo_serials_to_batch(db: Session, batch: Batch, user: User, product_id:
 
 def fefo_compliance_percent(db: Session, product_id: int | None = None) -> int:
     query = (
-        select(func.count(BatchItem.id), func.sum(case((BatchItem.fefo_picked == True, 1), else_=0)))
+        select(func.count(BatchItem.id), func.sum(case((BatchItem.fefo_picked.is_(True), 1), else_=0)))
         .join(Batch, BatchItem.batch_id == Batch.id)
         .where(Batch.batch_type.in_(FEFO_BATCH_TYPES), Batch.status != "DRAFT")
     )

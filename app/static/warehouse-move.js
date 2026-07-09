@@ -1,15 +1,24 @@
 const workflow = document.querySelector(".warehouse-workflow");
 const locationRows = JSON.parse(workflow?.dataset.locations || "[]");
 const locations = locationRows.map((row) => ({
-  id: row[0], code: row[1], warehouse: row[2], zone: row[3],
-  section: row[4], rack: row[5], shelf: row[6], bin: row[7], path: row[8],
+  id: row[0],
+  code: row[1],
+  warehouse: row[2],
+  zone: row[3],
+  section: row[4],
+  rack: row[5],
+  shelf: row[6],
+  bin: row[7],
+  path: row[8],
 }));
 
 const levels = ["warehouse", "zone", "section", "rack", "shelf", "bin"];
-const selectors = Object.fromEntries(levels.map((level) => [
-  level,
-  document.querySelector(`[data-location-level="${level}"]`),
-]));
+const selectors = Object.fromEntries(
+  levels.map((level) => [
+    level,
+    document.querySelector(`[data-location-level="${level}"]`),
+  ]),
+);
 const basket = new Map();
 const moveItemsBody = document.getElementById("move-items");
 const resultBox = document.getElementById("search-results");
@@ -61,7 +70,8 @@ function renderSearchResults(results) {
   wrap.className = "table-scroll";
   const table = document.createElement("table");
   const head = document.createElement("thead");
-  head.innerHTML = "<tr><th>Product</th><th>Batch</th><th>Expiry</th><th>Current location</th><th>Available</th><th></th></tr>";
+  head.innerHTML =
+    "<tr><th>Product</th><th>Batch</th><th>Expiry</th><th>Current location</th><th>Available</th><th></th></tr>";
   const body = document.createElement("tbody");
   results.forEach((item) => {
     const row = document.createElement("tr");
@@ -81,7 +91,11 @@ function renderSearchResults(results) {
     button.textContent = basket.has(itemKey(item)) ? "Added" : "Add";
     button.disabled = basket.has(itemKey(item));
     button.addEventListener("click", () => {
-      basket.set(itemKey(item), { ...item, move_quantity: item.quantity, move_all: true });
+      basket.set(itemKey(item), {
+        ...item,
+        move_quantity: item.quantity,
+        move_all: true,
+      });
       renderBasket();
       button.textContent = "Added";
       button.disabled = true;
@@ -113,7 +127,12 @@ function renderBasket() {
     const sub = document.createElement("small");
     sub.textContent = item.serial_number || item.product_code;
     product.append(sub);
-    row.append(product, cell(item.batch_number || "No batch"), cell(item.source_location), cell(String(item.quantity)));
+    row.append(
+      product,
+      cell(item.batch_number || "No batch"),
+      cell(item.source_location),
+      cell(String(item.quantity)),
+    );
 
     const quantityCell = document.createElement("td");
     const controls = document.createElement("div");
@@ -124,9 +143,15 @@ function renderBasket() {
     input.max = String(item.quantity);
     input.value = String(item.move_quantity);
     input.disabled = item.move_all;
-    input.setAttribute("aria-label", `Quantity of ${item.product_name} to move`);
+    input.setAttribute(
+      "aria-label",
+      `Quantity of ${item.product_name} to move`,
+    );
     input.addEventListener("input", () => {
-      item.move_quantity = Math.max(1, Math.min(item.quantity, Number(input.value) || 1));
+      item.move_quantity = Math.max(
+        1,
+        Math.min(item.quantity, Number(input.value) || 1),
+      );
       updateConfirmation();
     });
     const allLabel = document.createElement("label");
@@ -164,30 +189,37 @@ function renderBasket() {
   updateConfirmation();
 }
 
-document.getElementById("stock-search-form")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  clearAlert();
-  const query = searchInput.value.trim();
-  if (!query) return;
-  resultBox.innerHTML = '<p class="empty">Searching...</p>';
-  try {
-    const response = await fetch(`/warehouse/api/search?q=${encodeURIComponent(query)}`, {
-      headers: { Accept: "application/json" },
-    });
-    const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "Search failed");
-    renderSearchResults(payload.results);
-    if (payload.results.length === 1 && payload.results[0].serial_id) {
-      const item = payload.results[0];
-      const key = itemKey(item);
-      if (!basket.has(key)) basket.set(key, { ...item, move_quantity: 1, move_all: true });
-      renderBasket();
+document
+  .getElementById("stock-search-form")
+  ?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    clearAlert();
+    const query = searchInput.value.trim();
+    if (!query) return;
+    resultBox.innerHTML = '<p class="empty">Searching...</p>';
+    try {
+      const response = await fetch(
+        `/warehouse/api/search?q=${encodeURIComponent(query)}`,
+        {
+          headers: { Accept: "application/json" },
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok || !payload.ok)
+        throw new Error(payload.error || "Search failed");
+      renderSearchResults(payload.results);
+      if (payload.results.length === 1 && payload.results[0].serial_id) {
+        const item = payload.results[0];
+        const key = itemKey(item);
+        if (!basket.has(key))
+          basket.set(key, { ...item, move_quantity: 1, move_all: true });
+        renderBasket();
+      }
+    } catch (error) {
+      resultBox.replaceChildren();
+      showAlert(error.message || "Could not search stock");
     }
-  } catch (error) {
-    resultBox.replaceChildren();
-    showAlert(error.message || "Could not search stock");
-  }
-});
+  });
 
 function selectedFilters(untilIndex) {
   const values = {};
@@ -198,14 +230,18 @@ function selectedFilters(untilIndex) {
 }
 
 function matchingLocations(filters) {
-  return locations.filter((location) => Object.entries(filters).every(([key, value]) => location[key] === value));
+  return locations.filter((location) =>
+    Object.entries(filters).every(([key, value]) => location[key] === value),
+  );
 }
 
 function fillLevel(index) {
   const level = levels[index];
   const select = selectors[level];
   const filters = selectedFilters(index);
-  const options = [...new Set(matchingLocations(filters).map((location) => location[level]))].sort();
+  const options = [
+    ...new Set(matchingLocations(filters).map((location) => location[level])),
+  ].sort();
   select.replaceChildren(new Option(`Select ${level}`, ""));
   options.forEach((value) => select.add(new Option(value, value)));
   select.disabled = !options.length;
@@ -256,11 +292,15 @@ async function useDestinationCode() {
   const code = document.getElementById("destination-code").value.trim();
   if (!code) return;
   try {
-    const response = await fetch(`/warehouse/api/location?q=${encodeURIComponent(code)}`, {
-      headers: { Accept: "application/json" },
-    });
+    const response = await fetch(
+      `/warehouse/api/location?q=${encodeURIComponent(code)}`,
+      {
+        headers: { Accept: "application/json" },
+      },
+    );
     const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "Location not found");
+    if (!response.ok || !payload.ok)
+      throw new Error(payload.error || "Location not found");
     selectDestination(payload.location);
   } catch (error) {
     destinationId.value = "";
@@ -269,16 +309,23 @@ async function useDestinationCode() {
     showAlert(error.message || "Location code is invalid or inactive");
   }
 }
-document.getElementById("destination-lookup")?.addEventListener("click", useDestinationCode);
-document.getElementById("destination-code")?.addEventListener("keydown", (event) => {
-  if (event.key === "Enter") {
-    event.preventDefault();
-    useDestinationCode();
-  }
-});
+document
+  .getElementById("destination-lookup")
+  ?.addEventListener("click", useDestinationCode);
+document
+  .getElementById("destination-code")
+  ?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      useDestinationCode();
+    }
+  });
 
 function updateConfirmation() {
-  const quantity = [...basket.values()].reduce((total, item) => total + Number(item.move_quantity || 0), 0);
+  const quantity = [...basket.values()].reduce(
+    (total, item) => total + Number(item.move_quantity || 0),
+    0,
+  );
   const ready = quantity > 0 && Boolean(destinationId.value);
   confirmButton.disabled = !ready;
   moveSummary.textContent = ready
@@ -301,7 +348,10 @@ confirmButton?.addEventListener("click", async () => {
   try {
     const response = await fetch("/warehouse/relocate", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
       body: JSON.stringify({
         destination_id: Number(destinationId.value),
         reason: document.getElementById("move-reason").value,
@@ -309,13 +359,18 @@ confirmButton?.addEventListener("click", async () => {
       }),
     });
     const payload = await response.json();
-    if (!response.ok || !payload.ok) throw new Error(payload.error || "Relocation failed");
+    if (!response.ok || !payload.ok)
+      throw new Error(payload.error || "Relocation failed");
     basket.clear();
     renderBasket();
-    resultBox.innerHTML = '<p class="empty">Move complete. Search or scan the next product.</p>';
+    resultBox.innerHTML =
+      '<p class="empty">Move complete. Search or scan the next product.</p>';
     searchInput.value = "";
     document.getElementById("move-reason").value = "";
-    showAlert(`${payload.message}. ${payload.references.join(", ")}`, "success");
+    showAlert(
+      `${payload.message}. ${payload.references.join(", ")}`,
+      "success",
+    );
   } catch (error) {
     showAlert(error.message || "The relocation could not be completed");
   } finally {
@@ -334,7 +389,8 @@ let scannerActive = false;
 
 async function stopScanner() {
   scannerActive = false;
-  if (scannerReader && typeof scannerReader.reset === "function") scannerReader.reset();
+  if (scannerReader && typeof scannerReader.reset === "function")
+    scannerReader.reset();
   scannerReader = null;
   if (scanStream) scanStream.getTracks().forEach((track) => track.stop());
   scanStream = null;
@@ -364,7 +420,9 @@ async function startNativeScanner() {
   await scannerVideo.play();
   const formats = await BarcodeDetector.getSupportedFormats();
   const detector = new BarcodeDetector({
-    formats: formats.filter((format) => ["qr_code", "code_128", "ean_13"].includes(format)),
+    formats: formats.filter((format) =>
+      ["qr_code", "code_128", "ean_13"].includes(format),
+    ),
   });
   const detect = async () => {
     if (!scannerActive) return;
@@ -380,10 +438,14 @@ async function startNativeScanner() {
 }
 
 async function startZxingScanner() {
-  if (!window.ZXing?.BrowserMultiFormatReader) throw new Error("Camera scanning is not supported in this browser");
+  if (!window.ZXing?.BrowserMultiFormatReader)
+    throw new Error("Camera scanning is not supported in this browser");
   scannerReader = new window.ZXing.BrowserMultiFormatReader();
   scannerReader.decodeFromVideoDevice(undefined, scannerVideo, (result) => {
-    if (result) handleScan(typeof result.getText === "function" ? result.getText() : result.text);
+    if (result)
+      handleScan(
+        typeof result.getText === "function" ? result.getText() : result.text,
+      );
   });
 }
 
@@ -393,7 +455,9 @@ async function openScanner(target) {
   scannerDialog.showModal();
   scannerStatus.textContent = "Starting camera...";
   document.getElementById("warehouse-scanner-help").textContent =
-    target === "destination" ? "Scan the destination location QR code." : "Scan a product QR code or barcode.";
+    target === "destination"
+      ? "Scan the destination location QR code."
+      : "Scan a product QR code or barcode.";
   try {
     if ("BarcodeDetector" in window) await startNativeScanner();
     else await startZxingScanner();
@@ -405,12 +469,16 @@ async function openScanner(target) {
 }
 
 document.querySelectorAll("[data-open-scanner]").forEach((button) => {
-  button.addEventListener("click", () => openScanner(button.dataset.openScanner));
+  button.addEventListener("click", () =>
+    openScanner(button.dataset.openScanner),
+  );
 });
-document.getElementById("warehouse-scanner-close")?.addEventListener("click", async () => {
-  await stopScanner();
-  scannerDialog.close();
-});
+document
+  .getElementById("warehouse-scanner-close")
+  ?.addEventListener("click", async () => {
+    await stopScanner();
+    scannerDialog.close();
+  });
 scannerDialog?.addEventListener("close", stopScanner);
 
 renderBasket();

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import suppress
 from datetime import timedelta
+import logging
 
 from fastapi import FastAPI
 from sqlalchemy import or_, select
@@ -15,6 +16,7 @@ from app.services.tally import SYNC_LEASE_MINUTES, TALLY_XML_SUPPORTED_BATCH_TYP
 
 
 WORKER_STATE_KEY = "setuora_retry_worker_task"
+logger = logging.getLogger("setuora")
 
 
 def retry_pending_batches(limit: int = 10) -> int:
@@ -45,18 +47,25 @@ def retry_pending_batches(limit: int = 10) -> int:
 async def retry_worker_loop() -> None:
     while True:
         interval = 180
-        with SessionLocal() as db:
-            settings = get_all_settings(db)
-            try:
-                interval = max(30, int(settings.get("retry_interval_seconds", "180")))
-            except ValueError:
-                interval = 180
-        await asyncio.sleep(interval)
-        await asyncio.to_thread(retry_pending_batches)
+        try:
+            with SessionLocal() as db:
+                settings = get_all_settings(db)
+                try:
+                    interval = max(30, int(settings.get("retry_interval_seconds", "180")))
+                except ValueError:
+                    interval = 180
+            await asyncio.sleep(interval)
+            await asyncio.to_thread(retry_pending_batches)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Pending sync retry worker failed")
+            await asyncio.sleep(interval)
 
 
 def start_retry_worker(app: FastAPI) -> None:
-    if getattr(app.state, WORKER_STATE_KEY, None):
+    task = getattr(app.state, WORKER_STATE_KEY, None)
+    if task and not task.done():
         return
     setattr(app.state, WORKER_STATE_KEY, asyncio.create_task(retry_worker_loop()))
 

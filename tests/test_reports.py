@@ -11,7 +11,7 @@ from starlette.requests import Request
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import AuditAssignment, AuditAssignmentItem, AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
 from app.routers.reports import (
     audit_reconciliation_excel,
     director_audit_batch_detail,
@@ -46,6 +46,56 @@ def test_reports_page_renders_scan_and_transaction_rows():
         )
         db.add_all([user, product])
         db.flush()
+        audit_product = Product(
+            product_code="AUD100",
+            product_name="Audit Progress Masala",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Audit Progress Masala",
+        )
+        db.add(audit_product)
+        db.flush()
+        first_expected = Serial(
+            serial_number="AUD100-000001",
+            product_id=audit_product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        second_expected = Serial(
+            serial_number="AUD100-000002",
+            product_id=audit_product.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        db.add_all([first_expected, second_expected])
+        db.flush()
+        now = datetime.now(timezone.utc)
+        audit_assignment = AuditAssignment(
+            product_id=audit_product.id,
+            auditor_id=user.id,
+            assigned_by_id=user.id,
+            starts_at=now - timedelta(hours=1),
+            ends_at=now + timedelta(hours=1),
+        )
+        db.add(audit_assignment)
+        db.flush()
+        db.add_all(
+            [
+                AuditAssignmentItem(assignment_id=audit_assignment.id, serial_id=first_expected.id),
+                AuditAssignmentItem(assignment_id=audit_assignment.id, serial_id=second_expected.id),
+            ]
+        )
+        audit_batch = Batch(
+            batch_number="AUD-PROG-001",
+            batch_type=BatchType.AUDIT.value,
+            user_id=user.id,
+            audit_assignment_id=audit_assignment.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=now,
+        )
+        db.add(audit_batch)
+        db.flush()
+        db.add(BatchItem(batch_id=audit_batch.id, serial_id=first_expected.id, created_at=now))
         batch = Batch(
             batch_number="BATCH-001",
             batch_type=BatchType.SALE.value,
@@ -99,6 +149,15 @@ def test_reports_page_renders_scan_and_transaction_rows():
     assert "SG100-000001" in response.text
     assert "TALLY-001" in response.text
     assert "BATCH-001" in response.text
+    assert "Audit assignments" in response.text
+    assert "Expected" in response.text
+    assert "Found" in response.text
+    assert "Remaining" in response.text
+    audit_section_start = response.text.index("<h2>Audit assignments</h2>")
+    row_start = response.text.index("Audit Progress Masala", audit_section_start)
+    assignment_row = response.text[row_start:response.text.index("</tr>", row_start)]
+    assert "<td>2</td>" in assignment_row
+    assert assignment_row.count("<td>1</td>") >= 2
 
 
 def test_reports_product_dropdown_filters_product_specific_rows_and_exports():

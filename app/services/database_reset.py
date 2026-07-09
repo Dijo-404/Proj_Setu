@@ -55,6 +55,11 @@ DELETE_ALL_MODELS = (
     Setting,
 )
 
+SQLITE_RESET_DELETE_GUARDS = {
+    "prevent_relocation_serials_delete": "relocation_serials",
+    "prevent_stock_relocations_delete": "stock_relocations",
+}
+
 
 @dataclass(frozen=True)
 class ResetSummary:
@@ -80,6 +85,34 @@ def _sqlite_maintenance(bind) -> None:
         pass
 
 
+def _is_sqlite_session(db: Session) -> bool:
+    return getattr(db.get_bind().dialect, "name", "") == "sqlite"
+
+
+def _drop_sqlite_reset_delete_guards(db: Session) -> None:
+    if not _is_sqlite_session(db):
+        return
+    for trigger_name in SQLITE_RESET_DELETE_GUARDS:
+        db.execute(text(f"DROP TRIGGER IF EXISTS {trigger_name}"))
+
+
+def _restore_sqlite_reset_delete_guards(db: Session) -> None:
+    if not _is_sqlite_session(db):
+        return
+    for trigger_name, table_name in SQLITE_RESET_DELETE_GUARDS.items():
+        db.execute(
+            text(
+                f"""
+                CREATE TRIGGER IF NOT EXISTS {trigger_name}
+                BEFORE DELETE ON {table_name}
+                BEGIN
+                    SELECT RAISE(ABORT, 'Relocation history is permanent');
+                END
+                """
+            )
+        )
+
+
 def reset_database_and_cache(db: Session, super_admin_id: int) -> ResetSummary:
     user = db.get(User, super_admin_id)
     if not user or not user.active or user.deleted_at or not has_role(user.role, Role.SUPER_ADMIN):
@@ -87,6 +120,7 @@ def reset_database_and_cache(db: Session, super_admin_id: int) -> ResetSummary:
 
     deleted_rows: dict[str, int] = {}
     try:
+        _drop_sqlite_reset_delete_guards(db)
         for model in DELETE_ALL_MODELS:
             result = db.execute(delete(model).execution_options(synchronize_session=False))
             deleted_rows[model.__tablename__] = int(result.rowcount or 0)
@@ -109,6 +143,7 @@ def reset_database_and_cache(db: Session, super_admin_id: int) -> ResetSummary:
         for key, value in DEFAULT_SETTINGS.items():
             db.add(Setting(key=key, value=value))
 
+        _restore_sqlite_reset_delete_guards(db)
         db.commit()
     except Exception:
         db.rollback()

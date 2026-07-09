@@ -1,10 +1,42 @@
+import asyncio
+from contextlib import suppress
 import os
 import sqlite3
 from types import SimpleNamespace
 
 import app.services.backup as backup_service
+import app.services.backup_worker as backup_worker
 from app.config import get_settings
 from app.services.backup import create_scheduled_backup, create_sqlite_backup, sqlite_database_path, verify_sqlite_backup
+
+
+def test_backup_worker_start_replaces_finished_task(monkeypatch):
+    async def scenario():
+        app = SimpleNamespace(state=SimpleNamespace())
+
+        async def already_done():
+            return None
+
+        finished = asyncio.create_task(already_done())
+        await finished
+        setattr(app.state, backup_worker.WORKER_STATE_KEY, finished)
+
+        async def replacement_loop():
+            await asyncio.Event().wait()
+
+        monkeypatch.setattr(backup_worker, "get_settings", lambda: SimpleNamespace(automatic_backups_enabled=True))
+        monkeypatch.setattr(backup_worker, "backup_worker_loop", replacement_loop)
+        backup_worker.start_backup_worker(app)
+        replacement = getattr(app.state, backup_worker.WORKER_STATE_KEY)
+
+        assert replacement is not finished
+        assert replacement.done() is False
+
+        replacement.cancel()
+        with suppress(asyncio.CancelledError):
+            await replacement
+
+    asyncio.run(scenario())
 
 
 def _create_minimal_setuora_database(path, marker: str):
@@ -82,6 +114,33 @@ def test_scheduled_backup_verifies_copies_offsite_and_prunes(tmp_path, monkeypat
     verify_sqlite_backup(third.offsite_path)
     assert len(list(backup_dir.glob("setuora-backup-*.db"))) == 2
     assert len(list(offsite_dir.glob("setuora-backup-*.db"))) == 2
+
+
+def test_list_backup_files_includes_legacy_setu_prefix(tmp_path, monkeypatch):
+    db_path = tmp_path / "setuora.db"
+    db_path.write_bytes(b"")
+    backup_dir = tmp_path / "backups"
+    backup_dir.mkdir()
+    legacy = backup_dir / "setu-backup-20260702-163934-737317.db"
+    current = backup_dir / "setuora-backup-20260709-153824-133945.db"
+    other = backup_dir / "manual-copy.db"
+    legacy.write_bytes(b"legacy")
+    current.write_bytes(b"current")
+    other.write_bytes(b"other")
+    os.utime(legacy, (1, 1))
+    os.utime(current, (2, 2))
+
+    monkeypatch.setattr(
+        backup_service,
+        "get_settings",
+        lambda: SimpleNamespace(
+            database_url=f"sqlite:///{db_path}",
+            backup_directory=str(backup_dir),
+            backup_offsite_directory="",
+        ),
+    )
+
+    assert backup_service.list_backup_files() == [current, legacy]
 
 
 def test_update_backup_settings_persists_env_and_refreshes_runtime(tmp_path, monkeypatch):

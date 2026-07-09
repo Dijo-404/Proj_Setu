@@ -225,7 +225,7 @@ def _recent_assignment_batches(db: Session, user) -> list[Batch]:
 
 
 def _assignment_products(db: Session, user) -> list[Product]:
-    products = db.scalars(select(Product).where(Product.active == True).order_by(Product.product_code)).all()
+    products = db.scalars(select(Product).where(Product.active.is_(True)).order_by(Product.product_code)).all()
     return [product for product in products if user_can_generate_product_qr(user, product)]
 
 

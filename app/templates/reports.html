@@ -98,6 +98,44 @@
 {% include "partials/expiry_summary.html" %}
 
 <section class="panel">
+  <div class="section-title">
+    <h2>Audit assignments</h2>
+    <span>{{ audit_assignments|length }} total</span>
+  </div>
+  <div class="table-scroll">
+    <table>
+      <thead><tr><th>Product</th><th>Auditor</th><th>Status</th><th>Expected</th><th>Found</th><th>Remaining</th><th></th></tr></thead>
+      <tbody>
+        {% for row in audit_assignments %}
+        {% set assignment = row.assignment %}
+        {% set latest_batch = row.latest_batch %}
+        <tr>
+          <td>
+            <strong>{{ assignment.product.product_name }}</strong>
+            <small>{{ assignment.product.product_code }}</small>
+          </td>
+          <td>{{ assignment.auditor.username }}</td>
+          <td><span class="status {{ row.progress.state|lower }}">{{ row.progress.state }}</span></td>
+          <td>{{ row.progress.expected }}</td>
+          <td>{{ row.progress.verified }}</td>
+          <td>{{ row.progress.pending }}</td>
+          <td>
+            {% if latest_batch and role_can_view_batch(user, latest_batch.batch_type) %}
+            <a class="button small" href="/batches/{{ latest_batch.id }}">Open audit</a>
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="empty">No audit assignments found</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="panel">
   <div class="section-title"><h2>Transactions</h2></div>
   <div class="table-scroll">
     <table>

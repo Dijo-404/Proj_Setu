@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 import sqlite3
 from tempfile import TemporaryDirectory
+import threading
 
 from app.config import PROJECT_ROOT, get_settings
 
@@ -19,6 +20,8 @@ BACKUP_ENV_KEYS = (
     "BACKUP_INTERVAL_HOURS",
     "BACKUP_RETENTION_COUNT",
 )
+BACKUP_FILE_PATTERNS = ("setuora-backup-*.db", "setu-backup-*.db")
+_SQLITE_FILE_MAINTENANCE_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -119,53 +122,55 @@ def _copy_sqlite_database(source_path: Path, destination_path: Path) -> None:
 
 
 def create_sqlite_backup() -> BackupInfo:
-    source_path = sqlite_database_path()
-    if not source_path.exists():
-        raise RuntimeError("SQLite database file does not exist yet")
+    with _SQLITE_FILE_MAINTENANCE_LOCK:
+        source_path = sqlite_database_path()
+        if not source_path.exists():
+            raise RuntimeError("SQLite database file does not exist yet")
 
-    # NamedTemporaryFile keeps an open Windows handle that sqlite3 cannot reuse.
-    with TemporaryDirectory() as temp_dir:
-        temp_path = Path(temp_dir) / "setuora-backup.db"
-        _copy_sqlite_database(source_path, temp_path)
-        verify_sqlite_backup(temp_path)
-        data = temp_path.read_bytes()
+        # NamedTemporaryFile keeps an open Windows handle that sqlite3 cannot reuse.
+        with TemporaryDirectory() as temp_dir:
+            temp_path = Path(temp_dir) / "setuora-backup.db"
+            _copy_sqlite_database(source_path, temp_path)
+            verify_sqlite_backup(temp_path)
+            data = temp_path.read_bytes()
 
-    return BackupInfo(filename="setuora-backup.db", data=data)
+        return BackupInfo(filename="setuora-backup.db", data=data)
 
 
 def create_scheduled_backup() -> BackupFileInfo:
-    source_path = sqlite_database_path()
-    if not source_path.exists():
-        raise RuntimeError("SQLite database file does not exist yet")
+    with _SQLITE_FILE_MAINTENANCE_LOCK:
+        source_path = sqlite_database_path()
+        if not source_path.exists():
+            raise RuntimeError("SQLite database file does not exist yet")
 
-    settings = get_settings()
-    backup_dir = resolve_configured_path(getattr(settings, "backup_directory", "./data/backups"))
-    backup_dir.mkdir(parents=True, exist_ok=True)
+        settings = get_settings()
+        backup_dir = resolve_configured_path(getattr(settings, "backup_directory", "./data/backups"))
+        backup_dir.mkdir(parents=True, exist_ok=True)
 
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-    filename = f"setuora-backup-{stamp}.db"
-    destination = backup_dir / filename
-    temp_destination = backup_dir / f".{filename}.tmp"
-    if temp_destination.exists():
-        temp_destination.unlink()
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+        filename = f"setuora-backup-{stamp}.db"
+        destination = backup_dir / filename
+        temp_destination = backup_dir / f".{filename}.tmp"
+        if temp_destination.exists():
+            temp_destination.unlink()
 
-    _copy_sqlite_database(source_path, temp_destination)
-    verify_sqlite_backup(temp_destination)
-    temp_destination.replace(destination)
+        _copy_sqlite_database(source_path, temp_destination)
+        verify_sqlite_backup(temp_destination)
+        temp_destination.replace(destination)
 
-    offsite_path = _copy_to_offsite(destination, filename, settings)
-    _prune_backups(backup_dir, getattr(settings, "backup_retention_count", 14))
-    offsite_dir = getattr(settings, "backup_offsite_directory", "").strip()
-    if offsite_dir:
-        _prune_backups(resolve_configured_path(offsite_dir), getattr(settings, "backup_retention_count", 14))
+        offsite_path = _copy_to_offsite(destination, filename, settings)
+        _prune_backups(backup_dir, getattr(settings, "backup_retention_count", 14))
+        offsite_dir = getattr(settings, "backup_offsite_directory", "").strip()
+        if offsite_dir:
+            _prune_backups(resolve_configured_path(offsite_dir), getattr(settings, "backup_retention_count", 14))
 
-    return BackupFileInfo(
-        filename=filename,
-        path=destination,
-        size_bytes=destination.stat().st_size,
-        verified_at=datetime.now(timezone.utc),
-        offsite_path=offsite_path,
-    )
+        return BackupFileInfo(
+            filename=filename,
+            path=destination,
+            size_bytes=destination.stat().st_size,
+            verified_at=datetime.now(timezone.utc),
+            offsite_path=offsite_path,
+        )
 
 
 def update_backup_settings(
@@ -262,43 +267,44 @@ def backup_choice_path(value: str) -> Path:
 
 
 def restore_sqlite_backup_file(source_path: Path, *, reload_runtime: bool = True) -> RestoreInfo:
-    source = source_path.expanduser().resolve()
-    database_path = sqlite_database_path()
-    if not database_path.exists():
-        raise RuntimeError("SQLite database file does not exist yet")
-    verify_setuora_backup(source)
+    with _SQLITE_FILE_MAINTENANCE_LOCK:
+        source = source_path.expanduser().resolve()
+        database_path = sqlite_database_path()
+        if not database_path.exists():
+            raise RuntimeError("SQLite database file does not exist yet")
+        verify_setuora_backup(source)
 
-    with TemporaryDirectory() as temp_dir:
-        staged_source = Path(temp_dir) / "setuora-restore-source.db"
-        shutil.copy2(source, staged_source)
-        verify_setuora_backup(staged_source)
+        with TemporaryDirectory() as temp_dir:
+            staged_source = Path(temp_dir) / "setuora-restore-source.db"
+            shutil.copy2(source, staged_source)
+            verify_setuora_backup(staged_source)
 
-        safety_backup = create_scheduled_backup()
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
-        temp_destination = database_path.with_name(f".{database_path.name}.restore-{stamp}.tmp")
-        if temp_destination.exists():
-            temp_destination.unlink()
-        shutil.copy2(staged_source, temp_destination)
-        verify_setuora_backup(temp_destination)
+            safety_backup = create_scheduled_backup()
+            stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
+            temp_destination = database_path.with_name(f".{database_path.name}.restore-{stamp}.tmp")
+            if temp_destination.exists():
+                temp_destination.unlink()
+            shutil.copy2(staged_source, temp_destination)
+            verify_setuora_backup(temp_destination)
 
-        if reload_runtime:
-            from app.database import engine
+            if reload_runtime:
+                from app.database import engine
 
-            engine.dispose()
+                engine.dispose()
 
-        _remove_sqlite_sidecars(database_path)
-        temp_destination.replace(database_path)
-        _remove_sqlite_sidecars(database_path)
+            _remove_sqlite_sidecars(database_path)
+            temp_destination.replace(database_path)
+            _remove_sqlite_sidecars(database_path)
 
-        if reload_runtime:
-            _reload_runtime_database()
+            if reload_runtime:
+                _reload_runtime_database()
 
-    return RestoreInfo(
-        restored_path=database_path,
-        safety_backup_path=safety_backup.path,
-        source_path=source,
-        restored_at=datetime.now(timezone.utc),
-    )
+        return RestoreInfo(
+            restored_path=database_path,
+            safety_backup_path=safety_backup.path,
+            source_path=source,
+            restored_at=datetime.now(timezone.utc),
+        )
 
 
 def _copy_to_offsite(source: Path, filename: str, settings: object) -> Path | None:
@@ -321,7 +327,13 @@ def _copy_to_offsite(source: Path, filename: str, settings: object) -> Path | No
 def _backup_files(directory: Path | None) -> list[Path]:
     if not directory or not directory.exists():
         return []
-    return sorted(directory.glob("setuora-backup-*.db"), key=lambda path: path.stat().st_mtime, reverse=True)
+    files = {
+        backup
+        for pattern in BACKUP_FILE_PATTERNS
+        for backup in directory.glob(pattern)
+        if backup.is_file()
+    }
+    return sorted(files, key=lambda path: path.stat().st_mtime, reverse=True)
 
 
 def _latest_backup(directory: Path | None) -> Path | None:

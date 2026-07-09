@@ -9,7 +9,9 @@ const scanLine = document.querySelector(".scan-line");
 const cameraButton = document.getElementById("camera-button");
 const scanCountLabel = document.getElementById("scan-count");
 const submitBatchButton = document.getElementById("submit-batch-button");
-const shelfVerificationStatus = document.getElementById("shelf-verification-status");
+const shelfVerificationStatus = document.getElementById(
+  "shelf-verification-status",
+);
 const scanModeInput = document.getElementById("scan-mode");
 const saleModeButtons = document.querySelectorAll("[data-scan-mode-button]");
 const saleReturnStatus = document.getElementById("sale-return-status");
@@ -23,7 +25,10 @@ const scannedSerialsBody = document.getElementById("scanned-serials-body");
 const canManual = form && form.dataset.canManual === "true";
 const canEditVoucher = voucherPreviewTable?.dataset.canEdit === "true";
 const canEditScans = scannedSerialsTable?.dataset.canEdit === "true";
-const batchId = voucherPreviewTable?.dataset.batchId || scannedSerialsTable?.dataset.batchId || "";
+const batchId =
+  voucherPreviewTable?.dataset.batchId ||
+  scannedSerialsTable?.dataset.batchId ||
+  "";
 const batchType = scannedSerialsTable?.dataset.batchType || "";
 
 let nativeDetector = null;
@@ -64,7 +69,9 @@ function showToast(message, kind = "info", duration = 3500) {
 }
 
 function maxVisibleToasts() {
-  return window.matchMedia("(max-width: 640px)").matches ? MAX_MOBILE_TOASTS : MAX_DESKTOP_TOASTS;
+  return window.matchMedia("(max-width: 640px)").matches
+    ? MAX_MOBILE_TOASTS
+    : MAX_DESKTOP_TOASTS;
 }
 
 function pruneToasts(container, kind) {
@@ -101,7 +108,10 @@ function playBeep(freq, durationMs) {
     osc.frequency.value = freq;
     osc.type = "sine";
     gain.gain.value = 0.15;
-    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + durationMs / 1000);
+    gain.gain.exponentialRampToValueAtTime(
+      0.001,
+      ctx.currentTime + durationMs / 1000,
+    );
     osc.start();
     osc.stop(ctx.currentTime + durationMs / 1000);
   } catch (e) {
@@ -116,7 +126,8 @@ function setScanStatus(text) {
 function syncSubmitButton() {
   if (!submitBatchButton) return;
   const shelfPending = Number(shelfVerificationStatus?.dataset.pending || 0);
-  submitBatchButton.disabled = scanCount === 0 || shelfPending > 0 || saleReturnPending > 0;
+  submitBatchButton.disabled =
+    scanCount === 0 || shelfPending > 0 || saleReturnPending > 0;
 }
 
 function setScanCount(value) {
@@ -135,7 +146,8 @@ function updateScanCount() {
 function updateShelfState(payload) {
   const pending = Number(payload?.pending_count || 0);
   const required = payload?.shelf_required === true;
-  if (shelfVerificationStatus) shelfVerificationStatus.dataset.pending = String(pending);
+  if (shelfVerificationStatus)
+    shelfVerificationStatus.dataset.pending = String(pending);
   syncSubmitButton();
   if (!shelfVerificationStatus) return;
   shelfVerificationStatus.classList.toggle("warn", pending > 0);
@@ -143,11 +155,9 @@ function updateShelfState(payload) {
     const suffix = required
       ? " Scan the shelf QR now—more product scans are blocked."
       : " Scan the shelf QR before submitting.";
-    shelfVerificationStatus.textContent =
-      `${pending} product${pending === 1 ? "" : "s"} awaiting shelf verification.${suffix}`;
+    shelfVerificationStatus.textContent = `${pending} product${pending === 1 ? "" : "s"} awaiting shelf verification.${suffix}`;
   } else if (payload?.scan_type === "shelf") {
-    shelfVerificationStatus.textContent =
-      `Shelf verified: ${payload.location || payload.location_code || "location recorded"}.`;
+    shelfVerificationStatus.textContent = `Shelf verified: ${payload.location || payload.location_code || "location recorded"}.`;
   } else {
     shelfVerificationStatus.textContent =
       "Shelf placement is verified. Products with a configured interval will require a shelf QR scan.";
@@ -159,7 +169,8 @@ function setSaleScanMode(mode, options = {}) {
   let nextMode = mode === "return" ? "return" : "sale";
   if (nextMode === "sale" && saleReturnPending > 0) {
     nextMode = "return";
-    if (!options.silent) showToast("Scan the shelf QR before continuing the sale", "warn", 3500);
+    if (!options.silent)
+      showToast("Scan the shelf QR before continuing the sale", "warn", 3500);
   }
   scanModeInput.value = nextMode;
   saleModeButtons.forEach((button) => {
@@ -171,9 +182,15 @@ function setSaleScanMode(mode, options = {}) {
   lastCode = "";
   if (options.status !== false) {
     if (saleReturnPending > 0) {
-      setScanStatus(scanning ? "Return shelf pending - scan shelf QR" : "Return shelf pending");
+      setScanStatus(
+        scanning
+          ? "Return shelf pending - scan shelf QR"
+          : "Return shelf pending",
+      );
     } else if (nextMode === "return") {
-      setScanStatus(scanning ? "Return mode - scan product QR" : "Return mode ready");
+      setScanStatus(
+        scanning ? "Return mode - scan product QR" : "Return mode ready",
+      );
     } else if (!scanning) {
       setScanStatus("Scanning stopped");
     }
@@ -186,10 +203,13 @@ function updateSaleReturnState(state) {
   saleReturnStatus.dataset.pending = String(saleReturnPending);
   saleReturnStatus.hidden = saleReturnPending === 0;
   if (saleReturnPending > 0) {
-    const first = Array.isArray(state.pending_serials) ? state.pending_serials[0] : null;
-    const label = first?.serial ? `: ${first.serial}${first.product ? " - " + first.product : ""}` : "";
-    saleReturnStatus.textContent =
-      `${saleReturnPending} returned product${saleReturnPending === 1 ? "" : "s"} waiting for shelf QR${label}`;
+    const first = Array.isArray(state.pending_serials)
+      ? state.pending_serials[0]
+      : null;
+    const label = first?.serial
+      ? `: ${first.serial}${first.product ? " - " + first.product : ""}`
+      : "";
+    saleReturnStatus.textContent = `${saleReturnPending} returned product${saleReturnPending === 1 ? "" : "s"} waiting for shelf QR${label}`;
     setSaleScanMode("return", { silent: true, status: false });
   } else {
     saleReturnStatus.textContent = "";
@@ -248,8 +268,13 @@ function updateVoucherPreview(summary) {
 
   if (!lines.length) {
     const row = document.createElement("tr");
-    appendCell(row, batchType === "SALE" ? "Scan product QR codes to build the sale" : "Scan serials to build the voucher preview", "empty")
-      .colSpan = 10;
+    appendCell(
+      row,
+      batchType === "SALE"
+        ? "Scan product QR codes to build the sale"
+        : "Scan serials to build the voucher preview",
+      "empty",
+    ).colSpan = 10;
     voucherPreviewBody.appendChild(row);
   } else {
     lines.forEach((line) => {
@@ -258,12 +283,18 @@ function updateVoucherPreview(summary) {
       const strong = document.createElement("strong");
       strong.textContent = line.product_name || "";
       productCell.appendChild(strong);
-      if (line.tally_stock_item_name) productCell.appendChild(createSmallText(line.tally_stock_item_name));
+      if (line.tally_stock_item_name)
+        productCell.appendChild(createSmallText(line.tally_stock_item_name));
       appendCell(row, line.hsn || "-");
       appendCell(row, `${line.quantity || 0} ${line.unit || ""}`.trim());
       const rateCell = appendCell(row, "");
       if (canEditVoucher && batchId) {
-        rateCell.appendChild(createRateForm(`/batches/${batchId}/products/${line.product_id}/rate`, line.rate || "0.00"));
+        rateCell.appendChild(
+          createRateForm(
+            `/batches/${batchId}/products/${line.product_id}/rate`,
+            line.rate || "0.00",
+          ),
+        );
       } else {
         rateCell.textContent = line.rate || "0.00";
       }
@@ -334,7 +365,10 @@ function updateScannedSerials(items) {
       const strong = document.createElement("strong");
       strong.textContent = item.shelf_code;
       shelfCell.appendChild(strong);
-      if (item.shelf_verified_at) shelfCell.appendChild(createSmallText(`Verified ${item.shelf_verified_at}`));
+      if (item.shelf_verified_at)
+        shelfCell.appendChild(
+          createSmallText(`Verified ${item.shelf_verified_at}`),
+        );
     } else if (item.shelf_pending) {
       shelfCell.appendChild(createStatusBadge("PENDING_SYNC"));
     } else {
@@ -344,7 +378,12 @@ function updateScannedSerials(items) {
     statusCell.appendChild(createStatusBadge(item.status));
     const rateCell = appendCell(row, "");
     if (canEditScans && batchType !== "AUDIT" && batchId) {
-      rateCell.appendChild(createRateForm(`/batches/${batchId}/items/${item.id}/rate`, item.rate || "0.00"));
+      rateCell.appendChild(
+        createRateForm(
+          `/batches/${batchId}/items/${item.id}/rate`,
+          item.rate || "0.00",
+        ),
+      );
     } else {
       rateCell.textContent = item.rate || "0.00";
     }
@@ -366,7 +405,8 @@ function updateScannedSerials(items) {
 
 function updateBatchState(payload) {
   if (!payload) return;
-  if (typeof payload.item_count !== "undefined") setScanCount(payload.item_count);
+  if (typeof payload.item_count !== "undefined")
+    setScanCount(payload.item_count);
   if (payload.summary) updateVoucherPreview(payload.summary);
   if (payload.items) updateScannedSerials(payload.items);
   if (payload.sale_return) updateSaleReturnState(payload.sale_return);
@@ -380,14 +420,21 @@ function setCameraControls(active) {
   if (!cameraButton) return;
   cameraButton.hidden = false;
   cameraButton.disabled = cameraStarting;
-  cameraButton.textContent = cameraStarting ? "Starting..." : active ? "Stop scanning" : "Start scanning";
+  cameraButton.textContent = cameraStarting
+    ? "Starting..."
+    : active
+      ? "Stop scanning"
+      : "Start scanning";
   cameraButton.setAttribute("aria-pressed", active ? "true" : "false");
   cameraButton.className = active ? "button" : "button primary";
 }
 
 function resultText(result) {
   if (!result) return "";
-  const text = typeof result.getText === "function" ? result.getText() : String(result.text || result.rawValue || "");
+  const text =
+    typeof result.getText === "function"
+      ? result.getText()
+      : String(result.text || result.rawValue || "");
   return cleanDecodedText(text);
 }
 
@@ -409,10 +456,10 @@ const enhCanvas = document.createElement("canvas");
 const enhCtx = enhCanvas.getContext("2d", { willReadFrequently: true });
 const nativeFormatPreference = ["qr_code", "code_128"];
 const scanRegions = [
-  { x: 0.05, y: 0.22, w: 0.90, h: 0.58 },
-  { x: 0.05, y: 0.32, w: 0.90, h: 0.34 },
-  { x: 0.00, y: 0.00, w: 1.00, h: 1.00 },
-  { x: 0.00, y: 0.18, w: 1.00, h: 0.64 },
+  { x: 0.05, y: 0.22, w: 0.9, h: 0.58 },
+  { x: 0.05, y: 0.32, w: 0.9, h: 0.34 },
+  { x: 0.0, y: 0.0, w: 1.0, h: 1.0 },
+  { x: 0.0, y: 0.18, w: 1.0, h: 0.64 },
 ];
 
 function captureFrame() {
@@ -437,7 +484,17 @@ function copyFrameRegion(region) {
   cropCanvas.width = Math.round(sw * scale);
   cropCanvas.height = Math.round(sh * scale);
   cropCtx.imageSmoothingEnabled = false;
-  cropCtx.drawImage(scanCanvas, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
+  cropCtx.drawImage(
+    scanCanvas,
+    sx,
+    sy,
+    sw,
+    sh,
+    0,
+    0,
+    cropCanvas.width,
+    cropCanvas.height,
+  );
   return cropCanvas;
 }
 
@@ -461,7 +518,7 @@ function createEnhancedFrame(source) {
   }
   const range = max - min || 1;
   for (let i = 0; i < data.length; i += 4) {
-    const v = ((data[i] - min) * 255 / range) | 0;
+    const v = (((data[i] - min) * 255) / range) | 0;
     const bounded = v < 0 ? 0 : v > 255 ? 255 : v;
     data[i] = bounded;
     data[i + 1] = bounded;
@@ -523,7 +580,8 @@ function getZxingHints() {
       .map((name) => ZX.BarcodeFormat[name])
       .filter((format) => typeof format !== "undefined");
     zxingHints = new Map();
-    if (formats.length) zxingHints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, formats);
+    if (formats.length)
+      zxingHints.set(ZX.DecodeHintType.POSSIBLE_FORMATS, formats);
     zxingHints.set(ZX.DecodeHintType.TRY_HARDER, true);
   }
   return zxingHints;
@@ -564,8 +622,8 @@ function decodeRowsCode128(source) {
   const w = source.width;
   const h = source.height;
   const rows = [
-    0.18, 0.22, 0.26, 0.30, 0.34, 0.38, 0.42, 0.46,
-    0.50, 0.54, 0.58, 0.62, 0.66, 0.70, 0.74, 0.78, 0.82,
+    0.18, 0.22, 0.26, 0.3, 0.34, 0.38, 0.42, 0.46, 0.5, 0.54, 0.58, 0.62, 0.66,
+    0.7, 0.74, 0.78, 0.82,
   ];
 
   for (const fraction of rows) {
@@ -584,11 +642,19 @@ function decodeRowsCode128(source) {
 
     if (max - min < 35) continue;
     const avg = sum / w;
-    const thresholds = [(min + max) / 2, avg * 0.72, avg * 0.82, avg * 0.95, avg * 1.08];
+    const thresholds = [
+      (min + max) / 2,
+      avg * 0.72,
+      avg * 0.82,
+      avg * 0.95,
+      avg * 1.08,
+    ];
     for (const threshold of thresholds) {
       const attempts = code128RowAttempts(gray, threshold);
       for (const attempt of attempts) {
-        const code = decodeCode128Row(attempt, threshold, y) || decodeCode128Row(reverseGray(attempt), threshold, y);
+        const code =
+          decodeCode128Row(attempt, threshold, y) ||
+          decodeCode128Row(reverseGray(attempt), threshold, y);
         if (code) return code;
       }
     }
@@ -635,7 +701,8 @@ function trimBarcodeRow(gray, threshold) {
   let bestCount = 0;
   let start = 0;
   for (let i = 1; i <= transitions.length; i++) {
-    const split = i === transitions.length || transitions[i] - transitions[i - 1] > maxGap;
+    const split =
+      i === transitions.length || transitions[i] - transitions[i - 1] > maxGap;
     if (!split) continue;
     const count = i - start;
     if (count > bestCount) {
@@ -652,7 +719,7 @@ function trimBarcodeRow(gray, threshold) {
   const endX = Math.min(gray.length, transitions[bestEnd] + padding);
   if (endX - startX < 140) return null;
 
-  const quiet = Math.max(64, Math.round((endX - startX) * 0.10));
+  const quiet = Math.max(64, Math.round((endX - startX) * 0.1));
   const row = new Uint8Array(endX - startX + quiet * 2);
   row.fill(255);
   row.set(gray.slice(startX, endX), quiet);
@@ -686,7 +753,9 @@ async function createNativeDetector() {
     let formats = nativeFormatPreference;
     if (typeof BarcodeDetector.getSupportedFormats === "function") {
       const supported = await BarcodeDetector.getSupportedFormats();
-      formats = supported.length ? nativeFormatPreference.filter((format) => supported.includes(format)) : nativeFormatPreference;
+      formats = supported.length
+        ? nativeFormatPreference.filter((format) => supported.includes(format))
+        : nativeFormatPreference;
       if (!formats.length) return null;
     }
     return new BarcodeDetector({ formats });
@@ -751,7 +820,9 @@ async function submitSerial(serial, source = "camera") {
   if (input) input.value = serial;
   if (sourceInput) sourceInput.value = source;
   if (scanLine) scanLine.classList.add("detected");
-  setScanStatus(`${activeScanMode === "return" ? "Returning" : "Adding"} ${serial}...`);
+  setScanStatus(
+    `${activeScanMode === "return" ? "Returning" : "Adding"} ${serial}...`,
+  );
 
   const data = new FormData();
   data.append("serial_number", serial);
@@ -769,13 +840,21 @@ async function submitSerial(serial, source = "camera") {
     if (!payload.ok) {
       const errorMsg = payload.error || payload.detail || "Scan rejected";
       const kind = errorMsg.includes("Already scanned") ? "warn" : "error";
-      showToast(errorMsg.includes("not found") ? `Serial not found: ${serial}` : errorMsg, kind, 4000);
+      showToast(
+        errorMsg.includes("not found")
+          ? `Serial not found: ${serial}`
+          : errorMsg,
+        kind,
+        4000,
+      );
       updateShelfState(payload);
       updateBatchState(payload);
       setScanStatus(
         scanning
-          ? (payload.shelf_required || payload.sale_return?.return_shelf_required ? "Shelf QR required" : "Scan rejected - scan the next code")
-          : "Scanning stopped"
+          ? payload.shelf_required || payload.sale_return?.return_shelf_required
+            ? "Shelf QR required"
+            : "Scan rejected - scan the next code"
+          : "Scanning stopped",
       );
       finishSubmission();
       return;
@@ -784,10 +863,16 @@ async function submitSerial(serial, source = "camera") {
     if (payload.scan_type === "sale_return_product") {
       const product = payload.product || "";
       const serialNum = payload.serial || serial;
-      showToast(`${serialNum}${product ? " - " + product : ""} returned`, "warn", 3500);
+      showToast(
+        `${serialNum}${product ? " - " + product : ""} returned`,
+        "warn",
+        3500,
+      );
       updateBatchState(payload);
       setSaleScanMode("return", { silent: true, status: false });
-      setScanStatus(scanning ? "Returned - scan shelf QR" : "Return shelf pending");
+      setScanStatus(
+        scanning ? "Returned - scan shelf QR" : "Return shelf pending",
+      );
       finishSubmission(500);
       return;
     }
@@ -796,11 +881,15 @@ async function submitSerial(serial, source = "camera") {
       showToast(
         `${payload.verified_count || 0} returned product(s) placed at ${payload.location_code || "shelf"}`,
         "success",
-        3500
+        3500,
       );
       updateBatchState(payload);
       setSaleScanMode("sale", { silent: true, status: false });
-      setScanStatus(scanning ? "Return complete - scan the next product" : "Scanning stopped");
+      setScanStatus(
+        scanning
+          ? "Return complete - scan the next product"
+          : "Scanning stopped",
+      );
       finishSubmission(500);
       return;
     }
@@ -809,30 +898,42 @@ async function submitSerial(serial, source = "camera") {
       showToast(
         `${payload.verified_count || 0} product(s) verified at ${payload.location_code || "shelf"}`,
         "success",
-        3500
+        3500,
       );
       updateShelfState(payload);
       updateBatchState(payload);
-      setScanStatus(scanning ? "Shelf verified - scan the next product" : "Scanning stopped");
+      setScanStatus(
+        scanning
+          ? "Shelf verified - scan the next product"
+          : "Scanning stopped",
+      );
       finishSubmission(500);
       return;
     }
 
     const product = payload.product || "";
     const serialNum = payload.serial || serial;
-    showToast(`${serialNum}${product ? " - " + product : ""} added`, "success", 2500);
+    showToast(
+      `${serialNum}${product ? " - " + product : ""} added`,
+      "success",
+      2500,
+    );
     if (typeof payload.item_count === "undefined") updateScanCount();
     updateBatchState(payload);
     updateShelfState(payload);
     setScanStatus(
       scanning
-        ? (payload.shelf_required ? "Product added - scan the shelf QR now" : `${serialNum} added - scan the next code`)
-        : "Scanning stopped"
+        ? payload.shelf_required
+          ? "Product added - scan the shelf QR now"
+          : `${serialNum} added - scan the next code`
+        : "Scanning stopped",
     );
     finishSubmission();
   } catch (e) {
     showToast("Network error - check connection", "error", 5000);
-    setScanStatus(scanning ? "Network error - scan the code again" : "Scanning stopped");
+    setScanStatus(
+      scanning ? "Network error - scan the code again" : "Scanning stopped",
+    );
     lastCode = "";
     finishSubmission(500);
   }
@@ -853,7 +954,8 @@ async function readScanResponse(response) {
 }
 
 function scheduleInputAutoSubmit() {
-  if (!scanning || submitting || !input || !looksLikeSerial(input.value)) return;
+  if (!scanning || submitting || !input || !looksLikeSerial(input.value))
+    return;
   clearTimeout(inputSubmitTimer);
   inputSubmitTimer = setTimeout(() => {
     if (!submitting && looksLikeSerial(input.value)) {
@@ -917,7 +1019,11 @@ async function decodeSource(source) {
   if (code) return code;
 
   const binarized = createBinarizedFrame(source);
-  return decodeCanvasQr(binarized) || decodeRowsCode128(binarized) || await decodeNative(binarized);
+  return (
+    decodeCanvasQr(binarized) ||
+    decodeRowsCode128(binarized) ||
+    (await decodeNative(binarized))
+  );
 }
 
 async function startCamera() {
@@ -926,7 +1032,11 @@ async function startCamera() {
   cameraStarting = true;
   setCameraControls(false);
 
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !window.isSecureContext) {
+  if (
+    !navigator.mediaDevices ||
+    !navigator.mediaDevices.getUserMedia ||
+    !window.isSecureContext
+  ) {
     setScanStatus("HTTPS required for live camera");
     showToast("Live camera needs HTTPS or localhost", "warn", 5000);
     cameraStarting = false;
@@ -975,7 +1085,10 @@ saleModeButtons.forEach((button) => {
     setSaleScanMode(button.dataset.scanModeButton || "sale");
   });
 });
-setSaleScanMode(scanModeInput?.value || "sale", { silent: true, status: false });
+setSaleScanMode(scanModeInput?.value || "sale", {
+  silent: true,
+  status: false,
+});
 syncSubmitButton();
 
 if (form) {

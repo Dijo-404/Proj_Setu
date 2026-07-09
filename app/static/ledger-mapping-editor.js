@@ -3,11 +3,15 @@
     return (value || "")
       .split(/\r?\n/)
       .map(function (line) {
-        const parts = line.split("|").map(function (part) { return part.trim(); });
+        const parts = line.split("|").map(function (part) {
+          return part.trim();
+        });
         while (parts.length < 5) parts.push("");
         return parts.slice(0, 5);
       })
-      .filter(function (parts) { return parts.some(Boolean); });
+      .filter(function (parts) {
+        return parts.some(Boolean);
+      });
   }
 
   function rowField(label, field, value, options) {
@@ -29,7 +33,9 @@
   }
 
   function initEditor(editor) {
-    const hidden = editor.querySelector('input[name="sales_gst_ledger_mappings"]');
+    const hidden = editor.querySelector(
+      'input[name="sales_gst_ledger_mappings"]',
+    );
     const list = editor.querySelector("[data-ledger-mapping-list]");
     const empty = editor.querySelector("[data-ledger-mapping-empty]");
     const summary = editor.querySelector("[data-ledger-summary]");
@@ -42,17 +48,24 @@
     function updateState() {
       const count = rows().length;
       empty.hidden = count > 0;
-      summary.textContent = count > 0
-        ? "Product GST ledgers (" + count + ")"
-        : "Add product ledger";
+      summary.textContent =
+        count > 0
+          ? "Product GST ledgers (" + count + ")"
+          : "Add product ledger";
     }
 
     function serialize() {
-      hidden.value = rows().map(function (row) {
-        return ["rate", "sales", "cgst", "sgst", "igst"].map(function (field) {
-          return row.querySelector('[data-ledger-field="' + field + '"]').value.trim();
-        }).join(" | ");
-      }).join("\n");
+      hidden.value = rows()
+        .map(function (row) {
+          return ["rate", "sales", "cgst", "sgst", "igst"]
+            .map(function (field) {
+              return row
+                .querySelector('[data-ledger-field="' + field + '"]')
+                .value.trim();
+            })
+            .join(" | ");
+        })
+        .join("\n");
       updateState();
       hidden.dispatchEvent(new Event("input", { bubbles: true }));
     }
@@ -85,12 +98,20 @@
           min: "0",
           max: "100",
           step: "0.01",
-          placeholder: "e.g. 5"
+          placeholder: "e.g. 5",
         }),
-        rowField("Sales ledger", "sales", values[1], { placeholder: "e.g. Sales @ 5%" }),
-        rowField("CGST ledger", "cgst", values[2], { placeholder: "e.g. Output CGST @ 2.5%" }),
-        rowField("SGST ledger", "sgst", values[3], { placeholder: "e.g. Output SGST @ 2.5%" }),
-        rowField("IGST ledger", "igst", values[4], { placeholder: "e.g. Output IGST @ 5%" })
+        rowField("Sales ledger", "sales", values[1], {
+          placeholder: "e.g. Sales @ 5%",
+        }),
+        rowField("CGST ledger", "cgst", values[2], {
+          placeholder: "e.g. Output CGST @ 2.5%",
+        }),
+        rowField("SGST ledger", "sgst", values[3], {
+          placeholder: "e.g. Output SGST @ 2.5%",
+        }),
+        rowField("IGST ledger", "igst", values[4], {
+          placeholder: "e.g. Output IGST @ 5%",
+        }),
       );
       grid.querySelectorAll("input").forEach(function (input) {
         input.addEventListener("input", serialize);
@@ -103,7 +124,9 @@
       if (focusNewRow) grid.querySelector("input").focus();
     }
 
-    parseRows(hidden.value).forEach(function (values) { addRow(values, false); });
+    parseRows(hidden.value).forEach(function (values) {
+      addRow(values, false);
+    });
     updateState();
     addButton.addEventListener("click", function () {
       editor.open = true;

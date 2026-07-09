@@ -190,11 +190,11 @@ def director_product_stock_rows(db: Session, limit: int = 40) -> list[dict[str, 
             Serial,
             and_(
                 Serial.product_id == Product.id,
-                Serial.active == True,
+                Serial.active.is_(True),
                 Serial.status.in_(STOCK_STATUSES),
             ),
         )
-        .where(Product.active == True)
+        .where(Product.active.is_(True))
         .group_by(Product.id, Product.product_code, Product.product_name)
         .order_by(desc(func.count(Serial.id)), Product.product_name)
         .limit(limit)
@@ -211,13 +211,13 @@ def director_product_stock_rows(db: Session, limit: int = 40) -> list[dict[str, 
 
 
 def director_product_totals(db: Session) -> dict[str, int]:
-    total_products = db.scalar(select(func.count(Product.id)).where(Product.active == True)) or 0
+    total_products = db.scalar(select(func.count(Product.id)).where(Product.active.is_(True))) or 0
     total_stock = db.scalar(
-        select(func.count(Serial.id)).where(Serial.active == True, Serial.status.in_(STOCK_STATUSES))
+        select(func.count(Serial.id)).where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
     ) or 0
     products_with_stock = db.scalar(
         select(func.count(func.distinct(Serial.product_id))).where(
-            Serial.active == True,
+            Serial.active.is_(True),
             Serial.status.in_(STOCK_STATUSES),
         )
     ) or 0

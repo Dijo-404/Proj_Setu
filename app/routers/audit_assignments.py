@@ -87,13 +87,13 @@ def _page_context(
         candidate
         for candidate in db.scalars(
             select(User)
-            .where(User.active == True, User.deleted_at.is_(None))
+            .where(User.active.is_(True), User.deleted_at.is_(None))
             .order_by(User.username)
         ).all()
         if has_role(candidate.role, Role.AUDITOR)
     ]
     products = db.scalars(
-        select(Product).where(Product.active == True).order_by(Product.product_name)
+        select(Product).where(Product.active.is_(True)).order_by(Product.product_name)
     ).all()
     return {
         "request": request,
