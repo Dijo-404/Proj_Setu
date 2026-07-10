@@ -1,6 +1,7 @@
 @echo off
 setlocal
-cd /d "%~dp0.."
+set "SETUORA_SCRIPT_DIR=%~dp0"
+cd /d "%SETUORA_SCRIPT_DIR%.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
@@ -57,7 +58,7 @@ if not exist "%START_SCRIPT%" (
     exit /b 1
 )
 
-if not exist "%~dp0.venv\Scripts\python.exe" (
+if not exist "%PROJECT_DIR%\.venv\Scripts\python.exe" (
     echo Setuora is not set up yet. Run scripts\setup.bat first.
     echo.
     pause

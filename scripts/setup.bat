@@ -1,13 +1,13 @@
 @echo off
 setlocal
+set "SETUORA_SETUP_BAT=%~f0"
 cd /d "%~dp0.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
     shift
 )
-set "SETUORA_SETUP_BAT=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %1 %2 %3 %4 %5 %6 %7 %8 %9
 set "SETUP_EXIT=%ERRORLEVEL%"
 echo.
 if not "%SETUP_EXIT%"=="0" echo Setup did not complete successfully.

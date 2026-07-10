@@ -145,6 +145,24 @@ def test_windows_workflows_can_run_from_the_unified_executable_without_pausing()
         assert 'if not "%SETUORA_NO_PAUSE%"=="1" pause' in script
 
 
+def test_windows_workflows_do_not_forward_no_pause_to_powershell_helpers():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
+    start_script = (WORKFLOWS_DIR / "start_setuora.bat").read_text(encoding="utf-8")
+    stop_script = (WORKFLOWS_DIR / "stop_setuora.bat").read_text(encoding="utf-8")
+
+    assert setup_script.index('set "SETUORA_SETUP_BAT=%~f0"') < setup_script.index("shift")
+    assert update_script.index('set "SETUORA_UPDATE_BAT=%~f0"') < update_script.index("shift")
+    assert '" %*' not in setup_script
+    assert '" %*' not in update_script
+    assert '" %*' not in stop_script
+    assert "%1 %2 %3 %4 %5 %6 %7 %8 %9" in setup_script
+    assert "%1 %2 %3 %4 %5 %6 %7 %8 %9" in update_script
+    assert "%1 %2 %3 %4 %5 %6 %7 %8 %9" in stop_script
+    assert "%~dp0.venv" not in start_script
+    assert '"%PROJECT_DIR%\\.venv\\Scripts\\python.exe"' in start_script
+
+
 def test_setup_does_not_start_services_or_caddy_by_default():
     setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 

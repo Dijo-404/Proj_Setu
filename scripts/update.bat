@@ -1,13 +1,13 @@
 @echo off
 setlocal
+set "SETUORA_UPDATE_BAT=%~f0"
 cd /d "%~dp0.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
     shift
 )
-set "SETUORA_UPDATE_BAT=%~f0"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_UPDATE_BAT; $marker='### POWERSHELL UPDATE SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded update script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_UPDATE_BAT; $marker='### POWERSHELL UPDATE SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded update script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %1 %2 %3 %4 %5 %6 %7 %8 %9
 set "UPDATE_EXIT=%ERRORLEVEL%"
 echo.
 if not "%UPDATE_EXIT%"=="0" echo Update did not complete successfully. The error above explains what needs attention.
