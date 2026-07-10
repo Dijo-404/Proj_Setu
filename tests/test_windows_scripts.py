@@ -24,6 +24,8 @@ def test_setup_repairs_pip_and_checks_dependencies():
     setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
 
     assert "function Ensure-Pip" in setup_script
+    assert "$RequirementsLock = Join-Path $ProjectRoot \"requirements.lock\"" in setup_script
+    assert "pip install --require-hashes -r $RequirementsLock" in setup_script
     assert "& $VenvPython -m ensurepip --upgrade" in setup_script
     assert "& $VenvPython -m pip check" in setup_script
     assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in setup_script
@@ -36,6 +38,9 @@ def test_updater_never_uses_pull_or_rebase():
     assert "& git rebase " not in update_script
     assert "& git fetch --no-tags origin $branch" in update_script
     assert "& git merge --ff-only FETCH_HEAD" in update_script
+    assert "git reset --hard FETCH_HEAD" not in update_script
+    assert "Refusing to update because local source changes are present." in update_script
+    assert "$worktreeChanges = @(& git status --porcelain)" in update_script
 
 
 def test_updater_checks_service_permissions_before_fetching():
@@ -91,11 +96,35 @@ def test_start_helper_repairs_missing_dependencies_before_launch():
     assert "Set-Location $projectRoot" in helper
     assert "Test-AppDependencies -PythonExe $PythonExe -Quiet" in helper
     assert "& $PythonExe -m ensurepip --upgrade" in helper
-    assert "& $PythonExe -m pip install -r $RequirementsPath" in helper
+    assert "$requirementsPath = Join-Path $projectRoot \"requirements.lock\"" in helper
+    assert "& $PythonExe -m pip install --require-hashes -r $RequirementsPath" in helper
     assert "Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath" in helper
     assert helper.index("Ensure-AppDependencies -PythonExe $pythonExe") < helper.index(
         "Get-Service -Name $ServiceName"
     )
+
+
+def test_windows_services_use_the_least_privilege_localservice_account():
+    installer = (PROJECT_ROOT / "deployment" / "windows" / "install_service.ps1").read_text(
+        encoding="utf-8"
+    )
+    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+
+    assert 'ObjectName "NT AUTHORITY\\LocalService" ""' in installer
+    assert 'sc.exe config $CaddyServiceName obj= "NT AUTHORITY\\LocalService" password= ""' in setup_script
+    assert "Grant-LocalServiceAccess -Path $dataDir -Access \"M\"" in installer
+    assert "Grant-LocalServiceAccess -Path $stateDir -Access \"M\"" in setup_script
+
+
+def test_target_server_preflight_is_available():
+    preflight = (PROJECT_ROOT / "deployment" / "windows" / "production_preflight.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "Assert-LocalServiceIdentity -ServiceName $AppServiceName" in preflight
+    assert "https://$Address/health" in preflight
+    assert "create_scheduled_backup" in preflight
+    assert "git -C $projectRoot status --porcelain" in preflight
 
 
 def test_stop_helper_detects_setuora_process_tree_not_loopback_socket():

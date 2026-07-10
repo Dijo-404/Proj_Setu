@@ -31,7 +31,8 @@ Proj_Setu/
 |-- start_setuora.bat                    Start the local/server app
 |-- stop_setuora.bat                     Stop the local/server app
 |-- update.bat                        Fast-forward update helper
-|-- requirements.txt                  Python dependency pins
+|-- requirements.txt                  Direct Python dependency pins
+|-- requirements.lock                 Hash-verified production dependency lock
 |-- app/                              FastAPI application
 |   |-- main.py                       App entrypoint and route registration
 |   |-- models.py                     SQLAlchemy database models
@@ -55,13 +56,22 @@ Proj_Setu/
 
 ## Quick Windows Setup For Non-Technical Users
 
+For a new server, run `SetuoraInstaller.exe` and approve the Windows administrator
+prompt. The installer installs Git for Windows if it is missing, downloads or
+updates the official `main` branch into `C:\Setuora`, and then runs the complete
+interactive setup described below. Internet access is required.
+
+The installer can also repair or update an existing `C:\Setuora` installation.
+It preserves the gitignored `.env`, database, backups, and runtime data. Installer
+source and reproducible build instructions are in `installer/`.
+
 On the Windows server, double-click:
 
 ```text
 setup.bat
 ```
 
-The setup helper checks for Python 3.11, installs missing prerequisites with `winget`, creates `.venv`, installs packages, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
+The setup helper checks for Python 3.11, installs the hash-verified dependency lock, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
 
 For the complete Caddy setup, right-click `setup.bat` and choose **Run as administrator**. Caddy setup is offered by default; pass `-SkipCaddy` if HTTPS will be handled separately.
 
@@ -87,7 +97,12 @@ To download the latest version from GitHub and restart Setuora, double-click:
 update.bat
 ```
 
-The updater fetches the latest version and applies only a safe fast-forward update (it never rebases), refreshes Python packages, runs an import check, and restarts the existing Windows service or console server. If Setuora is installed as a Windows service, run `update.bat` as Administrator.
+The updater accepts only a clean fast-forward update, refuses a dirty worktree, installs the hash-verified dependency lock, runs the test suite, and restarts the existing Windows service or console server. If Setuora is installed as a Windows service, run `update.bat` as Administrator.
+
+Before going live on the target server, run the [production release
+checklist](docs/deployment/production-release-checklist.md). It verifies the
+actual Windows services, Caddy TLS, security headers, source checkout, tests,
+and a fresh verified backup without disclosing secrets.
 
 ## 1. Open The Project Folder
 
@@ -128,7 +143,7 @@ Then activate again.
 ## 3. Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 ```
 
 If `pip` is missing on Linux, install it with your OS package manager, then rerun the command.
@@ -152,11 +167,15 @@ Open `.env` and update these before real use:
 ```text
 APP_SECRET_KEY=replace-with-a-long-random-secret
 BOOTSTRAP_ADMIN_USERNAME=admin
-BOOTSTRAP_ADMIN_PASSWORD=change-this-password
+BOOTSTRAP_ADMIN_PASSWORD=replace-with-a-unique-password
 DATABASE_URL=sqlite:///./data/setuora.db
+SESSION_COOKIE_SECURE=true
+TRUSTED_HOSTS=setuora.local,127.0.0.1,localhost
 ```
 
-For first local testing, the example values work, but do not use the default secret/password for production.
+The app refuses to create its first administrator with an empty, placeholder, or
+default password. For a LAN deployment, serve only through HTTPS and set the
+actual Caddy hostname or address in `TRUSTED_HOSTS`.
 
 ## 5. Start The App
 
@@ -182,19 +201,12 @@ http://127.0.0.1:8000
 
 If you used `setup.bat`, use the admin username and password shown at the end of setup. Keep that password somewhere safe because generated passwords are only displayed once.
 
-If you used the manual `.env.example` path, the default local-development login is:
-
-```text
-username: admin
-password: admin123
-```
-
 After logging in:
 
 1. Open `Users`.
 2. Create named users for purchase, sales, auditor, and admin roles.
 3. Disable unused accounts or, as super admin, delete accounts that should no longer appear in the user list.
-4. Change the bootstrap admin password before production.
+4. Store the first-admin password securely; changing bootstrap settings after the database exists does not change existing users.
 
 Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setuora.db` already exists does not reset an existing user. Create, disable, or delete users from the `Users` page. Deleted users with old activity are hidden from the list but kept internally for historical records.
 
@@ -447,7 +459,7 @@ If Tally sync stays pending:
 If the app fails to start:
 
 - Confirm the virtual environment is active.
-- Run `pip install -r requirements.txt`.
+- Run `pip install --require-hashes -r requirements.lock`.
 - Confirm port `8000` is free.
 - Check that `data/` is writable.
 - If using the current pinned dependencies, confirm the virtual environment is Python 3.11.

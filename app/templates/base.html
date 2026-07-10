@@ -122,7 +122,7 @@
       </div>
     </details>
   </header>
-  <script>
+  <script nonce="{{ csp_nonce(request) }}">
     const navMenus = Array.from(document.querySelectorAll("details.nav-menu"));
     const profileMenu = document.querySelector("details.profile-menu");
 

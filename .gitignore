@@ -16,11 +16,13 @@ data/secret_key
 .coverage
 htmlcov/
 logs/
+/dist/
 docs/context/*.zip
 docs/context/*.7z
 docs/context/*.rar
 CLAUDE.md
 deployment/caddy/caddy.exe
+deployment/caddy/Caddyfile
 deployment/caddy/setuora-caddy-root.crt
 deployment/caddy/state/
 deployment/windows/nssm.exe

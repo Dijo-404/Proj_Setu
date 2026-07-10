@@ -1,4 +1,5 @@
 from fastapi.templating import Jinja2Templates
+from jinja2 import Undefined
 
 from app.database import SessionLocal
 from app.models import has_any_role
@@ -9,6 +10,15 @@ templates = Jinja2Templates(directory="app/templates")
 templates.env.globals["batch_voucher_number"] = batch_voucher_number
 templates.env.globals["report_date"] = report_date
 templates.env.filters["report_date"] = report_date
+
+
+def csp_nonce(request=None) -> str:
+    if isinstance(request, Undefined):
+        return ""
+    return getattr(getattr(request, "state", None), "csp_nonce", "")
+
+
+templates.env.globals["csp_nonce"] = csp_nonce
 
 
 def role_can(subject, access_key: str) -> bool:

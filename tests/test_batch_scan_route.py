@@ -56,7 +56,7 @@ def test_camera_scan_route_adds_multiple_serials_without_restarting():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         responses = []
         shelf_responses = []
         for serial_number in serial_numbers:
@@ -138,7 +138,7 @@ def test_sale_return_mode_removes_item_and_requires_shelf_before_submit():
     app.dependency_overrides[get_db] = override_get_db
     cookies = {SESSION_COOKIE: create_session_token(1)}
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         returned = client.post(
             f"/batches/{batch_id}/scan",
             data={

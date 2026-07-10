@@ -10,8 +10,10 @@ Set-StrictMode -Version Latest
 
 $pythonExe = Join-Path $ProjectDir ".venv\Scripts\python.exe"
 $logDir = Join-Path $ProjectDir "logs"
+$dataDir = Join-Path $ProjectDir "data"
+$localServiceSid = "*S-1-5-19"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
-New-Item -ItemType Directory -Force -Path (Join-Path $ProjectDir "data") | Out-Null
+New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 
 if (-not (Test-Path -LiteralPath $pythonExe)) {
     throw "Virtual-environment Python was not found at '$pythonExe'."
@@ -26,6 +28,23 @@ function Invoke-Nssm {
         throw "NSSM command failed: nssm $($args -join ' ')"
     }
 }
+
+function Grant-LocalServiceAccess {
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Access
+    )
+
+    & icacls.exe $Path /grant "${localServiceSid}:(OI)(CI)$Access" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not grant LocalService $Access access to '$Path'."
+    }
+}
+
+# The service can read application code but only write its database and logs.
+Grant-LocalServiceAccess -Path $ProjectDir -Access "RX"
+Grant-LocalServiceAccess -Path $dataDir -Access "M"
+Grant-LocalServiceAccess -Path $logDir -Access "M"
 
 $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $existingService) {
@@ -44,5 +63,9 @@ Invoke-Nssm set $ServiceName AppRotateFiles 1
 Invoke-Nssm set $ServiceName AppRotateBytes 10485760
 Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START
 Invoke-Nssm set $ServiceName AppExit Default Restart
+Invoke-Nssm set $ServiceName AppThrottle 15000
+Invoke-Nssm set $ServiceName AppRestartDelay 5000
+# Never run the web application as LocalSystem. LocalService has no administrator
+# privileges and only has write access to the runtime directories above.
+Invoke-Nssm set $ServiceName ObjectName "NT AUTHORITY\LocalService" ""
 Invoke-Nssm start $ServiceName
-

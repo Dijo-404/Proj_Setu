@@ -190,7 +190,7 @@
   </form>
 </section>
 {% if batch_type.value == 'SALE' %}
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     function initGstRegistrationFields() {
       const select = document.querySelector('select[name="party_gst_registration_type"]');

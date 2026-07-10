@@ -19,6 +19,7 @@ Set-StrictMode -Version Latest
 
 $ProjectRoot = Split-Path -Parent $env:SETUORA_UPDATE_BAT
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
 $StartScript = Join-Path $ProjectRoot "start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
@@ -27,6 +28,7 @@ $restartAsService = $false
 $restartAsConsole = $false
 $restartHostAddress = "127.0.0.1"
 $restartPort = $Port
+$updateStarted = $false
 
 function Write-Section {
     param([string]$Title)
@@ -78,10 +80,15 @@ function Start-SetuoraServer {
 }
 
 function Restore-PreviousVersion {
+    if (-not $updateStarted) {
+        return
+    }
     Write-Host "Rolling back to the previous version ($previousHead)..." -ForegroundColor Yellow
+    # This is safe because update.bat requires a clean worktree before changing
+    # source files, and this reset only returns the updater's own fast-forward.
     & git reset --hard $previousHead | Out-Host
     Ensure-Pip
-    & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt") | Out-Host
+    & $VenvPython -m pip install --require-hashes -r $RequirementsLock | Out-Host
 }
 
 Set-Location $ProjectRoot
@@ -94,6 +101,9 @@ if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
 }
 if (-not (Test-Path $VenvPython)) {
     throw "Setuora is not set up yet. Run setup.bat first."
+}
+if (-not (Test-Path $RequirementsLock)) {
+    throw "The pinned dependency lockfile is missing: '$RequirementsLock'. Reinstall from a complete release."
 }
 if (-not (Test-Path $ProcessHelper)) {
     throw "The Setuora process helper is missing: '$ProcessHelper'."
@@ -126,6 +136,14 @@ if ($restartAsService -and -not (Test-AdminShell)) {
     throw "Setuora is installed as a Windows service. Right-click update.bat, choose 'Run as administrator', and try again."
 }
 
+$worktreeChanges = @(& git status --porcelain)
+if ($LASTEXITCODE -ne 0) {
+    throw "Git could not inspect the working tree. Your installation was left unchanged."
+}
+if ($worktreeChanges.Count -gt 0) {
+    throw "Refusing to update because local source changes are present. Commit or stash them first; update.bat never overwrites local code."
+}
+
 # Remember the current commit so a failed update can roll back.
 $previousHead = (@(& git rev-parse HEAD) -join "").Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($previousHead)) {
@@ -139,22 +157,13 @@ if ($LASTEXITCODE -ne 0) {
     throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run update.bat again."
 }
 
-# Normally the update is a clean fast-forward, so try that first. This keeps the
-# updater independent of machine-wide pull.rebase settings and never rebases.
-# This deployment machine never commits to the project, so if history has
-# diverged (e.g. the remote branch was force-pushed / rewritten) a fast-forward
-# is impossible -- fall back to matching the remote exactly with a hard reset.
-# Data files (data/setuora.db, .env, data/secret_key) are gitignored, so the reset
-# only rewinds tracked source files and never touches live data or config.
+# Only accept a clean fast-forward. A rewritten or divergent remote must be
+# reviewed manually; the updater never resets an installation to another commit.
 & git merge --ff-only FETCH_HEAD
 if ($LASTEXITCODE -ne 0) {
-    Write-Host "A clean fast-forward was not possible (the remote history was rewritten)." -ForegroundColor Yellow
-    Write-Host "Resetting local files to match origin/$branch exactly (your data and .env are untouched)..." -ForegroundColor Yellow
-    & git reset --hard FETCH_HEAD
-    if ($LASTEXITCODE -ne 0) {
-        throw "Git could not sync the project to the latest version. Your data files were left intact; check the Git message above and run update.bat again."
-    }
+    throw "A clean fast-forward was not possible. No files were replaced; review the remote history before updating."
 }
+$updateStarted = $true
 
 if (-not (Test-Path $StopScript)) {
     throw "The server management helper is missing after the update: '$StopScript'."
@@ -173,7 +182,7 @@ try {
         throw "Could not upgrade pip."
     }
 
-    & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
+    & $VenvPython -m pip install --require-hashes -r $RequirementsLock
     if ($LASTEXITCODE -ne 0) {
         throw "Python dependency installation failed."
     }
@@ -186,6 +195,12 @@ try {
     & $VenvPython -c "import uvicorn; from app.main import app; print('App import OK')"
     if ($LASTEXITCODE -ne 0) {
         throw "The updated app could not be imported. Check the error above."
+    }
+
+    Write-Section "Regression Tests"
+    & $VenvPython -m pytest -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "The updated release did not pass its test suite."
     }
 }
 catch {

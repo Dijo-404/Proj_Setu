@@ -109,7 +109,7 @@
 {% endif %}
 
 <script src="/static/password-toggle.js"></script>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     const pickers = Array.from(document.querySelectorAll("[data-role-picker]"));
     pickers.forEach((picker) => {

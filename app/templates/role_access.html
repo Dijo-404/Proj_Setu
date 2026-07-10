@@ -80,7 +80,7 @@
   <a class="button" href="/settings/access">Reset unsaved changes</a>
 </div>
 </form>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (() => {
     const toneByValue = {
       shown: "synced",

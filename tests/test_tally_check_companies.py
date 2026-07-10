@@ -58,7 +58,7 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         cookies = {SESSION_COOKIE: create_session_token(1)}
         page = client.get("/tally-check", cookies=cookies)
         visible_config = {

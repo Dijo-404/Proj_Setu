@@ -25,7 +25,7 @@ The helper:
 
 - checks for Python 3.11 and can install it with `winget` when available
 - creates `.venv`, `data/`, and `logs/`
-- installs `requirements.txt`
+- installs the hash-verified `requirements.lock`
 - asks for the first admin username and password
 - writes `.env`
 - verifies that the app imports correctly
@@ -75,7 +75,7 @@ Linux/macOS:
 ```bash
 python3.11 -m venv .venv
 source .venv/bin/activate
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 cp .env.example .env
 ```
 
@@ -84,7 +84,7 @@ On Windows PowerShell:
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 copy .env.example .env
 ```
 
@@ -95,6 +95,8 @@ APP_SECRET_KEY=replace-with-a-long-random-secret
 BOOTSTRAP_ADMIN_USERNAME=admin
 BOOTSTRAP_ADMIN_PASSWORD=replace-before-first-use
 DATABASE_URL=sqlite:///./data/setuora.db
+SESSION_COOKIE_SECURE=true
+TRUSTED_HOSTS=setuora.local,127.0.0.1,localhost
 ```
 
 Start the app:
@@ -103,15 +105,18 @@ Start the app:
 uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Open:
+For a production LAN deployment, open only through the configured HTTPS proxy:
 
 ```text
-http://127.0.0.1:8000
+https://setuora.local
 ```
 
 ## First Login
 
 If `setup.bat` created `.env`, use the admin login printed at the end of setup. If you copied `.env.example`, use the bootstrap admin from `.env`, then create named users from `Users`.
+
+The app refuses to initialize its first administrator with an empty, placeholder,
+or default password. Replace every placeholder before starting it.
 
 Changing bootstrap values after the database exists does not update an existing user. Use the `Users` page for normal user administration.
 

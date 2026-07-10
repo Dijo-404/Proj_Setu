@@ -9,6 +9,12 @@ Use NSSM to run Setuora automatically after reboot. The easier path is to run `s
 - App command: `.venv\Scripts\uvicorn.exe app.main:app --host 127.0.0.1 --port 8000`
 - Logs: `logs\setuora-out.log` and `logs\setuora-err.log`
 
+The installer runs the service as `NT AUTHORITY\LocalService`, not LocalSystem.
+It grants that account read access to the application and write access only to
+`data\` and `logs\`. If an off-machine backup needs an authenticated network
+share, use a separately reviewed service-account deployment instead of granting
+the default account broader rights.
+
 ## Steps
 
 1. Run `setup.bat` first so `.venv`, `.env`, `data\`, and `logs\` exist.

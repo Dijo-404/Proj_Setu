@@ -22,6 +22,7 @@ Set-StrictMode -Version Latest
 $ProjectRoot = Split-Path -Parent $env:SETUORA_SETUP_BAT
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
+$RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
 $StartScript = Join-Path $ProjectRoot "start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $EnvPath = Join-Path $ProjectRoot ".env"
@@ -31,6 +32,7 @@ $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
 $CaddyServiceName = "SetuoraCaddy"
 $LegacyCaddyServiceNames = @("SetuCaddy")
+$LocalServiceSid = "*S-1-5-19"
 
 function Write-Section {
     param([string]$Title)
@@ -216,13 +218,17 @@ function Ensure-Pip {
 function Install-Dependencies {
     Ensure-Pip
 
+    if (-not (Test-Path $RequirementsLock)) {
+        throw "The pinned dependency lockfile is missing: '$RequirementsLock'. Reinstall from a complete release."
+    }
+
     Write-Host "Installing Python packages. This can take a few minutes..."
     & $VenvPython -m pip install --upgrade pip
     if ($LASTEXITCODE -ne 0) {
         throw "Could not upgrade pip."
     }
 
-    & $VenvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt")
+    & $VenvPython -m pip install --require-hashes -r $RequirementsLock
     if ($LASTEXITCODE -ne 0) {
         throw "Could not install project dependencies."
     }
@@ -269,11 +275,37 @@ function Write-EnvFile {
     }
 }
 
+function Test-EnvFileHasSafeBootstrapPassword {
+    if (-not (Test-Path $EnvPath)) {
+        return $false
+    }
+
+    $line = Get-Content -LiteralPath $EnvPath |
+        Where-Object { $_ -match "^BOOTSTRAP_ADMIN_PASSWORD=" } |
+        Select-Object -First 1
+    if (-not $line) {
+        return $false
+    }
+
+    $password = $line.Substring("BOOTSTRAP_ADMIN_PASSWORD=".Length)
+    return (
+        $password.Length -ge 8 -and
+        $password -notin @("admin123", "change-this-password", "change-this-before-first-start")
+    )
+}
+
 function Ensure-EnvFile {
     if (Test-Path $EnvPath) {
-        $keepExisting = Read-YesNo ".env already exists. Keep it as-is?" $true
-        if ($keepExisting) {
-            return $null
+        $safeBootstrap = Test-EnvFileHasSafeBootstrapPassword
+        if ($safeBootstrap) {
+            if (Read-YesNo ".env already exists. Keep it as-is?" $true) {
+                return $null
+            }
+        }
+        else {
+            if (-not (Read-YesNo ".env has no safe first-admin password. Replace it now?" $true)) {
+                return $null
+            }
         }
     }
 
@@ -481,6 +513,18 @@ function Write-CaddyConfig {
     )
 }
 
+function Grant-LocalServiceAccess {
+    param(
+        [Parameter(Mandatory=$true)][string]$Path,
+        [Parameter(Mandatory=$true)][string]$Access
+    )
+
+    & icacls.exe $Path /grant "${LocalServiceSid}:(OI)(CI)$Access" /T /C | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not grant LocalService $Access access to '$Path'."
+    }
+}
+
 function Remove-LegacyCaddyServices {
     foreach ($legacyName in $LegacyCaddyServiceNames) {
         if ($legacyName -eq $CaddyServiceName) {
@@ -562,11 +606,20 @@ function Install-CaddyService {
             -ErrorAction Stop | Out-Null
     }
 
+    # Caddy does not need LocalSystem privileges. It can read the proxy files and
+    # write only its own certificate state; the app service gets separate access.
+    Grant-LocalServiceAccess -Path $CaddyDir -Access "RX"
+
     & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setuora QR Tally Bridge" | Out-Null
+    & sc.exe config $CaddyServiceName obj= "NT AUTHORITY\LocalService" password= "" | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not configure Caddy to run as LocalService."
+    }
     & sc.exe failure $CaddyServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     $stateDir = Join-Path $CaddyDir "state"
     New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
+    Grant-LocalServiceAccess -Path $stateDir -Access "M"
     $serviceRegistryPath = "HKLM:\SYSTEM\CurrentControlSet\Services\$CaddyServiceName"
     New-ItemProperty -Path $serviceRegistryPath -Name Environment -PropertyType MultiString -Value @(
         "XDG_DATA_HOME=$stateDir",
@@ -642,6 +695,7 @@ function Offer-CaddySetup {
     Write-CaddyConfig -Address $address -UpstreamPort $Port
     $rootCertificate = Install-CaddyService -CaddyExe $caddyExe
     Set-EnvSetting -Name "SESSION_COOKIE_SECURE" -Value "true"
+    Set-EnvSetting -Name "TRUSTED_HOSTS" -Value "$address,127.0.0.1,localhost,testserver"
     $existingSetuoraService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
     if ($existingSetuoraService -and $existingSetuoraService.Status -eq "Running") {
         Restart-Service -Name "SetuoraQrTallyBridge"

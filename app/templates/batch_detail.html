@@ -368,11 +368,11 @@
 </section>
 {% endif %}
 {% if fefo_error %}
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   document.getElementById('fefo-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 </script>
 {% endif %}
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     const input = document.getElementById("fefo-product-search");
     const select = document.getElementById("fefo-product-select");

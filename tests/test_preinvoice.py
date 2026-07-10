@@ -154,7 +154,7 @@ def test_preinvoice_route_is_available_only_for_nonempty_sales():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         cookies = {SESSION_COOKIE: create_session_token(1)}
         response = client.get(f"/batches/{sale_id}/preinvoice.pdf", cookies=cookies)
         empty_response = client.get(

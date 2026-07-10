@@ -90,7 +90,7 @@
     </table>
   </div>
 </section>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     const input = document.getElementById("assignment-product-search");
     const select = document.getElementById("assignment-product-select");

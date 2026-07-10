@@ -283,7 +283,7 @@
 </dialog>
 {% endfor %}
 
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     function closeDialog(dialog) {
       if (dialog && typeof dialog.close === "function") dialog.close();

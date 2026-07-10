@@ -68,7 +68,7 @@ def test_admin_sets_shelf_verification_interval_on_products_page():
     app.dependency_overrides[get_db] = override_get_db
     cookies = {SESSION_COOKIE: create_session_token(1)}
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         page = client.get("/products", cookies=cookies)
         update = client.post(
             f"/products/{product_id}/pricing",
@@ -161,7 +161,7 @@ def test_purchase_requires_shelf_qr_at_interval_and_before_submit():
     app.dependency_overrides[get_db] = override_get_db
     cookies = {SESSION_COOKIE: create_session_token(1)}
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
 
         first = client.post(
             f"/batches/{batch_id}/scan",
@@ -298,7 +298,7 @@ def test_auditor_can_verify_shelf_and_location_mismatch_is_logged():
     app.dependency_overrides[get_db] = override_get_db
     cookies = {SESSION_COOKIE: create_session_token(1)}
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         product_scan = client.post(
             f"/batches/{batch_id}/scan",
             data={"serial_number": "AUD-SHELF-000001", "scan_source": "camera"},

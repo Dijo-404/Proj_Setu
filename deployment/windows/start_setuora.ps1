@@ -10,7 +10,7 @@ Set-StrictMode -Version Latest
 
 $projectRoot = [IO.Path]::GetFullPath($ProjectDir).TrimEnd("\")
 $pythonExe = [IO.Path]::GetFullPath((Join-Path $projectRoot ".venv\Scripts\python.exe"))
-$requirementsPath = Join-Path $projectRoot "requirements.txt"
+$requirementsPath = Join-Path $projectRoot "requirements.lock"
 $processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
 Set-Location $projectRoot
 
@@ -60,7 +60,7 @@ function Ensure-AppDependencies {
     }
 
     if (-not (Test-Path -LiteralPath $RequirementsPath)) {
-        throw "Python packages are missing and requirements.txt was not found at '$RequirementsPath'. Run setup.bat again from the project folder."
+        throw "Python packages are missing and requirements.lock was not found at '$RequirementsPath'. Reinstall from a complete release."
     }
 
     Write-Host "Python packages are missing or incomplete. Installing requirements..."
@@ -71,7 +71,7 @@ function Ensure-AppDependencies {
         throw "Could not upgrade pip."
     }
 
-    & $PythonExe -m pip install -r $RequirementsPath | Out-Host
+    & $PythonExe -m pip install --require-hashes -r $RequirementsPath | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Python dependency installation failed. Check the pip message above, then run setup.bat again."
     }

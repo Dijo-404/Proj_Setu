@@ -264,7 +264,7 @@ def test_relocation_routes_enforce_roles_and_record_android_device():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         purchase_page = client.get(
             "/warehouse/move",
             cookies={SESSION_COOKIE: create_session_token(2)},

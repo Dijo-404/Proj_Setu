@@ -358,7 +358,7 @@ def test_stock_movement_page_and_exports_follow_role_access():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         admin_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(1)})
         manager_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(2)})
         sales_response = client.get("/stock-movement", cookies={SESSION_COOKIE: create_session_token(3)})

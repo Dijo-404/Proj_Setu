@@ -199,7 +199,7 @@
 {% endfor %}
 
 <script src="/static/ledger-mapping-editor.js?v=20260628-2"></script>
-<script>
+<script nonce="{{ csp_nonce(request) }}">
   (function () {
     function openDialog(dialog) {
       if (!dialog) return;

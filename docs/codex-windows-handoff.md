@@ -60,7 +60,7 @@ Manual fallback:
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+pip install --require-hashes -r requirements.lock
 copy .env.example .env
 ```
 
@@ -82,18 +82,17 @@ Open:
 http://127.0.0.1:8000
 ```
 
-Default dev login from `.env.example`:
-
-```text
-admin / admin123
-```
-
-Before production, change:
+Before the first start, set:
 
 ```text
 APP_SECRET_KEY
 BOOTSTRAP_ADMIN_PASSWORD
+SESSION_COOKIE_SECURE=true
+TRUSTED_HOSTS=<your-lan-hostname-or-ip>,127.0.0.1,localhost
 ```
+
+The application refuses to initialize its first admin account with an empty,
+placeholder, or default password.
 
 ## Important Files
 

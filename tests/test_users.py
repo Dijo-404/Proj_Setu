@@ -54,7 +54,7 @@ def test_super_admin_can_delete_unused_user():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         cookies = {SESSION_COOKIE: create_session_token(1)}
         page = client.get("/users", cookies=cookies)
         delete = client.post("/users/2/delete", cookies=cookies)
@@ -117,7 +117,7 @@ def test_user_delete_is_super_admin_only_and_archives_history_user():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         admin_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(1)})
         admin_delete = client.post("/users/3/delete", cookies={SESSION_COOKIE: create_session_token(1)})
         self_delete = client.post("/users/2/delete", cookies={SESSION_COOKIE: create_session_token(2)})
@@ -164,7 +164,7 @@ def test_super_admin_can_reset_another_users_password():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         cookies = {SESSION_COOKIE: create_session_token(1)}
         page = client.get("/users", cookies=cookies)
         response = client.post(
@@ -213,7 +213,7 @@ def test_password_reset_is_super_admin_only_and_validates_input():
 
     app.dependency_overrides[get_db] = override_get_db
     try:
-        client = TestClient(app, follow_redirects=False)
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         admin_page = client.get("/users", cookies={SESSION_COOKIE: create_session_token(1)})
         admin_reset = client.post(
             "/users/3/password",
