@@ -1,6 +1,11 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "SETUORA_NO_PAUSE=0"
+if /I "%~1"=="--no-pause" (
+    set "SETUORA_NO_PAUSE=1"
+    shift
+)
 
 set "PROJECT_DIR=%CD%"
 set "START_SCRIPT=%PROJECT_DIR%\deployment\windows\start_setuora.ps1"
@@ -63,5 +68,5 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -ProjectDir
 set "START_EXIT=%ERRORLEVEL%"
 echo.
 if not "%START_EXIT%"=="0" echo Setuora stopped with error code %START_EXIT%.
-pause
+if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %START_EXIT%

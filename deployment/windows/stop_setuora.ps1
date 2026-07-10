@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$ProjectDir,
-    [string]$ServiceName = "SetuoraQrTallyBridge"
+    [string]$ServiceName = "SetuoraQrTallyBridge",
+    [string]$CaddyServiceName = "SetuoraCaddy"
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,6 +49,22 @@ foreach ($process in $setuoraProcesses) {
     elseif (Get-Process -Id $process.ProcessId -ErrorAction SilentlyContinue) {
         Write-Host "Stopping the existing Setuora server process..."
         Stop-Process -Id $process.ProcessId -Force
+    }
+    $stoppedAnything = $true
+}
+
+$caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+if ($caddyService -and $caddyService.Status -ne "Stopped") {
+    Write-Host "Stopping the Setuora HTTPS proxy..."
+    try {
+        Stop-Service -Name $CaddyServiceName -Force
+        $caddyService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+    }
+    catch [System.ServiceProcess.TimeoutException] {
+        throw "The Setuora HTTPS proxy did not stop within 20 seconds. Check the Caddy service, then try again."
+    }
+    catch {
+        throw "Windows could not stop the Setuora HTTPS proxy. Run this command as Administrator. $($_.Exception.Message)"
     }
     $stoppedAnything = $true
 }

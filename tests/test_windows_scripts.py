@@ -123,8 +123,35 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     assert "StartName = $CaddyServiceStartName" in setup_script
     assert "StartPassword = $null" in setup_script
     assert "sc.exe config $CaddyServiceName obj=" not in setup_script
+    assert 'StartMode = "Manual"' in setup_script
     assert "Grant-LocalServiceAccess -Path $dataDir -Access \"M\"" in installer
     assert "Grant-LocalServiceAccess -Path $stateDir -Access \"M\"" in setup_script
+    assert "Invoke-Nssm set $ServiceName Start SERVICE_DEMAND_START" in installer
+    assert "Invoke-Nssm start $ServiceName" not in installer
+
+
+def test_windows_workflows_can_run_from_the_unified_executable_without_pausing():
+    for filename in ("setup.bat", "start_setuora.bat", "stop_setuora.bat", "update.bat"):
+        script = (PROJECT_ROOT / filename).read_text(encoding="utf-8")
+
+        assert 'if /I "%~1"=="--no-pause"' in script
+        assert 'if not "%SETUORA_NO_PAUSE%"=="1" pause' in script
+
+
+def test_setup_does_not_start_services_or_caddy_by_default():
+    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+
+    assert '[switch]$ConfigureCaddy' in setup_script
+    assert 'Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $false' in setup_script
+    assert 'Read-YesNo "Start Setuora now in a new window?" $false' in setup_script
+    assert 'Stop-Service -Name $CaddyServiceName -Force' in setup_script
+
+
+def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
+    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+
+    assert '$CaddyServiceName = "SetuoraCaddy"' in update_script
+    assert "Start-Service -Name $CaddyServiceName" in update_script
 
 
 def test_target_server_preflight_is_available():

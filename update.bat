@@ -1,12 +1,17 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "SETUORA_NO_PAUSE=0"
+if /I "%~1"=="--no-pause" (
+    set "SETUORA_NO_PAUSE=1"
+    shift
+)
 set "SETUORA_UPDATE_BAT=%~f0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_UPDATE_BAT; $marker='### POWERSHELL UPDATE SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded update script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
 set "UPDATE_EXIT=%ERRORLEVEL%"
 echo.
 if not "%UPDATE_EXIT%"=="0" echo Update did not complete successfully. The error above explains what needs attention.
-pause
+if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %UPDATE_EXIT%
 
 ### POWERSHELL UPDATE SCRIPT ###
@@ -24,6 +29,7 @@ $StartScript = Join-Path $ProjectRoot "start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
 $ServiceName = "SetuoraQrTallyBridge"
+$CaddyServiceName = "SetuoraCaddy"
 $restartAsService = $false
 $restartAsConsole = $false
 $restartHostAddress = "127.0.0.1"
@@ -62,6 +68,11 @@ function Ensure-Pip {
 
 function Start-SetuoraServer {
     if ($restartAsService) {
+        $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+        if ($caddyService -and $caddyService.Status -ne "Running") {
+            Start-Service -Name $CaddyServiceName
+            $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
+        }
         Start-Service -Name $ServiceName
         $svc = Get-Service -Name $ServiceName
         $svc.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))

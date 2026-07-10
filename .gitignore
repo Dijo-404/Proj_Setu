@@ -17,6 +17,7 @@ data/secret_key
 htmlcov/
 logs/
 /dist/
+/Setuora.exe
 docs/context/*.zip
 docs/context/*.7z
 docs/context/*.rar

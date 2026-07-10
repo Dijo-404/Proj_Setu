@@ -1,6 +1,11 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "SETUORA_NO_PAUSE=0"
+if /I "%~1"=="--no-pause" (
+    set "SETUORA_NO_PAUSE=1"
+    shift
+)
 
 set "PROJECT_DIR=%CD%"
 set "STOP_SCRIPT=%PROJECT_DIR%\deployment\windows\stop_setuora.ps1"
@@ -26,5 +31,5 @@ if "%STOP_EXIT%"=="0" (
     echo right-click stop_setuora.bat and choose Run as administrator.
 )
 
-pause
+if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %STOP_EXIT%

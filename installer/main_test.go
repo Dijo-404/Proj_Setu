@@ -60,3 +60,21 @@ func TestValidBranch(t *testing.T) {
 		}
 	}
 }
+
+func TestParseOptionsSupportsUnifiedCommands(t *testing.T) {
+	options, err := parseOptions([]string{"start", "--install-dir", `C:\Setuora`})
+	if err != nil {
+		t.Fatalf("parseOptions() returned %v", err)
+	}
+	if options.command != "start" {
+		t.Fatalf("command = %q, want start", options.command)
+	}
+
+	options, err = parseOptions([]string{"--install-dir", `C:\Setuora`})
+	if err != nil {
+		t.Fatalf("parseOptions() returned %v", err)
+	}
+	if options.command != "setup" {
+		t.Fatalf("legacy flags command = %q, want setup", options.command)
+	}
+}

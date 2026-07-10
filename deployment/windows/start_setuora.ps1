@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory=$true)][string]$ProjectDir,
     [string]$HostAddress = "127.0.0.1",
     [int]$Port = 8000,
-    [string]$ServiceName = "SetuoraQrTallyBridge"
+    [string]$ServiceName = "SetuoraQrTallyBridge",
+    [string]$CaddyServiceName = "SetuoraCaddy"
 )
 
 $ErrorActionPreference = "Stop"
@@ -96,6 +97,21 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 }
 
 Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath
+
+$caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+if ($caddyService -and $caddyService.Status -ne "Running") {
+    Write-Host "Starting the Setuora HTTPS proxy..."
+    try {
+        Start-Service -Name $CaddyServiceName
+        $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
+    }
+    catch [System.ServiceProcess.TimeoutException] {
+        throw "The Setuora HTTPS proxy did not start within 20 seconds. Check the Caddy service, then try again."
+    }
+    catch {
+        throw "Windows could not start the Setuora HTTPS proxy. Run this command as Administrator. $($_.Exception.Message)"
+    }
+}
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($service) {

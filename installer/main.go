@@ -24,10 +24,11 @@ const (
 var validBranch = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
 
 type installerOptions struct {
+	command    string
 	installDir string
 	branch     string
-	skipStart  bool
-	skipCaddy  bool
+	port       int
+	withCaddy  bool
 	elevated   bool
 }
 
@@ -45,38 +46,69 @@ func main() {
 	}
 
 	if runtime.GOOS != "windows" {
-		fail(errors.New("SetuoraInstaller.exe can only run on Windows"))
+		fail(errors.New("Setuora.exe can only run on Windows"))
 	}
 
-	if !isAdministrator() {
-		if options.elevated {
-			fail(errors.New("administrator access is required to install Setuora"))
+	if options.command == "" {
+		options.command, err = chooseCommand()
+		if err != nil {
+			fail(err)
 		}
-		if err := relaunchElevated(options); err != nil {
-			fail(fmt.Errorf("the elevated installer did not complete: %w", err))
+	}
+
+	if options.command == "help" {
+		printUsage()
+		return
+	}
+
+	if options.command == "setup" {
+		if !isAdministrator() {
+			if options.elevated {
+				fail(errors.New("administrator access is required for setup"))
+			}
+			if err := relaunchElevated(options); err != nil {
+				fail(fmt.Errorf("the elevated setup did not complete: %w", err))
+			}
+			return
+		}
+		if err := runInstaller(options); err != nil {
+			fail(err)
 		}
 		return
 	}
 
-	if err := runInstaller(options); err != nil {
+	if err := runProjectCommand(options); err != nil {
 		fail(err)
 	}
 }
 
 func parseOptions(arguments []string) (installerOptions, error) {
 	options := installerOptions{}
-	flags := flag.NewFlagSet("SetuoraInstaller", flag.ContinueOnError)
+	hadArguments := len(arguments) > 0
+	if hadArguments && !strings.HasPrefix(arguments[0], "-") {
+		options.command = strings.ToLower(strings.TrimSpace(arguments[0]))
+		arguments = arguments[1:]
+	}
+
+	flags := flag.NewFlagSet("Setuora", flag.ContinueOnError)
 	flags.SetOutput(os.Stdout)
 	flags.StringVar(&options.installDir, "install-dir", defaultInstallDirectory(), "Setuora installation directory")
 	flags.StringVar(&options.branch, "branch", defaultBranch, "Git branch to install")
-	flags.BoolVar(&options.skipStart, "skip-start", false, "do not start Setuora after setup")
-	flags.BoolVar(&options.skipCaddy, "skip-caddy", false, "skip LAN HTTPS/Caddy setup")
+	flags.IntVar(&options.port, "port", 8000, "local Setuora port")
+	flags.BoolVar(&options.withCaddy, "with-caddy", false, "configure the optional LAN HTTPS/Caddy service during setup")
 	flags.BoolVar(&options.elevated, "elevated", false, "internal UAC flag")
 	if err := flags.Parse(arguments); err != nil {
 		return options, err
 	}
 	if flags.NArg() != 0 {
 		return options, fmt.Errorf("unexpected argument: %s", flags.Arg(0))
+	}
+	if options.command == "" && hadArguments {
+		// Preserve the previous installer behavior for invocations that only use flags.
+		options.command = "setup"
+	}
+	if options.command != "" && options.command != "setup" && options.command != "start" && options.command != "stop" && options.command != "update" && options.command != "help" {
+		return options, fmt.Errorf("unknown command: %s", options.command)
 	}
 
 	options.installDir = strings.TrimSpace(options.installDir)
@@ -86,6 +118,9 @@ func parseOptions(arguments []string) (installerOptions, error) {
 	}
 	if !validBranch.MatchString(options.branch) || strings.Contains(options.branch, "..") {
 		return options, fmt.Errorf("invalid Git branch name: %q", options.branch)
+	}
+	if options.port < 1 || options.port > 65535 {
+		return options, fmt.Errorf("port must be between 1 and 65535: %d", options.port)
 	}
 
 	absoluteDir, err := filepath.Abs(options.installDir)
@@ -110,8 +145,8 @@ func defaultInstallDirectory() string {
 }
 
 func runInstaller(options installerOptions) error {
-	fmt.Println("Setuora QR Tally Bridge Installer")
-	fmt.Println("=================================")
+	fmt.Println("Setuora QR Tally Bridge Setup")
+	fmt.Println("==============================")
 	fmt.Printf("Installation folder: %s\n\n", options.installDir)
 
 	gitPath, err := ensureGit()
@@ -125,13 +160,43 @@ func runInstaller(options installerOptions) error {
 	if !fileExists(filepath.Join(options.installDir, "setup.bat")) {
 		return fmt.Errorf("the downloaded project does not contain setup.bat: %s", options.installDir)
 	}
+	if err := installControlExecutable(options.installDir); err != nil {
+		return fmt.Errorf("place Setuora.exe in the installation folder: %w", err)
+	}
 
 	fmt.Println("\n== Complete Application Setup ==")
 	if err := runSetup(options); err != nil {
 		return fmt.Errorf("Setuora setup failed: %w", err)
 	}
-	fmt.Println("\nSetuora installation completed successfully.")
+	fmt.Println("\nSetuora setup completed successfully.")
 	return nil
+}
+
+func installControlExecutable(installDir string) error {
+	executable, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	destination := filepath.Join(installDir, "Setuora.exe")
+	if strings.EqualFold(filepath.Clean(executable), filepath.Clean(destination)) {
+		return nil
+	}
+
+	source, err := os.Open(executable)
+	if err != nil {
+		return err
+	}
+	defer source.Close()
+
+	target, err := os.OpenFile(destination, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(target, source); err != nil {
+		target.Close()
+		return err
+	}
+	return target.Close()
 }
 
 func ensureGit() (string, error) {
@@ -319,15 +384,73 @@ func synchronizeRepository(gitPath, installDir, branch string) error {
 }
 
 func runSetup(options installerOptions) error {
-	arguments := []string{"/d", "/c", "setup.bat"}
-	if options.skipStart {
-		arguments = append(arguments, "-SkipStart")
-	}
-	if options.skipCaddy {
+	arguments := []string{"/d", "/c", "setup.bat", "--no-pause", "-SkipStart", "-Port", fmt.Sprint(options.port)}
+	if options.withCaddy {
+		arguments = append(arguments, "-ConfigureCaddy")
+	} else {
 		arguments = append(arguments, "-SkipCaddy")
 	}
-	command := exec.Command("cmd.exe", arguments...)
-	command.Dir = options.installDir
+	return runVisibleInDir(options.installDir, "cmd.exe", arguments...)
+}
+
+func runProjectCommand(options installerOptions) error {
+	workflow := map[string]string{
+		"start":  "start_setuora.bat",
+		"stop":   "stop_setuora.bat",
+		"update": "update.bat",
+	}[options.command]
+	if workflow == "" {
+		return fmt.Errorf("unsupported command: %s", options.command)
+	}
+	if !fileExists(filepath.Join(options.installDir, workflow)) {
+		return fmt.Errorf("%s was not found in %s; run 'Setuora.exe setup' first", workflow, options.installDir)
+	}
+
+	arguments := []string{"/d", "/c", workflow, "--no-pause"}
+	if options.command == "start" || options.command == "update" {
+		arguments = append(arguments, "-Port", fmt.Sprint(options.port))
+	}
+	return runVisibleInDir(options.installDir, "cmd.exe", arguments...)
+}
+
+func chooseCommand() (string, error) {
+	fmt.Println("Setuora QR Tally Bridge")
+	fmt.Println("1. Setup or repair")
+	fmt.Println("2. Start")
+	fmt.Println("3. Stop")
+	fmt.Println("4. Update")
+	fmt.Print("Choose an action: ")
+
+	var choice string
+	if _, err := fmt.Fscanln(os.Stdin, &choice); err != nil {
+		return "", fmt.Errorf("read action: %w", err)
+	}
+	switch strings.TrimSpace(choice) {
+	case "1", "setup":
+		return "setup", nil
+	case "2", "start":
+		return "start", nil
+	case "3", "stop":
+		return "stop", nil
+	case "4", "update":
+		return "update", nil
+	default:
+		return "", fmt.Errorf("%q is not a valid action", choice)
+	}
+}
+
+func printUsage() {
+	fmt.Println("Usage: Setuora.exe <setup|start|stop|update> [options]")
+	fmt.Println("  setup  Installs or repairs Setuora without starting it automatically.")
+	fmt.Println("         Add --with-caddy to configure the optional HTTPS proxy.")
+	fmt.Println("  start  Starts Setuora and the optional HTTPS proxy.")
+	fmt.Println("  stop   Stops Setuora and the optional HTTPS proxy.")
+	fmt.Println("  update Downloads a verified fast-forward update and restores the prior runtime state.")
+}
+
+func runVisibleInDir(directory, name string, arguments ...string) error {
+	command := exec.Command(name, arguments...)
+	command.Dir = directory
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
@@ -368,12 +491,9 @@ func relaunchElevated(options installerOptions) error {
 	if err != nil {
 		return err
 	}
-	arguments := []string{"--elevated", "--install-dir", options.installDir, "--branch", options.branch}
-	if options.skipStart {
-		arguments = append(arguments, "--skip-start")
-	}
-	if options.skipCaddy {
-		arguments = append(arguments, "--skip-caddy")
+	arguments := []string{options.command, "--elevated", "--install-dir", options.installDir, "--branch", options.branch, "--port", fmt.Sprint(options.port)}
+	if options.withCaddy {
+		arguments = append(arguments, "--with-caddy")
 	}
 	quotedArguments := make([]string, 0, len(arguments))
 	for _, argument := range arguments {
@@ -466,7 +586,7 @@ func fileExists(path string) bool {
 }
 
 func fail(err error) {
-	fmt.Fprintf(os.Stderr, "\nInstallation failed: %v\n", err)
+	fmt.Fprintf(os.Stderr, "\nSetuora command failed: %v\n", err)
 	fmt.Fprintln(os.Stderr, "Your existing Setuora data and .env were not removed.")
 	fmt.Print("Press Enter to close...")
 	_, _ = fmt.Fscanln(os.Stdin)

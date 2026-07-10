@@ -27,10 +27,11 @@ Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff
 ```text
 Proj_Setu/
 |-- README.md                         Project guide and setup notes
-|-- setup.bat                         First-time Windows setup helper
-|-- start_setuora.bat                    Start the local/server app
-|-- stop_setuora.bat                     Stop the local/server app
-|-- update.bat                        Fast-forward update helper
+|-- Setuora.exe                       Unified Windows setup and control tool
+|-- setup.bat                         Setup workflow used by Setuora.exe
+|-- start_setuora.bat                 Start workflow used by Setuora.exe
+|-- stop_setuora.bat                  Stop workflow used by Setuora.exe
+|-- update.bat                        Update workflow used by Setuora.exe
 |-- requirements.txt                  Direct Python dependency pins
 |-- requirements.lock                 Hash-verified production dependency lock
 |-- app/                              FastAPI application
@@ -56,48 +57,31 @@ Proj_Setu/
 
 ## Quick Windows Setup For Non-Technical Users
 
-For a new server, run `SetuoraInstaller.exe` and approve the Windows administrator
-prompt. The installer installs Git for Windows if it is missing, downloads or
-updates the official `main` branch into `C:\Setuora`, and then runs the complete
-interactive setup described below. Internet access is required.
+For a new server, run `Setuora.exe` and choose `Setup or repair`, then approve the
+Windows administrator prompt. The executable installs Git for Windows if it is
+missing, downloads or updates the official `main` branch into `C:\Setuora`, and
+then runs the complete interactive setup described below. Internet access is
+required. Setup places a copy of `Setuora.exe` in the installation folder for
+later use.
 
 The installer can also repair or update an existing `C:\Setuora` installation.
 It preserves the gitignored `.env`, database, backups, and runtime data. Installer
 source and reproducible build instructions are in `installer/`.
 
-On the Windows server, double-click:
+The same executable controls the normal lifecycle after setup:
 
 ```text
-setup.bat
+Setuora.exe setup
+Setuora.exe start
+Setuora.exe stop
+Setuora.exe update
 ```
 
-The setup helper checks for Python 3.11, installs the hash-verified dependency lock, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, offers optional Windows service setup, installs and configures Caddy for LAN HTTPS, and can start the app. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
+Setup checks for Python 3.11, installs the hash-verified dependency lock, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, and offers an optional manually-started Windows service. It does not start Setuora automatically. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
 
-For the complete Caddy setup, right-click `setup.bat` and choose **Run as administrator**. Caddy setup is offered by default; pass `-SkipCaddy` if HTTPS will be handled separately.
+To configure the optional LAN HTTPS proxy, run `Setuora.exe setup --with-caddy` as Administrator. Caddy is installed as a manually-started service and is started and stopped alongside Setuora by the executable.
 
-After setup, start the app anytime with:
-
-```text
-start_setuora.bat
-```
-
-To stop the app, including the Windows service if it is installed, double-click:
-
-```text
-stop_setuora.bat
-```
-
-If Setuora is installed as a Windows service, run `stop_setuora.bat` as Administrator.
-
-Use `setup.bat` for first-time setup, `start_setuora.bat` for normal app startup, and `stop_setuora.bat` when the server needs to be stopped. No root-level PowerShell helper files are needed for the client-facing flow.
-
-To download the latest version from GitHub and restart Setuora, double-click:
-
-```text
-update.bat
-```
-
-The updater accepts only a clean fast-forward update, refuses a dirty worktree, installs the hash-verified dependency lock, runs the test suite, and restarts the existing Windows service or console server. If Setuora is installed as a Windows service, run `update.bat` as Administrator.
+If Setuora is installed as a Windows service, run `Setuora.exe start`, `stop`, or `update` as Administrator. The updater accepts only a clean fast-forward update, refuses a dirty worktree, installs the hash-verified dependency lock, runs the test suite, and restores the app to the state it had before the update.
 
 Before going live on the target server, run the [production release
 checklist](docs/deployment/production-release-checklist.md). It verifies the
@@ -387,12 +371,12 @@ The current pinned dependencies are verified with Python 3.11. A Python 3.13 vir
 
 Phone camera access usually requires HTTPS when accessed from another device on the LAN. The Windows `setup.bat` helper can configure this automatically:
 
-1. Right-click `setup.bat` and choose **Run as administrator**.
-2. Accept the Caddy setup prompt.
+1. Run `Setuora.exe setup --with-caddy` as Administrator.
+2. Confirm the Caddy setup prompt.
 3. Confirm the detected LAN IP address, or enter a local DNS name that resolves to this server.
 4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every phone that will use Setuora.
 
-The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the auto-start `SetuoraCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
+The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the manually-started `SetuoraCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
 
 Recommended production shape:
 
@@ -409,7 +393,7 @@ Back up `deployment\caddy\state` with the app data, but do not share it because 
 
 ## 14. Windows Service Setup
 
-For production, run Setuora as a Windows service using NSSM.
+For production, run Setuora as a manually-started Windows service using NSSM. Use `Setuora.exe start` and `Setuora.exe stop` to control it.
 
 See:
 

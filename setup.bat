@@ -1,19 +1,25 @@
 @echo off
 setlocal
 cd /d "%~dp0"
+set "SETUORA_NO_PAUSE=0"
+if /I "%~1"=="--no-pause" (
+    set "SETUORA_NO_PAUSE=1"
+    shift
+)
 set "SETUORA_SETUP_BAT=%~f0"
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %*
 set "SETUP_EXIT=%ERRORLEVEL%"
 echo.
 if not "%SETUP_EXIT%"=="0" echo Setup did not complete successfully.
-pause
+if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %SETUP_EXIT%
 
 ### POWERSHELL SETUP SCRIPT ###
 param(
     [int]$Port = 8000,
     [switch]$SkipStart,
-    [switch]$SkipCaddy
+    [switch]$SkipCaddy,
+    [switch]$ConfigureCaddy
 )
 
 $ErrorActionPreference = "Stop"
@@ -622,7 +628,7 @@ function Install-CaddyService {
             -Arguments @{
                 PathName = $serviceCommand
                 DisplayName = "Setuora Caddy HTTPS Proxy"
-                StartMode = "Automatic"
+                StartMode = "Manual"
                 StartName = $CaddyServiceStartName
                 StartPassword = $null
             }
@@ -637,7 +643,7 @@ function Install-CaddyService {
                 DisplayName = "Setuora Caddy HTTPS Proxy"
                 PathName = $serviceCommand
                 ServiceType = 16
-                StartMode = "Automatic"
+                StartMode = "Manual"
                 StartName = $CaddyServiceStartName
                 StartPassword = $null
             }
@@ -697,6 +703,8 @@ function Install-CaddyService {
         Write-Host "Caddy is running, but its root certificate was not ready to export yet." -ForegroundColor Yellow
     }
 
+    Stop-Service -Name $CaddyServiceName -Force
+    $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(15))
     return $exportedCertificate
 }
 
@@ -705,7 +713,7 @@ function Offer-CaddySetup {
         return $null
     }
 
-    $installCaddy = Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $true
+    $installCaddy = if ($ConfigureCaddy) { $true } else { Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $false }
     if (-not $installCaddy) {
         return $null
     }
@@ -730,11 +738,6 @@ function Offer-CaddySetup {
     $rootCertificate = Install-CaddyService -CaddyExe $caddyExe
     Set-EnvSetting -Name "SESSION_COOKIE_SECURE" -Value "true"
     Set-EnvSetting -Name "TRUSTED_HOSTS" -Value "$address,127.0.0.1,localhost,testserver"
-    $existingSetuoraService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
-    if ($existingSetuoraService -and $existingSetuoraService.Status -eq "Running") {
-        Restart-Service -Name "SetuoraQrTallyBridge"
-    }
-
     return @{
         Address = $address
         RootCertificate = $rootCertificate
@@ -744,7 +747,7 @@ function Offer-CaddySetup {
 function Offer-ServiceInstall {
     $existingService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
     if ($existingService) {
-        Write-Host "Existing Setuora Windows service found. Updating and restarting it."
+        Write-Host "Existing Setuora Windows service found. Updating it without starting it."
         if (-not (Test-AdminShell)) {
             throw "Updating the existing Windows service needs Administrator access. Right-click setup.bat and choose 'Run as administrator'."
         }
@@ -758,7 +761,7 @@ function Offer-ServiceInstall {
         return $true
     }
 
-    $installService = Read-YesNo "Install Setuora as an auto-starting Windows service now?" $false
+    $installService = Read-YesNo "Install Setuora as a manually started Windows service now?" $false
     if (-not $installService) {
         return $false
     }
@@ -791,7 +794,7 @@ function Get-LocalIPv4 {
 }
 
 Write-Section "Setuora Setup"
-Write-Host "This setup will prepare Python, install packages, create .env, configure optional services, and optionally start the app."
+Write-Host "This setup will prepare Python, install packages, create .env, and configure optional services. Start the app separately when you are ready."
 
 Set-Location $ProjectRoot
 New-Item -ItemType Directory -Force -Path $DataDir, $LogsDir | Out-Null
@@ -863,16 +866,11 @@ if ($credentials) {
 }
 
 if ($serviceInstalled) {
-    Write-Host "Setuora is running as the auto-starting Windows service." -ForegroundColor Green
-    if ($caddySetup) {
-        Start-Process "https://$($caddySetup.Address)"
-    }
-    else {
-        Start-Process "http://127.0.0.1:$Port"
-    }
+    Write-Host "Setuora was installed as a manually started Windows service." -ForegroundColor Green
+    Write-Host "Start it when ready with Setuora.exe start or start_setuora.bat."
 }
 elseif (-not $SkipStart) {
-    $startNow = Read-YesNo "Start Setuora now in a new window?" $true
+    $startNow = Read-YesNo "Start Setuora now in a new window?" $false
     if ($startNow) {
         Start-Process -FilePath $StartScript -ArgumentList @("-Port", "$Port")
         Start-Sleep -Seconds 2
