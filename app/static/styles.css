@@ -186,6 +186,191 @@ textarea {
   resize: vertical;
 }
 
+.searchable-select-native {
+  position: absolute !important;
+  width: 1px !important;
+  min-width: 1px !important;
+  height: 1px !important;
+  min-height: 1px !important;
+  margin: -1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.searchable-select {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+
+.searchable-select__button {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--r-md);
+  padding: 10px 38px 10px 13px;
+  background: var(--canvas);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow:
+    inset 0 2px 3px rgba(20, 20, 19, 0.1),
+    0 1px 0 rgba(255, 255, 255, 0.76);
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease,
+    background var(--dur) var(--ease);
+}
+
+.searchable-select__button::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  opacity: 0.74;
+  transform: translateY(-62%) rotate(45deg);
+  pointer-events: none;
+}
+
+.searchable-select__button:hover {
+  border-color: var(--muted-soft);
+  background: var(--parchment);
+}
+
+.searchable-select__button:focus-visible,
+.searchable-select.is-open .searchable-select__button {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow:
+    inset 0 2px 3px rgba(20, 20, 19, 0.1),
+    0 0 0 3px var(--primary-ring);
+}
+
+.searchable-select__button[aria-invalid="true"] {
+  border-color: var(--error);
+}
+
+.searchable-select__button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+}
+
+.searchable-select__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.searchable-select__menu {
+  position: fixed;
+  z-index: 90;
+  display: none;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 7px;
+  max-width: calc(100vw - 20px);
+  padding: 8px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: rgba(250, 249, 245, 0.98);
+  box-shadow: var(--inset-highlight), var(--e3);
+  -webkit-backdrop-filter: saturate(180%) blur(16px);
+  backdrop-filter: saturate(180%) blur(16px);
+  animation: modal-in var(--dur) var(--ease);
+}
+
+.searchable-select__menu.is-open {
+  display: grid;
+}
+
+.searchable-select__search {
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+}
+
+.searchable-select__options {
+  display: grid;
+  gap: 2px;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.searchable-select__group {
+  padding: 7px 9px 4px;
+  color: var(--ink-48);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.searchable-select__option {
+  display: block;
+  width: 100%;
+  min-height: 36px;
+  border: 0;
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--ink-80);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.25;
+  text-align: left;
+  white-space: normal;
+  cursor: pointer;
+}
+
+.searchable-select__option[hidden],
+.searchable-select__group[hidden],
+.searchable-select__empty[hidden] {
+  display: none;
+}
+
+.searchable-select__option:hover,
+.searchable-select__option:focus-visible {
+  outline: none;
+  background: var(--primary-softer);
+  color: var(--primary-active);
+}
+
+.searchable-select__option.is-selected {
+  background: var(--primary);
+  color: var(--on-primary);
+}
+
+.searchable-select__option.is-selected:hover,
+.searchable-select__option.is-selected:focus-visible {
+  background: var(--primary-active);
+  color: var(--on-primary);
+}
+
+.searchable-select__option:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.searchable-select__empty {
+  padding: 10px;
+  color: var(--ink-48);
+  font-size: 14px;
+}
+
 label {
   display: grid;
   gap: 7px;
@@ -222,13 +407,13 @@ th,
 td {
   padding: 13px 12px;
   border-bottom: 1px solid var(--hairline);
+  font-size: 12px;
   text-align: left;
   vertical-align: middle;
 }
 
 th {
   color: var(--ink-48);
-  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -249,7 +434,6 @@ tfoot td {
 .grand-total td {
   background: var(--ok-bg);
   color: var(--ok-fg);
-  font-size: 16px;
 }
 
 .table-scroll {
@@ -945,13 +1129,19 @@ tfoot td {
 
 .reports-filters input,
 .reports-filters select,
+.reports-filters .searchable-select__button,
 .reports-filters .button {
   min-height: 38px;
 }
 
 .reports-filters input,
-.reports-filters select {
+.reports-filters select,
+.reports-filters .searchable-select__button {
   padding: 8px 11px;
+}
+
+.reports-filters .searchable-select__button {
+  padding-right: 36px;
 }
 
 .reports-filters .button {
@@ -1009,6 +1199,10 @@ tfoot td {
 }
 
 .search select {
+  flex: 0 1 220px;
+}
+
+.search .searchable-select {
   flex: 0 1 220px;
 }
 
@@ -1434,7 +1628,7 @@ tfoot td {
 .director-table th,
 .director-table td {
   padding: 16px 14px;
-  font-size: 16px;
+  font-size: 13px;
 }
 
 .director-table th {
@@ -2243,6 +2437,15 @@ details.add-company:not([open]) {
   padding: 7px 10px;
 }
 
+.inline-form .searchable-select {
+  width: 130px;
+}
+
+.inline-form .searchable-select__button {
+  min-height: 36px;
+  padding: 7px 34px 7px 10px;
+}
+
 .compact-inline {
   justify-content: flex-start;
 }
@@ -2792,6 +2995,12 @@ dialog.company-config-modal {
     var(--inset-highlight),
     inset 0 -1px 0 rgba(20, 20, 19, 0.08),
     0 2px 3px rgba(20, 20, 19, 0.13);
+}
+
+table .status,
+.access-table .status {
+  font-size: 11px;
+  line-height: 1;
 }
 
 .status.synced,
@@ -3375,7 +3584,8 @@ small {
   }
 
   .inline-form input,
-  .inline-form select {
+  .inline-form select,
+  .inline-form .searchable-select {
     width: 100%;
   }
 
@@ -3392,6 +3602,7 @@ small {
 
   .search input,
   .search select,
+  .search .searchable-select,
   .search .button {
     flex: none;
     width: 100%;

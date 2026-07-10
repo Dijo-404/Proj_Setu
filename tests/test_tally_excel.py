@@ -293,7 +293,7 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     voucher_number_col = headers.index("Voucher Number") + 1
 
     assert sheet.title == "Accounting Voucher"
-    assert headers == [*TALLY_ACCOUNTING_VOUCHER_HEADERS, "img"]
+    assert headers == TALLY_ACCOUNTING_VOUCHER_HEADERS
     assert "Description of Goods" not in headers
     assert "HSN Code" not in headers
     assert "GST Rate %" not in headers
@@ -313,7 +313,7 @@ def test_sale_tally_excel_export_uses_tally_accounting_voucher_template(db_sessi
     assert sheet.cell(5, ledger_col).value == "Output SGST @ 2.5%"
 
 
-def test_unregistered_purchase_tally_excel_export_appends_img_column(db_session):
+def test_unregistered_purchase_tally_excel_export_does_not_append_img_column(db_session):
     user = User(username="purchase-img-xlsx", password_hash="x", role="purchase")
     product = _product("TALLYIMG")
     db_session.add_all([user, product])
@@ -333,9 +333,8 @@ def test_unregistered_purchase_tally_excel_export_appends_img_column(db_session)
     sheet = load_workbook(BytesIO(data), data_only=True).active
     headers = [sheet.cell(1, c).value for c in range(1, sheet.max_column + 1)]
 
-    assert headers[-1] == "img"
+    assert headers == TALLY_ACCOUNTING_VOUCHER_HEADERS
     assert sheet.cell(2, headers.index("Buyer/Supplier - GST Registration Type") + 1).value == "Unregistered/Consumer"
-    assert all(sheet.cell(row, sheet.max_column).value in (None, "") for row in range(2, sheet.max_row + 1))
 
 
 def test_registered_sale_tally_excel_export_does_not_append_img_column(db_session):
