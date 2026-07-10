@@ -28,10 +28,11 @@ Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff
 Proj_Setu/
 |-- README.md                         Project guide and setup notes
 |-- Setuora.exe                       Unified Windows setup and control tool
-|-- setup.bat                         Setup workflow used by Setuora.exe
-|-- start_setuora.bat                 Start workflow used by Setuora.exe
-|-- stop_setuora.bat                  Stop workflow used by Setuora.exe
-|-- update.bat                        Update workflow used by Setuora.exe
+|-- scripts/                          Windows workflows used by Setuora.exe
+|   |-- setup.bat                     Setup workflow
+|   |-- start_setuora.bat             Start workflow
+|   |-- stop_setuora.bat              Stop workflow
+|   `-- update.bat                    Update workflow
 |-- requirements.txt                  Direct Python dependency pins
 |-- requirements.lock                 Hash-verified production dependency lock
 |-- app/                              FastAPI application
@@ -183,7 +184,7 @@ http://127.0.0.1:8000
 
 ## 6. First Login
 
-If you used `setup.bat`, use the admin username and password shown at the end of setup. Keep that password somewhere safe because generated passwords are only displayed once.
+If you used `scripts\setup.bat`, use the admin username and password shown at the end of setup. Keep that password somewhere safe because generated passwords are only displayed once.
 
 After logging in:
 
@@ -369,7 +370,7 @@ The current pinned dependencies are verified with Python 3.11. A Python 3.13 vir
 
 ## 13. LAN Phone Camera Setup
 
-Phone camera access usually requires HTTPS when accessed from another device on the LAN. The Windows `setup.bat` helper can configure this automatically:
+Phone camera access usually requires HTTPS when accessed from another device on the LAN. The Windows `scripts\setup.bat` helper can configure this automatically:
 
 1. Run `Setuora.exe setup --with-caddy` as Administrator.
 2. Confirm the Caddy setup prompt.

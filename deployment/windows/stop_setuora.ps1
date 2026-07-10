@@ -8,7 +8,7 @@ $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $projectRoot = [IO.Path]::GetFullPath($ProjectDir).TrimEnd("\")
-$startScript = [IO.Path]::GetFullPath((Join-Path $projectRoot "start_setuora.bat"))
+$startScript = [IO.Path]::GetFullPath((Join-Path $projectRoot "scripts\start_setuora.bat"))
 $startHelper = [IO.Path]::GetFullPath((Join-Path $projectRoot "deployment\windows\start_setuora.ps1"))
 $processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
 $stoppedAnything = $false

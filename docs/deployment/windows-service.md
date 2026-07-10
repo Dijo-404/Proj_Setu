@@ -1,6 +1,6 @@
 # Windows Service Guide
 
-Use NSSM to run Setuora automatically after reboot. The easier path is to run `setup.bat` as Administrator and accept the optional service install when prompted. Use this guide when installing or repairing the service manually.
+Use NSSM to run Setuora automatically after reboot. The easier path is to run `scripts\setup.bat` as Administrator and accept the optional service install when prompted. Use this guide when installing or repairing the service manually.
 
 ## Files
 
@@ -17,7 +17,7 @@ the default account broader rights.
 
 ## Steps
 
-1. Run `setup.bat` first so `.venv`, `.env`, `data\`, and `logs\` exist.
+1. Run `scripts\setup.bat` first so `.venv`, `.env`, `data\`, and `logs\` exist.
 2. Download `nssm.exe` and place it somewhere stable, for example `C:\Tools\nssm\nssm.exe`.
 3. Open PowerShell as Administrator.
 4. Run the install script with the correct paths.

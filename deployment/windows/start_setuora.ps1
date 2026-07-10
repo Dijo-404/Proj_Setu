@@ -26,12 +26,12 @@ function Ensure-Pip {
     Write-Host "pip is missing from the virtual environment. Repairing pip with ensurepip..."
     & $PythonExe -m ensurepip --upgrade | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is missing and could not be repaired. Run setup.bat again after reinstalling Python 3.11 with pip enabled."
+        throw "pip is missing and could not be repaired. Run scripts\setup.bat again after reinstalling Python 3.11 with pip enabled."
     }
 
     & $PythonExe -m pip --version | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run setup.bat again."
+        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run scripts\setup.bat again."
     }
 }
 
@@ -74,7 +74,7 @@ function Ensure-AppDependencies {
 
     & $PythonExe -m pip install --require-hashes -r $RequirementsPath | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "Python dependency installation failed. Check the pip message above, then run setup.bat again."
+        throw "Python dependency installation failed. Check the pip message above, then run scripts\setup.bat again."
     }
 
     & $PythonExe -m pip check | Out-Host
@@ -93,7 +93,7 @@ if (-not (Test-Path -LiteralPath $processHelper)) {
 . $processHelper
 
 if (-not (Test-Path -LiteralPath $pythonExe)) {
-    throw "Setuora is not set up yet. Run setup.bat first."
+    throw "Setuora is not set up yet. Run scripts\setup.bat first."
 }
 
 Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath
@@ -129,11 +129,11 @@ if ($service) {
             throw "The Setuora Windows service did not start within 20 seconds. Check Windows Services, then try again."
         }
         catch {
-            throw "Windows could not start the Setuora service. Run start_setuora.bat as Administrator. $($_.Exception.Message)"
+            throw "Windows could not start the Setuora service. Run scripts\start_setuora.bat as Administrator. $($_.Exception.Message)"
         }
     }
 
-    Write-Host "Use stop_setuora.bat to stop it."
+    Write-Host "Use scripts\stop_setuora.bat to stop it."
     return
 }
 
@@ -141,7 +141,7 @@ $serverProcesses = @(Get-SetuoraServerProcesses -ProjectRoot $projectRoot -Exclu
 if ($serverProcesses.Count -gt 0) {
     $processIds = ($serverProcesses | ForEach-Object { $_.ProcessId }) -join ", "
     Write-Host "Setuora is already running in another window or background process. PID(s): $processIds"
-    Write-Host "Use stop_setuora.bat to stop it before starting a fresh server."
+    Write-Host "Use scripts\stop_setuora.bat to stop it before starting a fresh server."
     return
 }
 

@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
@@ -25,11 +25,11 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$ProjectRoot = Split-Path -Parent $env:SETUORA_SETUP_BAT
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $env:SETUORA_SETUP_BAT)
 $VenvDir = Join-Path $ProjectRoot ".venv"
 $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 $RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
-$StartScript = Join-Path $ProjectRoot "start_setuora.bat"
+$StartScript = Join-Path $ProjectRoot "scripts\start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $EnvPath = Join-Path $ProjectRoot ".env"
 $DataDir = Join-Path $ProjectRoot "data"
@@ -213,12 +213,12 @@ function Ensure-Pip {
     Write-Host "pip is missing from the virtual environment. Repairing pip with ensurepip..."
     & $VenvPython -m ensurepip --upgrade | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run setup.bat again."
+        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run scripts\setup.bat again."
     }
 
     & $VenvPython -m pip --version | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run setup.bat again."
+        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run scripts\setup.bat again."
     }
 }
 
@@ -563,7 +563,7 @@ function Remove-LegacyCaddyServices {
         }
 
         if (Get-Service -Name $legacyName -ErrorAction SilentlyContinue) {
-            throw "Old Caddy service '$legacyName' is still registered. Reboot Windows, then run setup.bat again."
+            throw "Old Caddy service '$legacyName' is still registered. Reboot Windows, then run scripts\setup.bat again."
         }
     }
 }
@@ -720,7 +720,7 @@ function Offer-CaddySetup {
 
     if (-not (Test-AdminShell)) {
         Write-Host "Caddy setup needs Administrator access to create its service and firewall rule." -ForegroundColor Yellow
-        Write-Host "Run setup.bat as Administrator to install and configure Caddy."
+        Write-Host "Run scripts\setup.bat as Administrator to install and configure Caddy."
         return $null
     }
 
@@ -749,7 +749,7 @@ function Offer-ServiceInstall {
     if ($existingService) {
         Write-Host "Existing Setuora Windows service found. Updating it without starting it."
         if (-not (Test-AdminShell)) {
-            throw "Updating the existing Windows service needs Administrator access. Right-click setup.bat and choose 'Run as administrator'."
+            throw "Updating the existing Windows service needs Administrator access. Right-click scripts\setup.bat and choose 'Run as administrator'."
         }
 
         $nssmPath = Ensure-Nssm
@@ -767,7 +767,7 @@ function Offer-ServiceInstall {
     }
 
     if (-not (Test-AdminShell)) {
-        throw "Windows service installation needs Administrator access. Right-click setup.bat, choose 'Run as administrator', and run it again."
+        throw "Windows service installation needs Administrator access. Right-click scripts\setup.bat, choose 'Run as administrator', and run it again."
     }
 
     $nssmPath = Ensure-Nssm
@@ -811,7 +811,7 @@ if (Test-Path $VenvPython) {
         $existingSetuoraService.Status -ne "Stopped" -and
         -not (Test-AdminShell)
     ) {
-        throw "Setuora is running as a Windows service. Right-click setup.bat, choose 'Run as administrator', and try again."
+        throw "Setuora is running as a Windows service. Right-click scripts\setup.bat, choose 'Run as administrator', and try again."
     }
 
     & $StopScript -ProjectDir $ProjectRoot
@@ -867,7 +867,7 @@ if ($credentials) {
 
 if ($serviceInstalled) {
     Write-Host "Setuora was installed as a manually started Windows service." -ForegroundColor Green
-    Write-Host "Start it when ready with Setuora.exe start or start_setuora.bat."
+    Write-Host "Start it when ready with Setuora.exe start or scripts\start_setuora.bat."
 }
 elseif (-not $SkipStart) {
     $startNow = Read-YesNo "Start Setuora now in a new window?" $false

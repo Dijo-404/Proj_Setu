@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
@@ -22,10 +22,10 @@ param(
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
-$ProjectRoot = Split-Path -Parent $env:SETUORA_UPDATE_BAT
+$ProjectRoot = Split-Path -Parent (Split-Path -Parent $env:SETUORA_UPDATE_BAT)
 $VenvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 $RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
-$StartScript = Join-Path $ProjectRoot "start_setuora.bat"
+$StartScript = Join-Path $ProjectRoot "scripts\start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
 $ServiceName = "SetuoraQrTallyBridge"
@@ -57,12 +57,12 @@ function Ensure-Pip {
     Write-Host "pip is missing from the virtual environment. Repairing pip with ensurepip..."
     & $VenvPython -m ensurepip --upgrade | Out-Host
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run setup.bat again."
+        throw "pip is missing and could not be repaired. Reinstall Python 3.11 with pip enabled, then run scripts\setup.bat again."
     }
 
     & $VenvPython -m pip --version | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run setup.bat again."
+        throw "pip is still unavailable after repair. Delete .venv, reinstall Python 3.11 with pip enabled, and run scripts\setup.bat again."
     }
 }
 
@@ -95,7 +95,7 @@ function Restore-PreviousVersion {
         return
     }
     Write-Host "Rolling back to the previous version ($previousHead)..." -ForegroundColor Yellow
-    # This is safe because update.bat requires a clean worktree before changing
+    # This is safe because scripts\update.bat requires a clean worktree before changing
     # source files, and this reset only returns the updater's own fast-forward.
     & git reset --hard $previousHead | Out-Host
     Ensure-Pip
@@ -105,13 +105,13 @@ function Restore-PreviousVersion {
 Set-Location $ProjectRoot
 
 if (-not (Get-Command git.exe -ErrorAction SilentlyContinue)) {
-    throw "Git was not found. Install Git for Windows, then run update.bat again."
+    throw "Git was not found. Install Git for Windows, then run scripts\update.bat again."
 }
 if (-not (Test-Path (Join-Path $ProjectRoot ".git"))) {
-    throw "'$ProjectRoot' is not a Git checkout. Clone https://github.com/Dijo-404/Proj_Setu.git before using update.bat."
+    throw "'$ProjectRoot' is not a Git checkout. Clone https://github.com/Dijo-404/Proj_Setu.git before using scripts\update.bat."
 }
 if (-not (Test-Path $VenvPython)) {
-    throw "Setuora is not set up yet. Run setup.bat first."
+    throw "Setuora is not set up yet. Run scripts\setup.bat first."
 }
 if (-not (Test-Path $RequirementsLock)) {
     throw "The pinned dependency lockfile is missing: '$RequirementsLock'. Reinstall from a complete release."
@@ -144,7 +144,7 @@ if ($restartAsConsole) {
     $restartPort = $launchInfo.Port
 }
 if ($restartAsService -and -not (Test-AdminShell)) {
-    throw "Setuora is installed as a Windows service. Right-click update.bat, choose 'Run as administrator', and try again."
+    throw "Setuora is installed as a Windows service. Right-click scripts\update.bat, choose 'Run as administrator', and try again."
 }
 
 $worktreeChanges = @(& git status --porcelain)
@@ -152,20 +152,20 @@ if ($LASTEXITCODE -ne 0) {
     throw "Git could not inspect the working tree. Your installation was left unchanged."
 }
 if ($worktreeChanges.Count -gt 0) {
-    throw "Refusing to update because local source changes are present. Commit or stash them first; update.bat never overwrites local code."
+    throw "Refusing to update because local source changes are present. Commit or stash them first; scripts\update.bat never overwrites local code."
 }
 
 # Remember the current commit so a failed update can roll back.
 $previousHead = (@(& git rev-parse HEAD) -join "").Trim()
 if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($previousHead)) {
-    throw "The current commit could not be determined. Run update.bat again."
+    throw "The current commit could not be determined. Run scripts\update.bat again."
 }
 
 Write-Section "Download Latest Version"
 Write-Host "Updating branch '$branch' from origin..."
 & git fetch --no-tags origin $branch
 if ($LASTEXITCODE -ne 0) {
-    throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run update.bat again."
+    throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run scripts\update.bat again."
 }
 
 # Only accept a clean fast-forward. A rewritten or divergent remote must be
@@ -233,7 +233,7 @@ catch {
         }
     }
     catch {
-        Write-Host "The server could not be restarted automatically. Start it manually with start_setuora.bat." -ForegroundColor Red
+        Write-Host "The server could not be restarted automatically. Start it manually with scripts\start_setuora.bat." -ForegroundColor Red
     }
     throw
 }

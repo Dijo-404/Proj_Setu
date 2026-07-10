@@ -134,7 +134,7 @@ func parseOptions(arguments []string) (installerOptions, error) {
 func defaultInstallDirectory() string {
 	if executable, err := os.Executable(); err == nil {
 		executableDir := filepath.Dir(executable)
-		if fileExists(filepath.Join(executableDir, "setup.bat")) && fileExists(filepath.Join(executableDir, ".git")) {
+		if fileExists(filepath.Join(executableDir, "scripts", "setup.bat")) && fileExists(filepath.Join(executableDir, ".git")) {
 			return executableDir
 		}
 	}
@@ -157,8 +157,8 @@ func runInstaller(options installerOptions) error {
 	if err := synchronizeRepository(gitPath, options.installDir, options.branch); err != nil {
 		return err
 	}
-	if !fileExists(filepath.Join(options.installDir, "setup.bat")) {
-		return fmt.Errorf("the downloaded project does not contain setup.bat: %s", options.installDir)
+	if !fileExists(filepath.Join(options.installDir, "scripts", "setup.bat")) {
+		return fmt.Errorf("the downloaded project does not contain scripts\\setup.bat: %s", options.installDir)
 	}
 	if err := installControlExecutable(options.installDir); err != nil {
 		return fmt.Errorf("place Setuora.exe in the installation folder: %w", err)
@@ -384,7 +384,8 @@ func synchronizeRepository(gitPath, installDir, branch string) error {
 }
 
 func runSetup(options installerOptions) error {
-	arguments := []string{"/d", "/c", "setup.bat", "--no-pause", "-SkipStart", "-Port", fmt.Sprint(options.port)}
+	workflow := filepath.Join("scripts", "setup.bat")
+	arguments := []string{"/d", "/c", workflow, "--no-pause", "-SkipStart", "-Port", fmt.Sprint(options.port)}
 	if options.withCaddy {
 		arguments = append(arguments, "-ConfigureCaddy")
 	} else {
@@ -394,14 +395,15 @@ func runSetup(options installerOptions) error {
 }
 
 func runProjectCommand(options installerOptions) error {
-	workflow := map[string]string{
+	workflowName := map[string]string{
 		"start":  "start_setuora.bat",
 		"stop":   "stop_setuora.bat",
 		"update": "update.bat",
 	}[options.command]
-	if workflow == "" {
+	if workflowName == "" {
 		return fmt.Errorf("unsupported command: %s", options.command)
 	}
+	workflow := filepath.Join("scripts", workflowName)
 	if !fileExists(filepath.Join(options.installDir, workflow)) {
 		return fmt.Errorf("%s was not found in %s; run 'Setuora.exe setup' first", workflow, options.installDir)
 	}

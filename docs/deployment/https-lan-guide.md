@@ -16,7 +16,7 @@ Phone browser
 
 The easiest Windows path is:
 
-1. Right-click `setup.bat` and choose **Run as administrator**.
+1. Right-click `scripts\setup.bat` and choose **Run as administrator**.
 2. Accept the Caddy setup prompt.
 3. Confirm the detected LAN IP address, or enter a local DNS name.
 4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every staff phone.
@@ -31,7 +31,7 @@ starting point and replace `setuora.local` with the real LAN hostname or static 
 Keep FastAPI bound to localhost behind the proxy:
 
 ```text
-start_setuora.bat
+scripts\start_setuora.bat
 ```
 
 or:

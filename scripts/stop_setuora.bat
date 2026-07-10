@@ -1,6 +1,6 @@
 @echo off
 setlocal
-cd /d "%~dp0"
+cd /d "%~dp0.."
 set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
@@ -28,7 +28,7 @@ if "%STOP_EXIT%"=="0" (
     echo Setuora stop command completed.
 ) else (
     echo Setuora could not be stopped. If Setuora is installed as a Windows service,
-    echo right-click stop_setuora.bat and choose Run as administrator.
+    echo right-click scripts\stop_setuora.bat and choose Run as administrator.
 )
 
 if not "%SETUORA_NO_PAUSE%"=="1" pause

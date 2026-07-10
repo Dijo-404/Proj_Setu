@@ -14,11 +14,11 @@ Factory LAN deployment on the SERVER machine with Tally Prime running locally or
 
 ## Windows Install
 
-For a non-technical Windows install, right-click `setup.bat`, choose **Run as
+For a non-technical Windows install, right-click `scripts\setup.bat`, choose **Run as
 administrator**, or run it from an Administrator PowerShell:
 
 ```powershell
-.\setup.bat
+.\scripts\setup.bat
 ```
 
 The helper:
@@ -38,32 +38,32 @@ The helper:
 After setup, start the app anytime with:
 
 ```text
-start_setuora.bat
+scripts\start_setuora.bat
 ```
 
-Use `start_setuora.bat --port 8001` if port `8000` is already in use.
+Use `scripts\start_setuora.bat --port 8001` if port `8000` is already in use.
 
 Stop the app, including the Windows service when installed, with:
 
 ```text
-stop_setuora.bat
+scripts\stop_setuora.bat
 ```
 
-Run `stop_setuora.bat` as Administrator when Setuora is installed as a Windows
+Run `scripts\stop_setuora.bat` as Administrator when Setuora is installed as a Windows
 service.
 
 To pull the latest version from GitHub, update dependencies, and restart the
 server, run:
 
 ```text
-update.bat
+scripts\update.bat
 ```
 
 Run the updater as Administrator when Setuora is installed as a Windows service.
 The updater fetches and applies only a fast-forward Git update. It never
 rebases and will not overwrite conflicting local code changes.
 
-Pass `-SkipCaddy` to `setup.bat` if another reverse proxy already provides
+Pass `-SkipCaddy` to `scripts\setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install
 `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every
 phone that connects to Setuora.
@@ -113,7 +113,7 @@ https://setuora.local
 
 ## First Login
 
-If `setup.bat` created `.env`, use the admin login printed at the end of setup. If you copied `.env.example`, use the bootstrap admin from `.env`, then create named users from `Users`.
+If `scripts\setup.bat` created `.env`, use the admin login printed at the end of setup. If you copied `.env.example`, use the bootstrap admin from `.env`, then create named users from `Users`.
 
 The app refuses to initialize its first administrator with an empty, placeholder,
 or default password. Replace every placeholder before starting it.

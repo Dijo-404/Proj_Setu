@@ -40,19 +40,19 @@ Latest verified test result in Linux workspace using Python 3.11.14 (`.venv311`)
 Recommended first-time setup from PowerShell in the project folder:
 
 ```powershell
-.\setup.bat
+.\scripts\setup.bat
 ```
 
 Normal startup after setup:
 
 ```powershell
-.\start_setuora.bat
+.\scripts\start_setuora.bat
 ```
 
 Stop Setuora, including the Windows service when installed:
 
 ```powershell
-.\stop_setuora.bat
+.\scripts\stop_setuora.bat
 ```
 
 Manual fallback:

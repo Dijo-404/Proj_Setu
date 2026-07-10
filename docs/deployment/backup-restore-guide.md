@@ -60,7 +60,7 @@ Manual restore:
 3. Replace `data/setuora.db` with the backup file.
 4. If a backup set also includes `setuora.db-wal` and `setuora.db-shm`, restore those sidecar files from the same backup point.
 5. Restore `.env` only when moving to a new machine or recovering a lost config.
-6. Start the Setuora service or run `start_setuora.bat`.
+6. Start the Setuora service or run `scripts\start_setuora.bat`.
 7. Log in and check Dashboard, Products, Serials, Reports, and Settings.
 
 Do not perform a manual file replacement while the app is running.

@@ -3,7 +3,7 @@
 `Setuora.exe` is the single Windows control executable for a Windows 11 server.
 It provides setup, start, stop, and update commands. Setup requests administrator
 access, installs Git for Windows when needed, clones or updates the official
-Setuora repository, and launches the complete `setup.bat` workflow without
+Setuora repository, and launches the complete `scripts\setup.bat` workflow without
 starting the application automatically.
 
 The setup workflow installs Python when needed, creates the virtual environment,
@@ -19,13 +19,13 @@ From this directory with Go installed:
 go test ./...
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags="-s -w" -o ..\dist\Setuora.exe .
+go build -trimpath -ldflags="-s -w" -o ..\Setuora.exe .
 ```
 
 Linux/macOS can cross-compile it with:
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../dist/Setuora.exe .
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o ../Setuora.exe .
 ```
 
 The installer requires internet access. The generated executable is unsigned;

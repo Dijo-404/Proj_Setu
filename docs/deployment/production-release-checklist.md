@@ -1,6 +1,6 @@
 # Production Release Checklist
 
-Run this only on the target Windows server after completing `setup.bat`, Caddy
+Run this only on the target Windows server after completing `scripts\setup.bat`, Caddy
 setup, and Windows service installation.
 
 ```powershell

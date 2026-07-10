@@ -2,10 +2,17 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+WORKFLOWS_DIR = PROJECT_ROOT / "scripts"
+
+
+def test_windows_workflows_are_grouped_under_scripts_directory():
+    for filename in ("setup.bat", "start_setuora.bat", "stop_setuora.bat", "update.bat"):
+        assert (WORKFLOWS_DIR / filename).is_file()
+        assert not (PROJECT_ROOT / filename).exists()
 
 
 def test_setup_skips_stop_helper_for_fresh_install():
-    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 
     stop_section = setup_script.split('Write-Section "Stop Existing Server"', 1)[1]
     stop_section = stop_section.split('Write-Section "Python"', 1)[0]
@@ -29,7 +36,7 @@ def test_lockfile_excludes_uvloop_on_windows_and_pins_windows_dependencies():
 
 
 def test_setup_repairs_pip_and_checks_dependencies():
-    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 
     assert "function Ensure-Pip" in setup_script
     assert "$RequirementsLock = Join-Path $ProjectRoot \"requirements.lock\"" in setup_script
@@ -40,7 +47,7 @@ def test_setup_repairs_pip_and_checks_dependencies():
 
 
 def test_updater_never_uses_pull_or_rebase():
-    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert "& git pull " not in update_script
     assert "& git rebase " not in update_script
@@ -52,7 +59,7 @@ def test_updater_never_uses_pull_or_rebase():
 
 
 def test_updater_checks_service_permissions_before_fetching():
-    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     permission_check = update_script.index("if ($restartAsService -and -not (Test-AdminShell))")
     fetch = update_script.index("& git fetch --no-tags origin $branch")
@@ -61,7 +68,7 @@ def test_updater_checks_service_permissions_before_fetching():
 
 
 def test_updater_repairs_pip_and_checks_dependencies():
-    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert "function Ensure-Pip" in update_script
     assert "& $VenvPython -m ensurepip --upgrade" in update_script
@@ -71,7 +78,7 @@ def test_updater_repairs_pip_and_checks_dependencies():
 
 
 def test_updater_restarts_based_on_running_server_state():
-    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert "deployment\\windows\\server_processes.ps1" in update_script
     assert '$restartAsService = $service -and $service.Status -ne "Stopped"' in update_script
@@ -82,7 +89,7 @@ def test_updater_restarts_based_on_running_server_state():
 
 
 def test_start_script_uses_state_aware_windows_helper():
-    start_script = (PROJECT_ROOT / "start_setuora.bat").read_text(encoding="utf-8")
+    start_script = (WORKFLOWS_DIR / "start_setuora.bat").read_text(encoding="utf-8")
     helper = (PROJECT_ROOT / "deployment" / "windows" / "start_setuora.ps1").read_text(
         encoding="utf-8"
     )
@@ -116,7 +123,7 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     installer = (PROJECT_ROOT / "deployment" / "windows" / "install_service.ps1").read_text(
         encoding="utf-8"
     )
-    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 
     assert 'ObjectName "NT AUTHORITY\\LocalService" ""' in installer
     assert '$CaddyServiceStartName = "NT AUTHORITY\\LocalService"' in setup_script
@@ -132,14 +139,14 @@ def test_windows_services_use_the_least_privilege_localservice_account():
 
 def test_windows_workflows_can_run_from_the_unified_executable_without_pausing():
     for filename in ("setup.bat", "start_setuora.bat", "stop_setuora.bat", "update.bat"):
-        script = (PROJECT_ROOT / filename).read_text(encoding="utf-8")
+        script = (WORKFLOWS_DIR / filename).read_text(encoding="utf-8")
 
         assert 'if /I "%~1"=="--no-pause"' in script
         assert 'if not "%SETUORA_NO_PAUSE%"=="1" pause' in script
 
 
 def test_setup_does_not_start_services_or_caddy_by_default():
-    setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 
     assert '[switch]$ConfigureCaddy' in setup_script
     assert 'Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $false' in setup_script
@@ -148,7 +155,7 @@ def test_setup_does_not_start_services_or_caddy_by_default():
 
 
 def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
-    update_script = (PROJECT_ROOT / "update.bat").read_text(encoding="utf-8")
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert '$CaddyServiceName = "SetuoraCaddy"' in update_script
     assert "Start-Service -Name $CaddyServiceName" in update_script
