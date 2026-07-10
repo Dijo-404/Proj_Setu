@@ -20,6 +20,14 @@ def test_requirements_pin_direct_starlette_import():
     assert "starlette==1.3.1" in requirements
 
 
+def test_lockfile_excludes_uvloop_on_windows_and_pins_windows_dependencies():
+    lockfile = (PROJECT_ROOT / "requirements.lock").read_text(encoding="utf-8")
+
+    uvloop_line = next(line for line in lockfile.splitlines() if line.startswith("uvloop=="))
+    assert "sys_platform != 'win32'" in uvloop_line
+    assert "colorama==0.4.6 ; sys_platform == 'win32'" in lockfile
+
+
 def test_setup_repairs_pip_and_checks_dependencies():
     setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
 
