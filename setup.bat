@@ -31,6 +31,7 @@ $LogsDir = Join-Path $ProjectRoot "logs"
 $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
 $CaddyServiceName = "SetuoraCaddy"
+$CaddyServiceStartName = "NT AUTHORITY\LocalService"
 $LegacyCaddyServiceNames = @("SetuCaddy")
 $LocalServiceSid = "*S-1-5-19"
 
@@ -561,6 +562,36 @@ function Remove-LegacyCaddyServices {
     }
 }
 
+function Assert-Win32ServiceResult {
+    param(
+        [Parameter(Mandatory=$true)]$Result,
+        [Parameter(Mandatory=$true)][string]$Action
+    )
+
+    $returnCode = [int]$Result.ReturnValue
+    if ($returnCode -eq 0) {
+        return
+    }
+
+    $messages = @{
+        2 = "Access denied"
+        3 = "Dependent services running"
+        8 = "Unknown failure"
+        9 = "Path not found"
+        10 = "Service already running"
+        11 = "Service database locked"
+        15 = "Service logon failure"
+        16 = "Service marked for deletion"
+        22 = "Invalid service account"
+    }
+    $message = $messages[$returnCode]
+    if (-not $message) {
+        $message = "Win32_Service returned an undocumented error"
+    }
+
+    throw "$Action (${returnCode}: $message)."
+}
+
 function Install-CaddyService {
     param([string]$CaddyExe)
 
@@ -592,18 +623,25 @@ function Install-CaddyService {
                 PathName = $serviceCommand
                 DisplayName = "Setuora Caddy HTTPS Proxy"
                 StartMode = "Automatic"
+                StartName = $CaddyServiceStartName
+                StartPassword = $null
             }
-        if ($changeResult.ReturnValue -ne 0) {
-            throw "Could not update the Caddy Windows service (Win32_Service.Change returned $($changeResult.ReturnValue))."
-        }
+        Assert-Win32ServiceResult -Result $changeResult -Action "Could not update the Caddy Windows service"
     }
     else {
-        New-Service `
-            -Name $CaddyServiceName `
-            -BinaryPathName $serviceCommand `
-            -DisplayName "Setuora Caddy HTTPS Proxy" `
-            -StartupType Automatic `
-            -ErrorAction Stop | Out-Null
+        $createResult = Invoke-CimMethod `
+            -ClassName Win32_Service `
+            -MethodName Create `
+            -Arguments @{
+                Name = $CaddyServiceName
+                DisplayName = "Setuora Caddy HTTPS Proxy"
+                PathName = $serviceCommand
+                ServiceType = 16
+                StartMode = "Automatic"
+                StartName = $CaddyServiceStartName
+                StartPassword = $null
+            }
+        Assert-Win32ServiceResult -Result $createResult -Action "Could not create the Caddy Windows service"
     }
 
     # Caddy does not need LocalSystem privileges. It can read the proxy files and
@@ -611,10 +649,6 @@ function Install-CaddyService {
     Grant-LocalServiceAccess -Path $CaddyDir -Access "RX"
 
     & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setuora QR Tally Bridge" | Out-Null
-    & sc.exe config $CaddyServiceName obj= "NT AUTHORITY\LocalService" password= "" | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        throw "Could not configure Caddy to run as LocalService."
-    }
     & sc.exe failure $CaddyServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
 
     $stateDir = Join-Path $CaddyDir "state"

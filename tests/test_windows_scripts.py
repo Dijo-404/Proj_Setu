@@ -119,7 +119,10 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     setup_script = (PROJECT_ROOT / "setup.bat").read_text(encoding="utf-8")
 
     assert 'ObjectName "NT AUTHORITY\\LocalService" ""' in installer
-    assert 'sc.exe config $CaddyServiceName obj= "NT AUTHORITY\\LocalService" password= ""' in setup_script
+    assert '$CaddyServiceStartName = "NT AUTHORITY\\LocalService"' in setup_script
+    assert "StartName = $CaddyServiceStartName" in setup_script
+    assert "StartPassword = $null" in setup_script
+    assert "sc.exe config $CaddyServiceName obj=" not in setup_script
     assert "Grant-LocalServiceAccess -Path $dataDir -Access \"M\"" in installer
     assert "Grant-LocalServiceAccess -Path $stateDir -Access \"M\"" in setup_script
 
