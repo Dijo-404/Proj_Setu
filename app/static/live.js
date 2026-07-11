@@ -2,9 +2,51 @@
   const root = document.querySelector("[data-live-url]");
   if (!root) return;
   const url = root.getAttribute("data-live-url");
-  const INTERVAL = 20000;
+  const configuredInterval = Number(root.getAttribute("data-live-interval"));
+  const INTERVAL = Number.isFinite(configuredInterval) && configuredInterval >= 5000
+    ? configuredInterval
+    : 20000;
+
+  function replaceHtml(selector, html) {
+    if (typeof html !== "string") return;
+    const element = document.querySelector(selector);
+    if (element) element.innerHTML = html;
+  }
+
+  function applyDirectorReport(data) {
+    if (data.director_metrics) {
+      Object.keys(data.director_metrics).forEach(function (key) {
+        const element = document.querySelector('[data-director-metric="' + key + '"]');
+        if (element) element.textContent = data.director_metrics[key];
+      });
+    }
+    if (typeof data.latest_audit_url === "string") {
+      document.querySelectorAll("[data-director-latest-audit-link]").forEach(function (link) {
+        link.setAttribute("href", data.latest_audit_url);
+      });
+    }
+    if (data.reconciliation) {
+      const batchCount = document.querySelector("[data-director-reconciliation-batch-count]");
+      if (batchCount) {
+        const count = data.reconciliation.audit_batch_count;
+        batchCount.textContent = count + " audit batch" + (count === 1 ? "" : "es");
+      }
+      Object.keys(data.reconciliation).forEach(function (key) {
+        const element = document.querySelector(
+          '[data-director-reconciliation-metric="' + key + '"]'
+        );
+        if (element) element.textContent = data.reconciliation[key];
+      });
+    }
+    replaceHtml("[data-director-live-product-rows]", data.product_rows_html);
+    replaceHtml("[data-director-live-warehouse-rows]", data.warehouse_rows_html);
+    replaceHtml("[data-director-live-audit-batches]", data.audit_batches_html);
+    replaceHtml("[data-director-live-expiry-risk]", data.expiry_risk_html);
+    replaceHtml("[data-director-live-dead-stock]", data.dead_stock_html);
+  }
 
   function apply(data) {
+    applyDirectorReport(data);
     if (data.counts) {
       Object.keys(data.counts).forEach(function (key) {
         const el = document.querySelector('[data-metric="' + key + '"]');

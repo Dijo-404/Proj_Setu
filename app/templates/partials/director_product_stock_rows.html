@@ -1,0 +1,10 @@
+{% for row in report.product_rows %}
+<tr>
+  <td><strong>{{ row.product_name }}</strong></td>
+  <td>{{ row.product_code }}</td>
+  <td><strong>{{ row.stock }}</strong></td>
+  <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
+</tr>
+{% else %}
+<tr><td colspan="4" class="empty">No products found</td></tr>
+{% endfor %}

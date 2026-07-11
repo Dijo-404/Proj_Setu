@@ -19,7 +19,8 @@ param(
     [int]$Port = 8000,
     [switch]$SkipStart,
     [switch]$SkipCaddy,
-    [switch]$ConfigureCaddy
+    [switch]$ConfigureCaddy,
+    [switch]$Repair
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,15 +32,22 @@ $VenvPython = Join-Path $VenvDir "Scripts\python.exe"
 $RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
 $StartScript = Join-Path $ProjectRoot "scripts\start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
+$ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
 $EnvPath = Join-Path $ProjectRoot ".env"
 $DataDir = Join-Path $ProjectRoot "data"
 $LogsDir = Join-Path $ProjectRoot "logs"
 $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
 $CaddyServiceName = "SetuoraCaddy"
+$AppServiceName = "SetuoraQrTallyBridge"
 $CaddyServiceStartName = "NT AUTHORITY\LocalService"
 $LegacyCaddyServiceNames = @("SetuCaddy")
 $LocalServiceSid = "*S-1-5-19"
+$restartAsService = $false
+$restartAsConsole = $false
+$restartCaddyService = $false
+$restartHostAddress = "127.0.0.1"
+$restartPort = $Port
 
 function Write-Section {
     param([string]$Title)
@@ -192,8 +200,22 @@ function Ensure-Venv {
     param($Python)
 
     if (Test-Path $VenvPython) {
-        Write-Host "Virtual environment already exists."
-        return
+        $venvHealthy = $false
+        try {
+            & $VenvPython -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" | Out-Null
+            $venvHealthy = ($LASTEXITCODE -eq 0)
+        }
+        catch {
+            $venvHealthy = $false
+        }
+
+        if ($venvHealthy) {
+            Write-Host "Virtual environment is healthy."
+            return
+        }
+
+        Write-Host "The virtual environment is damaged or incompatible. Rebuilding it..." -ForegroundColor Yellow
+        Remove-Item -LiteralPath $VenvDir -Recurse -Force
     }
 
     Write-Host "Creating Python virtual environment..."
@@ -745,7 +767,7 @@ function Offer-CaddySetup {
 }
 
 function Offer-ServiceInstall {
-    $existingService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
+    $existingService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
     if ($existingService) {
         Write-Host "Existing Setuora Windows service found. Updating it without starting it."
         if (-not (Test-AdminShell)) {
@@ -759,6 +781,11 @@ function Offer-ServiceInstall {
             throw "Windows service update failed."
         }
         return $true
+    }
+
+    if ($Repair) {
+        Write-Host "No Setuora Windows service is installed; keeping the current console-server setup."
+        return $false
     }
 
     $installService = Read-YesNo "Install Setuora as a manually started Windows service now?" $false
@@ -794,18 +821,41 @@ function Get-LocalIPv4 {
 }
 
 Write-Section "Setuora Setup"
-Write-Host "This setup will prepare Python, install packages, create .env, and configure optional services. Start the app separately when you are ready."
+if ($Repair) {
+    Write-Host "Repair mode will validate Python, rebuild damaged runtime files, reinstall verified packages, and test the app. Your .env and data are preserved."
+}
+else {
+    Write-Host "This setup will prepare Python, install packages, create .env, and configure optional services. Start the app separately when you are ready."
+}
 
 Set-Location $ProjectRoot
 New-Item -ItemType Directory -Force -Path $DataDir, $LogsDir | Out-Null
 
+if ($Repair -and (Test-Path $ProcessHelper)) {
+    . $ProcessHelper
+    $existingService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
+    $restartAsService = [bool]($existingService -and $existingService.Status -ne "Stopped")
+    $existingCaddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+    $restartCaddyService = [bool]($existingCaddyService -and $existingCaddyService.Status -ne "Stopped")
+
+    if (-not $restartAsService) {
+        $runningSetuoraProcesses = @(Get-SetuoraServerProcesses -ProjectRoot $ProjectRoot -ExcludeProcessIds @($PID))
+        $restartAsConsole = $runningSetuoraProcesses.Count -gt 0
+        if ($restartAsConsole) {
+            $launchInfo = Get-SetuoraServerLaunchInfo -Process $runningSetuoraProcesses[0] -DefaultHostAddress $restartHostAddress -DefaultPort $restartPort
+            $restartHostAddress = $launchInfo.HostAddress
+            $restartPort = $launchInfo.Port
+        }
+    }
+}
+
 Write-Section "Stop Existing Server"
-if (Test-Path $VenvPython) {
+if ((Test-Path $VenvPython) -or $Repair) {
     if (-not (Test-Path $StopScript)) {
         throw "The server management helper is missing: '$StopScript'."
     }
 
-    $existingSetuoraService = Get-Service -Name "SetuoraQrTallyBridge" -ErrorAction SilentlyContinue
+    $existingSetuoraService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
     if (
         $existingSetuoraService -and
         $existingSetuoraService.Status -ne "Stopped" -and
@@ -828,7 +878,13 @@ Write-Section "Dependencies"
 Install-Dependencies
 
 Write-Section "Configuration"
-$credentials = Ensure-EnvFile
+if ($Repair -and (Test-Path $EnvPath)) {
+    Write-Host "Existing .env settings preserved."
+    $credentials = $null
+}
+else {
+    $credentials = Ensure-EnvFile
+}
 
 Write-Section "Smoke Test"
 & $VenvPython -c "import uvicorn; from app.main import app; print('App import OK')"
@@ -836,14 +892,33 @@ if ($LASTEXITCODE -ne 0) {
     throw "The app could not be imported. Check the error above."
 }
 
+if ($Repair) {
+    Write-Section "Regression Tests"
+    & $VenvPython -m pytest -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "Repair completed the runtime checks, but the application test suite failed. Review the error above before starting Setuora."
+    }
+}
+
 Write-Section "HTTPS with Caddy"
-$caddySetup = Offer-CaddySetup
+if ($Repair) {
+    Write-Host "Existing HTTPS configuration preserved."
+    $caddySetup = $null
+}
+else {
+    $caddySetup = Offer-CaddySetup
+}
 
 Write-Section "Optional Service"
 $serviceInstalled = Offer-ServiceInstall
 
 Write-Section "Done"
-Write-Host "Setup completed successfully." -ForegroundColor Green
+if ($Repair) {
+    Write-Host "Repair completed successfully." -ForegroundColor Green
+}
+else {
+    Write-Host "Setup completed successfully." -ForegroundColor Green
+}
 Write-Host "Local URL: http://127.0.0.1:$Port"
 $lanIp = Get-LocalIPv4
 if ($caddySetup) {
@@ -865,7 +940,28 @@ if ($credentials) {
     Write-Host "Keep this password somewhere safe. It is only shown during setup."
 }
 
-if ($serviceInstalled) {
+if ($Repair) {
+    Write-Section "Restore Previous Running State"
+    if ($restartCaddyService) {
+        Start-Service -Name $CaddyServiceName
+        $caddy = Get-Service -Name $CaddyServiceName
+        $caddy.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
+    }
+    if ($restartAsService) {
+        Start-Service -Name $AppServiceName
+        $appService = Get-Service -Name $AppServiceName
+        $appService.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
+        Write-Host "Setuora was repaired and restarted as a Windows service." -ForegroundColor Green
+    }
+    elseif ($restartAsConsole) {
+        Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")
+        Write-Host "Setuora was repaired and restarted in a new window." -ForegroundColor Green
+    }
+    else {
+        Write-Host "Setuora was stopped before repair, so it remains stopped."
+    }
+}
+elseif ($serviceInstalled) {
     Write-Host "Setuora was installed as a manually started Windows service." -ForegroundColor Green
     Write-Host "Start it when ready with Setuora.exe start or scripts\start_setuora.bat."
 }

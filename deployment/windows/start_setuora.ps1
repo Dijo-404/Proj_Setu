@@ -3,7 +3,8 @@ param(
     [string]$HostAddress = "127.0.0.1",
     [int]$Port = 8000,
     [string]$ServiceName = "SetuoraQrTallyBridge",
-    [string]$CaddyServiceName = "SetuoraCaddy"
+    [string]$CaddyServiceName = "SetuoraCaddy",
+    [switch]$ConsoleOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -114,7 +115,7 @@ if ($caddyService -and $caddyService.Status -ne "Running") {
 }
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-if ($service) {
+if ($service -and -not $ConsoleOnly) {
     if ($service.Status -eq "Running") {
         Write-Host "Setuora is already running as the Windows service."
     }

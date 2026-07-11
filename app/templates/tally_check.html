@@ -14,15 +14,23 @@
     <h2>Company names</h2>
     <span>{{ companies|length }} compan{{ 'y' if companies|length == 1 else 'ies' }}</span>
   </div>
-  <div class="company-name-list">
+  <form class="search tally-search" role="search" data-tally-search-form>
+    <input type="search" placeholder="Search companies or ledgers" aria-label="Search configured companies or ledgers" data-tally-search-input>
+    <button class="button" type="submit">Search</button>
+  </form>
+  <div class="company-name-list" data-tally-company-list>
     {% for row in companies %}
     <button
       class="company-name-card"
       type="button"
       data-company-open="company-modal-{{ row.company.id }}"
+      data-tally-company-search="{{ [row.company.name, row.config.company_name, row.config.sales_voucher_type, row.config.purchase_voucher_type, row.config.sales_ledger_name, row.config.purchase_ledger_name, row.config.cgst_ledger_name, row.config.sgst_ledger_name, row.config.round_off_ledger_name, row.config.sales_gst_ledger_mappings]|join(' ') }}"
       aria-haspopup="dialog"
     >
-      <span data-company-name="{{ row.company.id }}">{{ row.company.name }}</span>
+      <span class="company-name-card__identity">
+        <span data-company-name="{{ row.company.id }}">{{ row.company.name }}</span>
+        <small>{{ row.config.company_name or 'No Tally company name' }}</small>
+      </span>
       {% if row.company.is_active %}
       <small class="status active">Active</small>
       {% endif %}
@@ -35,6 +43,9 @@
       {% endif %}
     </div>
     {% endfor %}
+    <div class="empty company-empty" data-tally-company-search-empty hidden>
+      No matching company or ledger found.
+    </div>
   </div>
 </section>
 
@@ -135,7 +146,7 @@
           <tbody>
             {% for item in requirements %}
             {% set confirmation = confirmations.get(item.key) %}
-            <tr>
+            <tr data-tally-master-search-row data-tally-master-search="{{ item.master_type }} {{ item.master_name }} {{ item.source }} {{ item.detail }}">
               <td>{{ item.master_type }}</td>
               <td>
                 {% if item.master_name %}
@@ -183,6 +194,7 @@
             {% else %}
             <tr><td colspan="4" class="empty">No Tally masters found</td></tr>
             {% endfor %}
+            <tr data-tally-master-search-empty hidden><td colspan="4" class="empty">No matching Tally master found</td></tr>
           </tbody>
         </table>
       </div>
@@ -222,6 +234,44 @@
       });
       if (dialog.dataset.autoOpen === "true") openDialog(dialog);
     });
+
+    const tallySearchForm = document.querySelector("[data-tally-search-form]");
+    if (tallySearchForm) {
+      const input = tallySearchForm.querySelector("[data-tally-search-input]");
+      const companyCards = Array.from(document.querySelectorAll("[data-tally-company-search]"));
+      const companyEmpty = document.querySelector("[data-tally-company-search-empty]");
+      const masterBodies = Array.from(document.querySelectorAll(".company-master-table tbody"));
+
+      const normalise = (value) => value.trim().toLocaleLowerCase();
+      const applyTallySearch = () => {
+        const query = normalise(input.value);
+        let visibleCompanies = 0;
+        companyCards.forEach((card) => {
+          const matches = !query || normalise(card.dataset.tallyCompanySearch || "").includes(query);
+          card.hidden = !matches;
+          if (matches) visibleCompanies += 1;
+        });
+        if (companyEmpty) companyEmpty.hidden = !query || visibleCompanies > 0 || companyCards.length === 0;
+
+        masterBodies.forEach((body) => {
+          const rows = Array.from(body.querySelectorAll("[data-tally-master-search-row]"));
+          const noMatches = body.querySelector("[data-tally-master-search-empty]");
+          let visibleRows = 0;
+          rows.forEach((row) => {
+            const matches = !query || normalise(row.dataset.tallyMasterSearch || "").includes(query);
+            row.hidden = !matches;
+            if (matches) visibleRows += 1;
+          });
+          if (noMatches) noMatches.hidden = !query || rows.length === 0 || visibleRows > 0;
+        });
+      };
+
+      tallySearchForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        applyTallySearch();
+      });
+      input.addEventListener("input", applyTallySearch);
+    }
 
     document.querySelectorAll("[data-company-settings-form]").forEach((form) => {
       form.addEventListener("submit", (event) => {

@@ -70,11 +70,32 @@ func TestParseOptionsSupportsUnifiedCommands(t *testing.T) {
 		t.Fatalf("command = %q, want start", options.command)
 	}
 
+	options, err = parseOptions([]string{"repair", "--install-dir", `C:\Setuora`, "--port", "8123"})
+	if err != nil {
+		t.Fatalf("parseOptions(repair) returned %v", err)
+	}
+	if options.command != "repair" || options.port != 8123 {
+		t.Fatalf("repair options = command %q, port %d", options.command, options.port)
+	}
+
 	options, err = parseOptions([]string{"--install-dir", `C:\Setuora`})
 	if err != nil {
 		t.Fatalf("parseOptions() returned %v", err)
 	}
 	if options.command != "setup" {
 		t.Fatalf("legacy flags command = %q, want setup", options.command)
+	}
+}
+
+func TestRemoveArgument(t *testing.T) {
+	arguments := []string{"/d", "/c", "scripts/update.bat", "--no-pause", "-Port", "8000"}
+	filtered := removeArgument(arguments, "--no-pause")
+	for _, argument := range filtered {
+		if argument == "--no-pause" {
+			t.Fatal("removeArgument left the unwanted argument in place")
+		}
+	}
+	if got, want := len(filtered), 5; got != want {
+		t.Fatalf("len(filtered) = %d, want %d", got, want)
 	}
 }

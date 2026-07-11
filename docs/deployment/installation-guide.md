@@ -14,8 +14,11 @@ Factory LAN deployment on the SERVER machine with Tally Prime running locally or
 
 ## Windows Install
 
-For a non-technical Windows install, right-click `scripts\setup.bat`, choose **Run as
-administrator**, or run it from an Administrator PowerShell:
+For a non-technical Windows install, open `Setuora.exe`, choose **Install or finish
+setup**, and approve the Administrator prompt. For later maintenance, use the same
+executable and choose **Repair** or **Update**; no command line is required.
+
+The lower-level setup script remains available from an Administrator PowerShell:
 
 ```powershell
 .\scripts\setup.bat
@@ -35,6 +38,11 @@ The helper:
 - can install the optional NSSM Windows service when run as Administrator
 - can start the app when finished
 
+`Setuora.exe repair` preserves `.env`, database files, backups, and source files.
+It validates or rebuilds the virtual environment, reinstalls hash-verified
+dependencies, refreshes an existing Windows service, runs the app smoke test and
+full regression suite, and restores the server to its previous running state.
+
 After setup, start the app anytime with:
 
 ```text
@@ -52,8 +60,8 @@ scripts\stop_setuora.bat
 Run `scripts\stop_setuora.bat` as Administrator when Setuora is installed as a Windows
 service.
 
-To pull the latest version from GitHub, update dependencies, and restart the
-server, run:
+To safely pull the latest version from GitHub, update dependencies, test it, and
+restore the server state, choose **Update** in `Setuora.exe` or run:
 
 ```text
 scripts\update.bat

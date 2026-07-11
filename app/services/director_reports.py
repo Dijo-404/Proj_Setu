@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import and_, desc, func, select
+from sqlalchemy import and_, desc, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import AuditFinding, Batch, BatchType, Product, Serial
+from app.models import AuditFinding, Batch, BatchType, Product, Serial, StorageLocation
 from app.services.expiry import STOCK_STATUSES, expiry_summary
 
 
@@ -178,8 +178,12 @@ def director_audit_reconciliation_report(
     }
 
 
-def director_product_stock_rows(db: Session, limit: int = 40) -> list[dict[str, object]]:
-    rows = db.execute(
+def director_product_stock_rows(
+    db: Session,
+    q: str = "",
+    limit: int = 40,
+) -> list[dict[str, object]]:
+    query = (
         select(
             Product.product_code,
             Product.product_name,
@@ -197,8 +201,21 @@ def director_product_stock_rows(db: Session, limit: int = 40) -> list[dict[str, 
         .where(Product.active.is_(True))
         .group_by(Product.id, Product.product_code, Product.product_name)
         .order_by(desc(func.count(Serial.id)), Product.product_name)
-        .limit(limit)
-    ).all()
+    )
+    if q.strip():
+        like = f"%{q.strip()}%"
+        query = query.where(
+            or_(
+                Product.product_code.ilike(like),
+                Product.product_name.ilike(like),
+                Product.nickname.ilike(like),
+                Product.tally_stock_item_name.ilike(like),
+                Product.alternate_tally_stock_item_name.ilike(like),
+                Product.hsn.ilike(like),
+                Product.brand.ilike(like),
+            )
+        )
+    rows = db.execute(query.limit(limit)).all()
     return [
         {
             "product_code": product_code,
@@ -208,6 +225,68 @@ def director_product_stock_rows(db: Session, limit: int = 40) -> list[dict[str, 
         }
         for product_code, product_name, stock, nearest_expiry in rows
     ]
+
+
+def director_product_filter_options(db: Session) -> list[dict[str, str]]:
+    """Return active products for the Director Report product picker."""
+    rows = db.execute(
+        select(Product.product_code, Product.product_name)
+        .where(Product.active.is_(True))
+        .order_by(Product.product_code, Product.product_name)
+    ).all()
+    return [
+        {"product_code": product_code, "product_name": product_name}
+        for product_code, product_name in rows
+    ]
+
+
+def _current_warehouse_name():
+    return func.coalesce(
+        func.nullif(func.trim(StorageLocation.warehouse), ""),
+        func.nullif(func.trim(Serial.warehouse), ""),
+        "Unassigned",
+    )
+
+
+def director_warehouse_stock_rows(
+    db: Session,
+    q: str = "",
+    limit: int = 20,
+) -> list[dict[str, object]]:
+    """Return current in-stock units grouped by their present warehouse."""
+    warehouse = _current_warehouse_name()
+    query = (
+        select(
+            warehouse.label("warehouse"),
+            func.count(Serial.id).label("stock"),
+        )
+        .outerjoin(StorageLocation, Serial.location_id == StorageLocation.id)
+        .where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
+        .group_by(warehouse)
+        .order_by(desc(func.count(Serial.id)), warehouse)
+    )
+    if q.strip():
+        query = query.where(warehouse.ilike(f"%{q.strip()}%"))
+    rows = db.execute(query.limit(limit)).all()
+    return [
+        {"warehouse": warehouse_name, "stock": int(stock or 0)}
+        for warehouse_name, stock in rows
+    ]
+
+
+def director_warehouse_filter_options(db: Session) -> list[str]:
+    """Return every warehouse with current stock for the Director Report picker."""
+    warehouse = _current_warehouse_name()
+    return list(
+        db.scalars(
+            select(warehouse)
+            .select_from(Serial)
+            .outerjoin(StorageLocation, Serial.location_id == StorageLocation.id)
+            .where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
+            .group_by(warehouse)
+            .order_by(warehouse)
+        ).all()
+    )
 
 
 def director_product_totals(db: Session) -> dict[str, int]:
@@ -232,6 +311,8 @@ def director_report(
     db: Session,
     audit_start_at: datetime | None = None,
     audit_end_at: datetime | None = None,
+    product_q: str = "",
+    warehouse_q: str = "",
 ) -> dict[str, object]:
     audit_batches = director_audit_batch_rows(db)
     latest_audit = audit_batches[0] if audit_batches else None
@@ -252,7 +333,8 @@ def director_report(
         "latest_extra": int(latest_audit["extra"]) if latest_audit else 0,
         "expiry": expiry,
         "dead_stock_rows": dead_stock_rows,
-        "product_rows": director_product_stock_rows(db),
+        "product_rows": director_product_stock_rows(db, product_q),
+        "warehouse_rows": director_warehouse_stock_rows(db, warehouse_q),
         "products": products,
         "reconciliation": director_audit_reconciliation_report(db, audit_start_at, audit_end_at),
     }

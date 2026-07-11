@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from sqlalchemy import and_, desc, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -12,11 +12,18 @@ from app.database import get_db
 from app.models import AuditAssignment, AuditFinding, Batch, InventoryTransaction, Product, Role, ScanLog, Serial, TransactionType, has_any_role, has_role
 from app.services.audit import assignment_progress, current_missing_stock_findings_query, refresh_expired_audit_assignments
 from app.services.charts import bar_chart, donut_chart
-from app.services.director_reports import director_audit_batch_report, director_audit_reconciliation_report, director_report
+from app.services.director_reports import (
+    director_audit_batch_report,
+    director_audit_reconciliation_report,
+    director_product_filter_options,
+    director_report,
+    director_warehouse_filter_options,
+)
 from app.services.expiry import expiry_summary
 from app.services.exports import audit_reconciliation_xlsx, missing_stock_xlsx, scans_xlsx, transactions_xlsx
 from app.services.losses import loss_summary
 from app.services.log_fields import barcode_sold_by, invoice_created_by, product_audited_by
+from app.services.report_format import report_date
 from app.templates import templates
 
 router = APIRouter(prefix="/reports")
@@ -219,6 +226,8 @@ def reports(
     end: str = "",
     audit_start: str = "",
     audit_end: str = "",
+    product_q: str = "",
+    warehouse_q: str = "",
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
@@ -232,12 +241,31 @@ def reports(
             {
                 "request": request,
                 "user": user,
-                "report": director_report(db, audit_start_dt, audit_end_dt),
+                "report": director_report(
+                    db,
+                    audit_start_dt,
+                    audit_end_dt,
+                    product_q,
+                    warehouse_q,
+                ),
                 "audit_start": audit_start,
                 "audit_end": audit_end,
+                "product_q": product_q,
+                "warehouse_q": warehouse_q,
+                "director_product_options": director_product_filter_options(db),
+                "director_warehouse_options": director_warehouse_filter_options(db),
                 "audit_reconciliation_export_url": export_url(
                     "/reports/audit-reconciliation.xlsx",
                     {"start": audit_start, "end": audit_end},
+                ),
+                "director_live_url": export_url(
+                    "/reports/live",
+                    {
+                        "audit_start": audit_start,
+                        "audit_end": audit_end,
+                        "product_q": product_q,
+                        "warehouse_q": warehouse_q,
+                    },
                 ),
             },
         )
@@ -313,6 +341,66 @@ def reports(
                 {"action": action, "product_id": str(product_id or ""), "start": start, "end": end},
             ),
         },
+    )
+
+
+@router.get("/live")
+def director_report_live(
+    request: Request,
+    audit_start: str = "",
+    audit_end: str = "",
+    product_q: str = "",
+    warehouse_q: str = "",
+    db: Session = Depends(get_db),
+):
+    """Return the current Director Report data for background refreshes."""
+    require_permission(request, db, "reports_data")
+    refresh_expired_audit_assignments(db)
+    audit_start_at = parse_period_datetime(audit_start, "audit start")
+    audit_end_at = parse_period_datetime(audit_end, "audit end", end=True)
+    report = director_report(db, audit_start_at, audit_end_at, product_q, warehouse_q)
+    latest_audit = report["latest_audit"]
+    reconciliation = report["reconciliation"]
+
+    return JSONResponse(
+        {
+            "director_metrics": {
+                "audit_batch_count": report["audit_batch_count"],
+                "latest_missing": report["latest_missing"],
+                "latest_extra": report["latest_extra"],
+                "expiry_risk": report["expiry"]["widgets"]["high_risk"],
+                "dead_stock": len(report["dead_stock_rows"]),
+                "latest_audit_at": report_date(latest_audit["audit_at"]) if latest_audit else "No audit",
+                "total_products": report["products"]["total_products"],
+                "total_stock": report["products"]["total_stock"],
+            },
+            "latest_audit_url": (
+                f"/reports/audit-batches/{latest_audit['id']}" if latest_audit else "#audit-batches"
+            ),
+            "reconciliation": {
+                "audit_batch_count": reconciliation["audit_batch_count"],
+                "verified": reconciliation["verified"],
+                "pending": reconciliation["pending"],
+                "missing": reconciliation["missing"],
+                "extra": reconciliation["extra"],
+                "total": reconciliation["total"],
+            },
+            "product_rows_html": templates.env.get_template(
+                "partials/director_product_stock_rows.html"
+            ).render(report=report),
+            "warehouse_rows_html": templates.env.get_template(
+                "partials/director_warehouse_rows.html"
+            ).render(report=report),
+            "audit_batches_html": templates.env.get_template(
+                "partials/director_audit_batch_rows.html"
+            ).render(report=report),
+            "expiry_risk_html": templates.env.get_template(
+                "partials/director_expiry_risk_rows.html"
+            ).render(report=report),
+            "dead_stock_html": templates.env.get_template(
+                "partials/director_dead_stock_rows.html"
+            ).render(report=report),
+        }
     )
 
 

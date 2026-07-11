@@ -58,7 +58,7 @@ Proj_Setu/
 
 ## Quick Windows Setup For Non-Technical Users
 
-For a new server, run `Setuora.exe` and choose `Setup or repair`, then approve the
+For a new server, run `Setuora.exe` and choose `Install or finish setup`, then approve the
 Windows administrator prompt. The executable installs Git for Windows if it is
 missing, downloads or updates the official `main` branch into `C:\Setuora`, and
 then runs the complete interactive setup described below. Internet access is
@@ -66,23 +66,31 @@ required. Setup places a copy of `Setuora.exe` in the installation folder for
 later use.
 
 The installer can also repair or update an existing `C:\Setuora` installation.
-It preserves the gitignored `.env`, database, backups, and runtime data. Installer
-source and reproducible build instructions are in `installer/`.
+Choose `Repair this installation` for an automatic dependency, virtual-environment,
+service, import, and regression-test check. Repair keeps `.env`, the database,
+backups, runtime data, and source files unchanged, then restores the app to its
+previous running or stopped state. Installer source and reproducible build
+instructions are in `installer/`.
 
 The same executable controls the normal lifecycle after setup:
 
 ```text
 Setuora.exe setup
+Setuora.exe repair
+Setuora.exe update
 Setuora.exe start
 Setuora.exe stop
-Setuora.exe update
 ```
 
 Setup checks for Python 3.11, installs the hash-verified dependency lock, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, and offers an optional manually-started Windows service. It does not start Setuora automatically. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
 
 To configure the optional LAN HTTPS proxy, run `Setuora.exe setup --with-caddy` as Administrator. Caddy is installed as a manually-started service and is started and stopped alongside Setuora by the executable.
 
-If Setuora is installed as a Windows service, run `Setuora.exe start`, `stop`, or `update` as Administrator. The updater accepts only a clean fast-forward update, refuses a dirty worktree, installs the hash-verified dependency lock, runs the test suite, and restores the app to the state it had before the update.
+`Setuora.exe setup`, `repair`, and `update` request Administrator access automatically.
+The updater accepts only a clean fast-forward update, refuses a dirty worktree,
+does nothing when the installation is already current, installs the hash-verified
+dependency lock, runs the test suite, and restores the app to the state it had
+before the update. It never overwrites divergent or locally edited source files.
 
 Before going live on the target server, run the [production release
 checklist](docs/deployment/production-release-checklist.md). It verifies the

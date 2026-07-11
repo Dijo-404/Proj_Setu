@@ -225,11 +225,11 @@
 </section>
 {% endif %}
 
-<section class="split">
-  <div class="panel split-card">
+<section class="split reports-activity-grid">
+  <div class="panel split-card reports-activity-card">
     <div class="section-title"><h2>Scans</h2></div>
-    <div class="table-scroll">
-      <table>
+    <div class="table-scroll reports-activity-scroll">
+      <table class="reports-activity-table reports-scans-table">
         <thead><tr><th>Time</th><th>User</th><th>Action</th><th>Serial</th><th>Status</th></tr></thead>
         <tbody>
           {% for scan in scans %}
@@ -247,10 +247,10 @@
       </table>
     </div>
   </div>
-  <div class="panel split-card">
+  <div class="panel split-card reports-activity-card">
     <div class="section-title"><h2>Pending sync</h2></div>
-    <div class="table-scroll">
-      <table>
+    <div class="table-scroll reports-activity-scroll">
+      <table class="reports-activity-table reports-pending-table">
         <thead><tr><th>Batch</th><th>Status</th><th>Retries</th><th>Last retry</th><th>Error</th></tr></thead>
         <tbody>
           {% for batch in pending %}

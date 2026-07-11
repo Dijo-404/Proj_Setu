@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#faf9f5">
   <title>{% block title %}Setuora Barcode Tally Bridge{% endblock %}</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/styles.css?v=20260710-table-fonts-3">
+  <link rel="stylesheet" href="/static/styles.css?v=20260711-table-slots-2">
 </head>
 <body>
   {% if user %}
@@ -196,7 +196,8 @@
     {% block content %}{% endblock %}
   </main>
   {% include "partials/xlsx_export_dialog.html" %}
-  <script src="/static/searchable-select.js?v=20260710-2"></script>
+  <script src="/static/table-viewport.js?v=20260711-2"></script>
+  <script src="/static/searchable-select.js?v=20260711-director-picker-1"></script>
   <script src="/static/autosave.js?v=20260708-gst-choice-1"></script>
   <script src="/static/xlsx-export-dialog.js?v=20260709-gst-fields-1"></script>
 </body>

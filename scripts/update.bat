@@ -7,6 +7,10 @@ if /I "%~1"=="--no-pause" (
     set "SETUORA_NO_PAUSE=1"
     shift
 )
+if "%SETUORA_LAUNCHED_UPDATE%"=="1" (
+    rem Give Setuora.exe time to exit so Git can safely replace the launcher itself.
+    >nul 2>&1 ping 127.0.0.1 -n 4
+)
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_UPDATE_BAT; $marker='### POWERSHELL UPDATE SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded update script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %1 %2 %3 %4 %5 %6 %7 %8 %9
 set "UPDATE_EXIT=%ERRORLEVEL%"
 echo.
@@ -81,7 +85,7 @@ function Start-SetuoraServer {
     }
 
     if ($restartAsConsole) {
-        Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort")
+        Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")
         Write-Host "Setuora is running in a new window." -ForegroundColor Green
         return $true
     }
@@ -166,6 +170,15 @@ Write-Host "Updating branch '$branch' from origin..."
 & git fetch --no-tags origin $branch
 if ($LASTEXITCODE -ne 0) {
     throw "Git could not download the latest version. Your existing files were left intact; check the Git message above and run scripts\update.bat again."
+}
+
+$fetchedHead = (@(& git rev-parse FETCH_HEAD) -join "").Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fetchedHead)) {
+    throw "The downloaded version could not be verified. Your existing files were left intact."
+}
+if ($fetchedHead -eq $previousHead) {
+    Write-Host "Setuora is already up to date. Nothing was stopped or changed." -ForegroundColor Green
+    return
 }
 
 # Only accept a clean fast-forward. A rewritten or divergent remote must be

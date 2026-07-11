@@ -17,7 +17,7 @@ def test_setup_skips_stop_helper_for_fresh_install():
     stop_section = setup_script.split('Write-Section "Stop Existing Server"', 1)[1]
     stop_section = stop_section.split('Write-Section "Python"', 1)[0]
 
-    assert "if (Test-Path $VenvPython)" in stop_section
+    assert "if ((Test-Path $VenvPython) -or $Repair)" in stop_section
     assert "Fresh installation; there is no existing Setuora server to stop." in stop_section
 
 
@@ -46,6 +46,19 @@ def test_setup_repairs_pip_and_checks_dependencies():
     assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in setup_script
 
 
+def test_setup_has_a_data_preserving_repair_mode():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    assert "[switch]$Repair" in setup_script
+    assert 'Write-Host "Existing .env settings preserved."' in setup_script
+    assert 'Write-Host "Existing HTTPS configuration preserved."' in setup_script
+    assert "The virtual environment is damaged or incompatible. Rebuilding it" in setup_script
+    assert "& $VenvPython -m pytest -q" in setup_script
+    assert 'Write-Section "Restore Previous Running State"' in setup_script
+    assert "Get-SetuoraServerLaunchInfo" in setup_script
+    assert 'Start-Service -Name $AppServiceName' in setup_script
+
+
 def test_updater_never_uses_pull_or_rebase():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
@@ -56,6 +69,28 @@ def test_updater_never_uses_pull_or_rebase():
     assert "git reset --hard FETCH_HEAD" not in update_script
     assert "Refusing to update because local source changes are present." in update_script
     assert "$worktreeChanges = @(& git status --porcelain)" in update_script
+
+
+def test_updater_exits_before_changing_an_already_current_installation():
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
+
+    assert 'if ("$fetchedHead" -eq "$previousHead")' not in update_script
+    assert "if ($fetchedHead -eq $previousHead)" in update_script
+    assert "Setuora is already up to date. Nothing was stopped or changed." in update_script
+    assert update_script.index("if ($fetchedHead -eq $previousHead)") < update_script.index(
+        '& git merge --ff-only FETCH_HEAD'
+    )
+
+
+def test_unified_updater_releases_the_executable_before_git_merge():
+    update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
+    installer_source = (PROJECT_ROOT / "installer" / "main.go").read_text(encoding="utf-8")
+
+    assert 'if "%SETUORA_LAUNCHED_UPDATE%"=="1"' in update_script
+    assert '"SETUORA_LAUNCHED_UPDATE=1"' in installer_source
+    assert "command.Start()" in installer_source
+    assert 'runGitVisible(gitPath, installDir, "reset", "--hard", "FETCH_HEAD")' not in installer_source
+    assert "local source changes are present; setup will not overwrite them" in installer_source
 
 
 def test_updater_checks_service_permissions_before_fetching():
@@ -84,7 +119,7 @@ def test_updater_restarts_based_on_running_server_state():
     assert '$restartAsService = $service -and $service.Status -ne "Stopped"' in update_script
     assert "$runningSetuoraProcesses = @(Get-SetuoraServerProcesses" in update_script
     assert "$restartAsConsole = (-not $restartAsService) -and $runningSetuoraProcesses.Count -gt 0" in update_script
-    assert 'Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort")' in update_script
+    assert 'Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")' in update_script
     assert "Setuora was not running before the update; leaving it stopped." in update_script
 
 
@@ -97,6 +132,9 @@ def test_start_script_uses_state_aware_windows_helper():
     assert "deployment\\windows\\start_setuora.ps1" in start_script
     assert "-HostAddress \"%HOST_ADDRESS%\" -Port \"%PORT%\"" in start_script
     assert "Get-Service -Name $ServiceName" in helper
+    assert "[switch]$ConsoleOnly" in helper
+    assert "if ($service -and -not $ConsoleOnly)" in helper
+    assert 'if "%CONSOLE_ONLY%"=="1" set "CONSOLE_ONLY_ARG=-ConsoleOnly"' in start_script
     assert "Get-SetuoraServerProcesses" in helper
     assert "Setuora is already running in another window or background process." in helper
 

@@ -1,0 +1,8 @@
+{% for row in report.warehouse_rows %}
+<tr>
+  <td><strong>{{ row.warehouse }}</strong></td>
+  <td><strong>{{ row.stock }}</strong></td>
+</tr>
+{% else %}
+<tr><td colspan="2" class="empty">No stock available</td></tr>
+{% endfor %}

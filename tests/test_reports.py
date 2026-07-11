@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 
@@ -11,10 +12,11 @@ from starlette.requests import Request
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import AuditAssignment, AuditAssignmentItem, AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, TransactionType, User
+from app.models import AuditAssignment, AuditAssignmentItem, AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, StorageLocation, TransactionType, User
 from app.routers.reports import (
     audit_reconciliation_excel,
     director_audit_batch_detail,
+    director_report_live,
     missing_stock_excel,
     missing_stock_report,
     reports as reports_route,
@@ -613,6 +615,9 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Missing in last audit" in report_text
     assert "Director expiry risk product" in report_text
     assert "Director dead stock product" in report_text
+    assert "Live data" in report_text
+    assert "Product stock" in report_text
+    assert "Warehouse totals" in report_text
     assert "Audit reconciliation Excel" in report_text
     assert "Audit reconciliation" in report_text
     assert "Transactions Excel" not in report_text
@@ -627,6 +632,121 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Director missing product" in detail_text
     assert "DIR-MISS-001" in detail_text
     assert "DIR-MISS-EXTRA" in detail_text
+
+
+def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        director = User(id=1, username="director", password_hash="x", role="directors", active=True)
+        product = Product(
+            product_code="WH100",
+            product_name="Warehouse stock product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Warehouse stock product",
+        )
+        main_location = StorageLocation(
+            code="MAIN-A-1-1-1-1",
+            warehouse="Main warehouse",
+            zone="A",
+            section="1",
+            rack="1",
+            shelf="1",
+            bin="1",
+        )
+        db.add_all([director, product, main_location])
+        db.flush()
+        db.add_all(
+            [
+                Serial(
+                    serial_number="WH100-000001",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse="Old warehouse name",
+                    location_id=main_location.id,
+                ),
+                Serial(
+                    serial_number="WH100-000002",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse="Main warehouse",
+                ),
+                Serial(
+                    serial_number="WH100-000003",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse="Branch warehouse",
+                ),
+            ]
+        )
+        db.commit()
+
+    def signed_request() -> Request:
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/reports",
+                "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(1)}".encode())],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
+
+    with Session() as db:
+        response = reports_route(signed_request(), db=db)
+        report_text = response.body.decode()
+        live_response = director_report_live(signed_request(), db=db)
+        live_data = json.loads(live_response.body)
+        filtered_response = reports_route(
+            signed_request(),
+            product_q="Warehouse stock",
+            warehouse_q="Branch",
+            db=db,
+        )
+        filtered_text = filtered_response.body.decode()
+        filtered_live_response = director_report_live(
+            signed_request(),
+            product_q="Warehouse stock",
+            warehouse_q="Branch",
+            db=db,
+        )
+        filtered_live_data = json.loads(filtered_live_response.body)
+    engine.dispose()
+
+    assert response.status_code == 200
+    assert live_response.status_code == 200
+    assert 'data-live-url="/reports/live"' in report_text
+    assert report_text.index("<h2>Product stock</h2>") < report_text.index("<h2>Audit reconciliation</h2>")
+    assert report_text.index("<h2>Warehouse totals</h2>") < report_text.index("<h2>Audit reconciliation</h2>")
+    assert "Main warehouse" in report_text
+    assert "Branch warehouse" in report_text
+    assert "Old warehouse name" not in report_text
+    assert live_data["director_metrics"]["total_stock"] == 3
+    assert live_data["director_metrics"]["total_products"] == 1
+    assert "Main warehouse" in live_data["warehouse_rows_html"]
+    assert "Branch warehouse" in live_data["warehouse_rows_html"]
+    assert 'data-director-stock-filter' in report_text
+    assert 'aria-label="Filter product stock by product"' in report_text
+    assert 'aria-label="Filter warehouse totals by warehouse"' in report_text
+    assert '<option value="WH100"' in report_text
+    assert '<option value="Branch warehouse"' in report_text
+    assert 'data-live-url="/reports/live?product_q=Warehouse+stock&amp;warehouse_q=Branch"' in filtered_text
+    filtered_warehouse_rows = filtered_text.split('data-director-live-warehouse-rows>', 1)[1].split("</tbody>", 1)[0]
+    assert "Main warehouse" not in filtered_warehouse_rows
+    assert "Branch warehouse" in filtered_warehouse_rows
+    assert "Main warehouse" not in filtered_live_data["warehouse_rows_html"]
+    assert "Branch warehouse" in filtered_live_data["warehouse_rows_html"]
 
 
 def test_audit_reconciliation_xlsx_combines_audit_batches_for_admin_and_director():

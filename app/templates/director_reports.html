@@ -14,62 +14,130 @@
 
 {% set latest_url = '/reports/audit-batches/' ~ report.latest_audit.id if report.latest_audit else '#audit-batches' %}
 
+<section class="director-live-layout" data-live-url="{{ director_live_url }}" data-live-interval="10000">
+  <section class="panel director-panel director-live-products" id="products">
+    <div class="section-title">
+      <div>
+        <p class="eyebrow">Live data</p>
+        <h2>Product stock</h2>
+      </div>
+      <div class="director-live-tools">
+        <span>Current in-stock units · highest stock first</span>
+        <form method="get" class="director-stock-filter" data-director-stock-filter>
+          <select name="product_q" aria-label="Filter product stock by product">
+            <option value="">All products</option>
+            {% for product in director_product_options %}
+            <option value="{{ product.product_code }}" data-search="{{ product.product_code }} {{ product.product_name }}" {{ 'selected' if product_q == product.product_code }}>{{ product.product_code }} · {{ product.product_name }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="warehouse_q" value="{{ warehouse_q }}">
+          <input type="hidden" name="audit_start" value="{{ audit_start }}">
+          <input type="hidden" name="audit_end" value="{{ audit_end }}">
+        </form>
+      </div>
+    </div>
+    <div class="table-scroll director-table-scroll">
+      <table class="director-table director-live-table">
+        <thead><tr><th>Product</th><th>Product code</th><th>Stock</th><th>Nearest expiry</th></tr></thead>
+        <tbody data-director-live-product-rows>
+          {% include "partials/director_product_stock_rows.html" %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <aside class="panel director-panel director-warehouse-panel" id="warehouse-totals">
+    <div class="section-title">
+      <div>
+        <p class="eyebrow">Live data</p>
+        <h2>Warehouse totals</h2>
+      </div>
+      <div class="director-live-tools">
+        <span>Current stock by warehouse</span>
+        <form method="get" class="director-stock-filter" data-director-stock-filter>
+          <select name="warehouse_q" aria-label="Filter warehouse totals by warehouse">
+            <option value="">All warehouses</option>
+            {% for warehouse in director_warehouse_options %}
+            <option value="{{ warehouse }}" {{ 'selected' if warehouse_q == warehouse }}>{{ warehouse }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="product_q" value="{{ product_q }}">
+          <input type="hidden" name="audit_start" value="{{ audit_start }}">
+          <input type="hidden" name="audit_end" value="{{ audit_end }}">
+        </form>
+      </div>
+    </div>
+    <div class="table-scroll director-table-scroll">
+      <table class="director-table director-warehouse-table">
+        <thead><tr><th>Warehouse</th><th>Total stock</th></tr></thead>
+        <tbody data-director-live-warehouse-rows>
+          {% include "partials/director_warehouse_rows.html" %}
+        </tbody>
+      </table>
+    </div>
+  </aside>
+</section>
+
 <section class="metric-grid director-metric-grid">
   <a class="metric director-metric-link" href="#audit-batches">
     <span>Audit batches</span>
-    <strong>{{ report.audit_batch_count }}</strong>
+    <strong data-director-metric="audit_batch_count">{{ report.audit_batch_count }}</strong>
   </a>
-  <a class="metric director-metric-link danger" href="{{ latest_url }}">
+  <a class="metric director-metric-link danger" href="{{ latest_url }}" data-director-latest-audit-link>
     <span>Missing in last audit</span>
-    <strong>{{ report.latest_missing }}</strong>
+    <strong data-director-metric="latest_missing">{{ report.latest_missing }}</strong>
   </a>
-  <a class="metric director-metric-link warn" href="{{ latest_url }}">
+  <a class="metric director-metric-link warn" href="{{ latest_url }}" data-director-latest-audit-link>
     <span>Extra in last audit</span>
-    <strong>{{ report.latest_extra }}</strong>
+    <strong data-director-metric="latest_extra">{{ report.latest_extra }}</strong>
   </a>
   <a class="metric director-metric-link danger" href="#expiry-risk">
     <span>Expiry risk</span>
-    <strong>{{ report.expiry.widgets.high_risk }}</strong>
+    <strong data-director-metric="expiry_risk">{{ report.expiry.widgets.high_risk }}</strong>
   </a>
   <a class="metric director-metric-link danger" href="#dead-stock">
     <span>Dead stock</span>
-    <strong>{{ report.dead_stock_rows|length }}</strong>
+    <strong data-director-metric="dead_stock">{{ report.dead_stock_rows|length }}</strong>
   </a>
   <div class="metric director-date-metric">
     <span>Last audit date and time</span>
     {% if report.latest_audit %}
-    <strong>{{ report_date(report.latest_audit.audit_at) }}</strong>
+    <strong data-director-metric="latest_audit_at">{{ report_date(report.latest_audit.audit_at) }}</strong>
     {% else %}
-    <strong>No audit</strong>
+    <strong data-director-metric="latest_audit_at">No audit</strong>
     {% endif %}
   </div>
   <a class="metric director-metric-link" href="#products">
     <span>Products</span>
-    <strong>{{ report.products.total_products }}</strong>
+    <strong data-director-metric="total_products">{{ report.products.total_products }}</strong>
   </a>
   <a class="metric director-metric-link" href="#products">
     <span>Stock items</span>
-    <strong>{{ report.products.total_stock }}</strong>
+    <strong data-director-metric="total_stock">{{ report.products.total_stock }}</strong>
   </a>
 </section>
 
-<section class="panel director-panel">
-  <div class="section-title">
+<section class="panel director-panel director-reconciliation">
+  <div class="section-title director-reconciliation__head">
     <h2>Audit reconciliation</h2>
-    <span>{{ report.reconciliation.audit_batch_count }} audit batch{{ '' if report.reconciliation.audit_batch_count == 1 else 'es' }}</span>
+    <span class="director-reconciliation__batch-count" data-director-reconciliation-batch-count>{{ report.reconciliation.audit_batch_count }} audit batch{{ '' if report.reconciliation.audit_batch_count == 1 else 'es' }}</span>
   </div>
-  <form method="get" class="filters">
+  <form method="get" class="filters director-reconciliation__filters">
     <label>From<input name="audit_start" type="datetime-local" value="{{ audit_start }}"></label>
     <label>To<input name="audit_end" type="datetime-local" value="{{ audit_end }}"></label>
-    <button class="button" type="submit">Apply</button>
-    <a class="button primary" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Export Excel</a>
+    <input type="hidden" name="product_q" value="{{ product_q }}">
+    <input type="hidden" name="warehouse_q" value="{{ warehouse_q }}">
+    <div class="director-reconciliation__actions">
+      <button class="button" type="submit">Apply</button>
+      <a class="button primary" href="{{ audit_reconciliation_export_url }}" data-xlsx-export data-xlsx-title="Customize audit reconciliation" data-xlsx-parameters="start|end" data-xlsx-fields="{{ audit_excel_fields }}">Export Excel</a>
+    </div>
   </form>
-  <section class="metric-grid director-detail-grid">
-    <div class="metric"><span>Verified</span><strong>{{ report.reconciliation.verified }}</strong></div>
-    <div class="metric"><span>Pending</span><strong>{{ report.reconciliation.pending }}</strong></div>
-    <div class="metric danger"><span>Missing</span><strong>{{ report.reconciliation.missing }}</strong></div>
-    <div class="metric warn"><span>Extra</span><strong>{{ report.reconciliation.extra }}</strong></div>
-    <div class="metric"><span>Total checked</span><strong>{{ report.reconciliation.total }}</strong></div>
+  <section class="metric-grid director-detail-grid director-reconciliation__metrics">
+    <div class="metric director-reconciliation__metric"><span>Verified</span><strong data-director-reconciliation-metric="verified">{{ report.reconciliation.verified }}</strong></div>
+    <div class="metric director-reconciliation__metric"><span>Pending</span><strong data-director-reconciliation-metric="pending">{{ report.reconciliation.pending }}</strong></div>
+    <div class="metric danger director-reconciliation__metric"><span>Missing</span><strong data-director-reconciliation-metric="missing">{{ report.reconciliation.missing }}</strong></div>
+    <div class="metric warn director-reconciliation__metric"><span>Extra</span><strong data-director-reconciliation-metric="extra">{{ report.reconciliation.extra }}</strong></div>
+    <div class="metric director-reconciliation__metric"><span>Total checked</span><strong data-director-reconciliation-metric="total">{{ report.reconciliation.total }}</strong></div>
   </section>
 </section>
 
@@ -92,21 +160,8 @@
           <th>Extra</th>
         </tr>
       </thead>
-      <tbody>
-        {% for row in report.audit_batches %}
-        <tr>
-          <td><a class="button primary director-open" href="/reports/audit-batches/{{ row.id }}">Open</a></td>
-          <td><strong>{{ row.batch_number }}</strong></td>
-          <td>{{ report_date(row.audit_at) }}</td>
-          <td>{{ row.audited_by }}</td>
-          <td>{{ row.products }}</td>
-          <td><span class="status {{ 'pending_sync' if row.pending else 'synced' }}">{{ row.pending }}</span></td>
-          <td><span class="status {{ 'missing' if row.missing else 'synced' }}">{{ row.missing }}</span></td>
-          <td><span class="status {{ 'extra' if row.extra else 'synced' }}">{{ row.extra }}</span></td>
-        </tr>
-        {% else %}
-        <tr><td colspan="8" class="empty">No audit batches found</td></tr>
-        {% endfor %}
+      <tbody data-director-live-audit-batches>
+        {% include "partials/director_audit_batch_rows.html" %}
       </tbody>
     </table>
   </div>
@@ -121,18 +176,8 @@
     <div class="table-scroll director-table-scroll">
       <table class="director-table">
         <thead><tr><th>Product</th><th>Batch</th><th>Stock</th><th>Unsold</th><th>Risk</th></tr></thead>
-        <tbody>
-          {% for row in report.expiry.risk_rows[:12] %}
-          <tr>
-            <td><strong>{{ row.product_name }}</strong><small>{{ row.product_code }} · {{ row.warehouse }}</small></td>
-            <td>{{ row.batch }}</td>
-            <td>{{ row.stock }}</td>
-            <td>{{ row.unsold_stock }}</td>
-            <td><span class="status {{ row.risk_class }}">{{ row.risk }}</span></td>
-          </tr>
-          {% else %}
-          <tr><td colspan="5" class="empty">No expiry risk found</td></tr>
-          {% endfor %}
+        <tbody data-director-live-expiry-risk>
+          {% include "partials/director_expiry_risk_rows.html" %}
         </tbody>
       </table>
     </div>
@@ -145,44 +190,14 @@
     <div class="table-scroll director-table-scroll">
       <table class="director-table">
         <thead><tr><th>Product</th><th>Stock</th><th>Last sale</th><th>Value</th></tr></thead>
-        <tbody>
-          {% for row in report.dead_stock_rows[:12] %}
-          <tr>
-            <td><strong>{{ row.product_name }}</strong></td>
-            <td>{{ row.stock }}</td>
-            <td>{{ row.last_sale }}</td>
-            <td>Rs {{ '%.0f'|format(row.value) }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4" class="empty">No dead stock found</td></tr>
-          {% endfor %}
+        <tbody data-director-live-dead-stock>
+          {% include "partials/director_dead_stock_rows.html" %}
         </tbody>
       </table>
     </div>
   </div>
 </section>
 
-<section class="panel director-panel" id="products">
-  <div class="section-title">
-    <h2>Products</h2>
-    <span>{{ report.products.products_with_stock }} products currently in stock</span>
-  </div>
-  <div class="table-scroll director-table-scroll">
-    <table class="director-table">
-      <thead><tr><th>Product</th><th>Product code</th><th>Stock</th><th>Nearest expiry</th></tr></thead>
-      <tbody>
-        {% for row in report.product_rows %}
-        <tr>
-          <td><strong>{{ row.product_name }}</strong></td>
-          <td>{{ row.product_code }}</td>
-          <td>{{ row.stock }}</td>
-          <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
-        </tr>
-        {% else %}
-        <tr><td colspan="4" class="empty">No products found</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</section>
+<script src="/static/director-report-filters.js?v=20260711-1"></script>
+<script src="/static/live.js?v=20260711-director-report-1"></script>
 {% endblock %}

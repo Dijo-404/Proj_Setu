@@ -95,6 +95,10 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
 
     assert page.status_code == 200
     assert 'data-company-open="company-modal-' in page.text
+    assert 'data-tally-search-form' in page.text
+    assert 'placeholder="Search companies or ledgers"' in page.text
+    assert 'data-tally-company-search=' in page.text
+    assert 'data-tally-master-search-row' in page.text
     assert "Original Label" in page.text
     assert "Required Tally masters" not in page.text
     assert 'name="default_party_name"' not in page.text
