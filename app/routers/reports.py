@@ -407,7 +407,10 @@ def director_report_live(
             },
             "product_rows_html": templates.env.get_template(
                 "partials/product_stock_summary_rows.html"
-            ).render(product_rows=report["product_rows"]),
+            ).render(
+                product_rows=report["product_rows"],
+                show_audit_variance=True,
+            ),
             "warehouse_rows_html": templates.env.get_template(
                 "partials/director_warehouse_rows.html"
             ).render(report=report),

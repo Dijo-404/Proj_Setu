@@ -262,7 +262,21 @@ def director_product_stock_rows(
                 AuditFinding.product_code,
                 Batch.id,
                 audit_at.label("audit_at"),
-                func.count(AuditFinding.id).label("audited_quantity"),
+                func.sum(
+                    case(
+                        (
+                            AuditFinding.finding_type.in_(("VERIFIED", "EXTRA")),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ).label("audited_quantity"),
+                func.sum(
+                    case((AuditFinding.finding_type == "MISSING", 1), else_=0)
+                ).label("missing_quantity"),
+                func.sum(
+                    case((AuditFinding.finding_type == "EXTRA", 1), else_=0)
+                ).label("extra_quantity"),
             )
             .join(Batch, Batch.id == AuditFinding.batch_id)
             .where(
@@ -277,11 +291,20 @@ def director_product_stock_rows(
             )
             .order_by(AuditFinding.product_code, desc(audit_at), desc(Batch.id))
         ).all()
-        for product_code, _batch_id, last_audit_at, audited_quantity in audit_rows:
+        for (
+            product_code,
+            _batch_id,
+            last_audit_at,
+            audited_quantity,
+            missing_quantity,
+            extra_quantity,
+        ) in audit_rows:
             if product_code not in latest_audits:
                 latest_audits[product_code] = {
                     "last_audit_at": last_audit_at,
                     "last_audited_quantity": int(audited_quantity or 0),
+                    "last_audit_missing": int(missing_quantity or 0),
+                    "last_audit_extra": int(extra_quantity or 0),
                 }
 
     return [
@@ -294,6 +317,12 @@ def director_product_stock_rows(
             "last_audit_at": latest_audits.get(product_code, {}).get("last_audit_at"),
             "last_audited_quantity": latest_audits.get(product_code, {}).get(
                 "last_audited_quantity", 0
+            ),
+            "last_audit_missing": latest_audits.get(product_code, {}).get(
+                "last_audit_missing", 0
+            ),
+            "last_audit_extra": latest_audits.get(product_code, {}).get(
+                "last_audit_extra", 0
             ),
             "nearest_expiry": nearest_expiry,
         }

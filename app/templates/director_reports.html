@@ -38,9 +38,10 @@
     </div>
     <div class="table-scroll director-table-scroll">
       <table class="director-table director-live-table product-stock-summary-table">
-        <thead><tr><th>Product</th><th>Product code</th><th>Current stock</th><th>Purchased (cumulative)</th><th>Sold (cumulative)</th><th>Last audit</th><th>Last audited qty</th><th>Nearest expiry</th></tr></thead>
+        <thead><tr><th>Product</th><th>Product code</th><th>Current stock</th><th>Purchased (cumulative)</th><th>Sold (cumulative)</th><th>Last audit</th><th>Last audited qty</th><th>Last audit missing</th><th>Last audit extra</th><th>Nearest expiry</th></tr></thead>
         <tbody data-director-live-product-rows>
           {% set product_rows = report.product_rows %}
+          {% set show_audit_variance = true %}
           {% include "partials/product_stock_summary_rows.html" %}
         </tbody>
       </table>

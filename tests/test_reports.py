@@ -941,6 +941,15 @@ def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable()
                     expected_status=SerialStatus.IN_STOCK.value,
                     scanned_status=SerialStatus.SOLD.value,
                 ),
+                AuditFinding(
+                    batch_id=audit_batch.id,
+                    serial_id=other_serial.id,
+                    serial_number=other_serial.serial_number,
+                    product_code=other.product_code,
+                    product_name=other.product_name,
+                    finding_type="MISSING",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                ),
             ]
         )
         db.commit()
@@ -972,6 +981,10 @@ def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable()
         director_filtered = reports_route(
             signed_request("/reports", 2), product_q="SUM-A", db=db
         )
+        director_live = director_report_live(
+            signed_request("/reports/live", 2),
+            db=db,
+        )
     engine.dispose()
 
     primary_row = next(row for row in rows if row["product_code"] == "SUM-A")
@@ -980,6 +993,13 @@ def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable()
     assert primary_row["sold"] == 1
     assert primary_row["last_audit_at"] == audit_at.replace(tzinfo=None)
     assert primary_row["last_audited_quantity"] == 2
+    assert primary_row["last_audit_missing"] == 0
+    assert primary_row["last_audit_extra"] == 1
+    other_row = next(row for row in rows if row["product_code"] == "SUM-B")
+    assert other_row["last_audit_at"] == audit_at.replace(tzinfo=None)
+    assert other_row["last_audited_quantity"] == 0
+    assert other_row["last_audit_missing"] == 1
+    assert other_row["last_audit_extra"] == 0
     assert [row["product_code"] for row in filtered_rows] == ["SUM-A"]
 
     for response in (admin_response, director_response):
@@ -991,6 +1011,16 @@ def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable()
         assert "Last audited qty" in text
         assert "Summary primary product" in text
         assert "Summary other product" in text
+
+    director_text = director_response.body.decode()
+    assert "Last audit missing" in director_text
+    assert "Last audit extra" in director_text
+    assert "Nothing scanned" in director_text
+    assert "Last audit missing" not in admin_response.body.decode()
+
+    director_live_rows = json.loads(director_live.body)["product_rows_html"]
+    assert "Nothing scanned" in director_live_rows
+    assert 'class="status missing">1</span>' in director_live_rows
 
     admin_filtered_rows = admin_filtered.body.decode().split(
         "data-dashboard-product-stock-rows>", 1

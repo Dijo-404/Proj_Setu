@@ -1592,7 +1592,7 @@ tfoot td {
 
 .director-live-layout {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
+  grid-template-columns: minmax(0, 1fr);
   align-items: stretch;
   gap: 20px;
   margin-bottom: 26px;
