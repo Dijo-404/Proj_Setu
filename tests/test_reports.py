@@ -12,7 +12,8 @@ from starlette.requests import Request
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import AuditAssignment, AuditAssignmentItem, AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, StorageLocation, TransactionType, User
+from app.models import AuditAssignment, AuditAssignmentItem, AuditFinding, Batch, BatchItem, BatchStatus, BatchType, InventoryTransaction, Product, ScanLog, Serial, SerialStatus, StorageLocation, TransactionType, User, WarehouseLevel
+from app.routers.dashboard import dashboard, dashboard_data
 from app.routers.reports import (
     audit_reconciliation_excel,
     director_audit_batch_detail,
@@ -24,6 +25,11 @@ from app.routers.reports import (
 from app.security import create_session_token
 from app.services.access_control import save_role_access_config
 from app.services.expiry import today
+from app.services.director_reports import (
+    director_product_stock_rows,
+    director_warehouse_filter_options,
+    director_warehouse_stock_rows,
+)
 
 
 def test_reports_page_renders_scan_and_transaction_rows():
@@ -297,6 +303,14 @@ def test_reports_product_dropdown_filters_product_specific_rows_and_exports():
     try:
         client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
         response = client.get(f"/reports?product_id={selected_id}", cookies={SESSION_COOKIE: create_session_token(1)})
+        all_products_response = client.get(
+            "/reports?action=&product_id=&start=&end=",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
+        invalid_product_response = client.get(
+            "/reports?product_id=not-a-product",
+            cookies={SESSION_COOKIE: create_session_token(1)},
+        )
         export = client.get(
             f"/reports/transactions.xlsx?product_id={selected_id}",
             cookies={SESSION_COOKIE: create_session_token(1)},
@@ -314,6 +328,12 @@ def test_reports_product_dropdown_filters_product_specific_rows_and_exports():
     assert "OTH-TALLY-001" not in response.text
     assert "OTH-EXP-BATCH" not in response.text
     assert "product_id" in response.text
+
+    assert all_products_response.status_code == 200
+    assert "SEL100-000001" in all_products_response.text
+    assert "OTH200-000001" in all_products_response.text
+    assert invalid_product_response.status_code == 400
+    assert invalid_product_response.json()["detail"] == "Invalid product filter"
 
     workbook = load_workbook(BytesIO(export.content))
     sheet = workbook["Transactions"]
@@ -747,6 +767,241 @@ def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
     assert "Branch warehouse" in filtered_warehouse_rows
     assert "Main warehouse" not in filtered_live_data["warehouse_rows_html"]
     assert "Branch warehouse" in filtered_live_data["warehouse_rows_html"]
+
+
+def test_director_warehouse_filter_does_not_treat_warehouse_levels_as_names():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        product = Product(
+            product_code="WH-LEVEL",
+            product_name="Warehouse level guard",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Warehouse level guard",
+        )
+        actual_location = StorageLocation(
+            code="BENGALURU-A-1-1-1-1",
+            warehouse="Bengaluru warehouse",
+            warehouse_level=WarehouseLevel.COMPANY_WAREHOUSE.value,
+            zone="A",
+            section="1",
+            rack="1",
+            shelf="1",
+            bin="1",
+        )
+        db.add_all([product, actual_location])
+        db.flush()
+        db.add_all(
+            [
+                Serial(
+                    serial_number="WH-LEVEL-000001",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse=WarehouseLevel.COMPANY_WAREHOUSE.value,
+                    warehouse_level=WarehouseLevel.COMPANY_WAREHOUSE.value,
+                ),
+                Serial(
+                    serial_number="WH-LEVEL-000002",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse=WarehouseLevel.C_AND_F.value,
+                    warehouse_level=WarehouseLevel.C_AND_F.value,
+                ),
+                Serial(
+                    serial_number="WH-LEVEL-000003",
+                    product_id=product.id,
+                    status=SerialStatus.IN_STOCK.value,
+                    warehouse=WarehouseLevel.COMPANY_WAREHOUSE.value,
+                    warehouse_level=WarehouseLevel.COMPANY_WAREHOUSE.value,
+                    location_id=actual_location.id,
+                ),
+            ]
+        )
+        db.commit()
+
+        options = director_warehouse_filter_options(db)
+        rows = director_warehouse_stock_rows(db)
+
+    engine.dispose()
+
+    assert options == ["Bengaluru warehouse", "Unassigned"]
+    assert {row["warehouse"]: row["stock"] for row in rows} == {
+        "Unassigned": 2,
+        "Bengaluru warehouse": 1,
+    }
+    for level in WarehouseLevel:
+        assert level.value not in options
+
+
+def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+    audit_at = datetime(2026, 7, 12, 10, 30, tzinfo=timezone.utc)
+
+    with Session() as db:
+        admin = User(id=1, username="admin", password_hash="x", role="admin", active=True)
+        director = User(id=2, username="director", password_hash="x", role="directors", active=True)
+        primary = Product(
+            product_code="SUM-A",
+            product_name="Summary primary product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=100,
+            tally_stock_item_name="Summary primary product",
+        )
+        other = Product(
+            product_code="SUM-B",
+            product_name="Summary other product",
+            hsn="0910",
+            gst_rate=5,
+            unit="Pcs",
+            default_rate=80,
+            tally_stock_item_name="Summary other product",
+        )
+        db.add_all([admin, director, primary, other])
+        db.flush()
+        stock_serial = Serial(
+            serial_number="SUM-A-000001",
+            product_id=primary.id,
+            status=SerialStatus.IN_STOCK.value,
+        )
+        sold_serial = Serial(
+            serial_number="SUM-A-000002",
+            product_id=primary.id,
+            status=SerialStatus.SOLD.value,
+        )
+        other_serial = Serial(
+            serial_number="SUM-B-000001",
+            product_id=other.id,
+            status=SerialStatus.RETURNED.value,
+        )
+        db.add_all([stock_serial, sold_serial, other_serial])
+        db.flush()
+        audit_batch = Batch(
+            batch_number="AUD-SUM-001",
+            batch_type=BatchType.AUDIT.value,
+            user_id=admin.id,
+            status=BatchStatus.SUBMITTED.value,
+            submitted_at=audit_at,
+        )
+        db.add(audit_batch)
+        db.flush()
+        db.add_all(
+            [
+                InventoryTransaction(
+                    transaction_type=TransactionType.PURCHASE.value,
+                    product_id=primary.id,
+                    serial_id=stock_serial.id,
+                    user_id=admin.id,
+                ),
+                InventoryTransaction(
+                    transaction_type=TransactionType.PURCHASE.value,
+                    product_id=primary.id,
+                    serial_id=sold_serial.id,
+                    user_id=admin.id,
+                ),
+                InventoryTransaction(
+                    transaction_type=TransactionType.SALE.value,
+                    product_id=primary.id,
+                    serial_id=sold_serial.id,
+                    user_id=admin.id,
+                ),
+                AuditFinding(
+                    batch_id=audit_batch.id,
+                    serial_id=stock_serial.id,
+                    serial_number=stock_serial.serial_number,
+                    product_code=primary.product_code,
+                    product_name=primary.product_name,
+                    finding_type="VERIFIED",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    scanned_status=SerialStatus.IN_STOCK.value,
+                ),
+                AuditFinding(
+                    batch_id=audit_batch.id,
+                    serial_id=sold_serial.id,
+                    serial_number=sold_serial.serial_number,
+                    product_code=primary.product_code,
+                    product_name=primary.product_name,
+                    finding_type="EXTRA",
+                    expected_status=SerialStatus.IN_STOCK.value,
+                    scanned_status=SerialStatus.SOLD.value,
+                ),
+            ]
+        )
+        db.commit()
+
+    def signed_request(path: str, user_id: int) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": path,
+                "headers": [
+                    (b"cookie", f"{SESSION_COOKIE}={create_session_token(user_id)}".encode())
+                ],
+                "query_string": b"",
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
+
+    with Session() as db:
+        rows = director_product_stock_rows(db)
+        filtered_rows = director_product_stock_rows(db, "SUM-A")
+        admin_response = dashboard(signed_request("/", 1), db=db)
+        admin_filtered = dashboard(signed_request("/", 1), product_q="SUM-A", db=db)
+        admin_live = dashboard_data(
+            signed_request("/dashboard/data", 1), product_q="SUM-A", db=db
+        )
+        director_response = reports_route(signed_request("/reports", 2), db=db)
+        director_filtered = reports_route(
+            signed_request("/reports", 2), product_q="SUM-A", db=db
+        )
+    engine.dispose()
+
+    primary_row = next(row for row in rows if row["product_code"] == "SUM-A")
+    assert primary_row["stock"] == 1
+    assert primary_row["purchased"] == 2
+    assert primary_row["sold"] == 1
+    assert primary_row["last_audit_at"] == audit_at.replace(tzinfo=None)
+    assert primary_row["last_audited_quantity"] == 2
+    assert [row["product_code"] for row in filtered_rows] == ["SUM-A"]
+
+    for response in (admin_response, director_response):
+        text = response.body.decode()
+        assert "Current stock" in text
+        assert "Purchased (cumulative)" in text
+        assert "Sold (cumulative)" in text
+        assert "Last audit" in text
+        assert "Last audited qty" in text
+        assert "Summary primary product" in text
+        assert "Summary other product" in text
+
+    admin_filtered_rows = admin_filtered.body.decode().split(
+        "data-dashboard-product-stock-rows>", 1
+    )[1].split("</tbody>", 1)[0]
+    director_filtered_rows = director_filtered.body.decode().split(
+        "data-director-live-product-rows>", 1
+    )[1].split("</tbody>", 1)[0]
+    live_rows = json.loads(admin_live.body)["product_stock_rows_html"]
+    for html in (admin_filtered_rows, director_filtered_rows, live_rows):
+        assert "Summary primary product" in html
+        assert "Summary other product" not in html
 
 
 def test_audit_reconciliation_xlsx_combines_audit_batches_for_admin_and_director():

@@ -22,8 +22,8 @@
         <h2>Product stock</h2>
       </div>
       <div class="director-live-tools">
-        <span>Current in-stock units · highest stock first</span>
-        <form method="get" class="director-stock-filter" data-director-stock-filter>
+        <span>Current stock and cumulative purchase/sale totals</span>
+        <form method="get" class="director-stock-filter" data-product-stock-filter>
           <select name="product_q" aria-label="Filter product stock by product">
             <option value="">All products</option>
             {% for product in director_product_options %}
@@ -37,10 +37,11 @@
       </div>
     </div>
     <div class="table-scroll director-table-scroll">
-      <table class="director-table director-live-table">
-        <thead><tr><th>Product</th><th>Product code</th><th>Stock</th><th>Nearest expiry</th></tr></thead>
+      <table class="director-table director-live-table product-stock-summary-table">
+        <thead><tr><th>Product</th><th>Product code</th><th>Current stock</th><th>Purchased (cumulative)</th><th>Sold (cumulative)</th><th>Last audit</th><th>Last audited qty</th><th>Nearest expiry</th></tr></thead>
         <tbody data-director-live-product-rows>
-          {% include "partials/director_product_stock_rows.html" %}
+          {% set product_rows = report.product_rows %}
+          {% include "partials/product_stock_summary_rows.html" %}
         </tbody>
       </table>
     </div>
@@ -198,6 +199,6 @@
   </div>
 </section>
 
-<script src="/static/director-report-filters.js?v=20260711-1"></script>
-<script src="/static/live.js?v=20260711-director-report-1"></script>
+<script src="/static/director-report-filters.js?v=20260712-product-stock-1"></script>
+<script src="/static/live.js?v=20260712-product-stock-1"></script>
 {% endblock %}

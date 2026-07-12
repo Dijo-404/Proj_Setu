@@ -1656,6 +1656,10 @@ tfoot td {
   min-width: 680px;
 }
 
+.product-stock-summary-table {
+  min-width: 1180px;
+}
+
 .director-warehouse-table {
   min-width: 0;
 }

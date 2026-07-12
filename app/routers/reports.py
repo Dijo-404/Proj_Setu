@@ -67,6 +67,25 @@ def export_url(path: str, params: dict[str, str]) -> str:
     return f"{path}?{urlencode(filtered)}" if filtered else path
 
 
+def parse_optional_product_id(value: object) -> int | None:
+    raw = str(value or "").strip()
+    if not raw:
+        return None
+    try:
+        product_id = int(raw)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid product filter",
+        ) from exc
+    if product_id <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid product filter",
+        )
+    return product_id
+
+
 def scan_query(action: str = "", start: str = "", end: str = "", product_id: int | None = None):
     conditions = []
     if action:
@@ -221,7 +240,7 @@ def audit_assignment_rows(
 def reports(
     request: Request,
     action: str = "",
-    product_id: int | None = None,
+    product_id: str = "",
     start: str = "",
     end: str = "",
     audit_start: str = "",
@@ -231,6 +250,7 @@ def reports(
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
+    parsed_product_id = parse_optional_product_id(product_id)
     refresh_expired_audit_assignments(db)
     if has_role(user.role, Role.DIRECTORS) and not has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN}):
         audit_start_dt = parse_period_datetime(audit_start, "audit start")
@@ -276,12 +296,12 @@ def reports(
         end_dt = end_dt + timedelta(days=1)
     missing_stock_selected = action == MISSING_STOCK_ACTION
     products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
-    selected_product = db.get(Product, product_id) if product_id is not None else None
-    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end, product_id)).all()
-    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, "", start, end, product_id)).all()
-    audit_assignments = audit_assignment_rows(db, start, end, product_id)
+    selected_product = db.get(Product, parsed_product_id) if parsed_product_id is not None else None
+    scans = [] if missing_stock_selected else db.scalars(scan_query(action, start, end, parsed_product_id)).all()
+    transactions = [] if missing_stock_selected else db.scalars(transaction_query(action, "", start, end, parsed_product_id)).all()
+    audit_assignments = audit_assignment_rows(db, start, end, parsed_product_id)
     missing_stock = (
-        db.scalars(missing_stock_query("", start, end, product_id)).all()
+        db.scalars(missing_stock_query("", start, end, parsed_product_id)).all()
         if not action or missing_stock_selected
         else []
     )
@@ -308,14 +328,14 @@ def reports(
             "pending": pending,
             "transaction_chart": bar_chart(transaction_counts.items()),
             "scan_status_chart": donut_chart(scan_status_counts.items()),
-            "expiry": expiry_summary(db, product_id=product_id),
+            "expiry": expiry_summary(db, product_id=parsed_product_id),
             "losses": (
-                loss_summary(db, action=action, q="", start=start_dt, end=end_dt, product_id=product_id)
+                loss_summary(db, action=action, q="", start=start_dt, end=end_dt, product_id=parsed_product_id)
                 if has_any_role(user.role, {Role.ADMIN, Role.SUPER_ADMIN})
                 else None
             ),
             "action": action,
-            "product_id": product_id or "",
+            "product_id": parsed_product_id or "",
             "products": products,
             "selected_product": selected_product,
             "start": start,
@@ -330,15 +350,15 @@ def reports(
             ),
             "missing_stock_export_url": export_url(
                 "/reports/missing-stock.xlsx",
-                {"product_id": str(product_id or ""), "start": start, "end": end},
+                {"product_id": str(parsed_product_id or ""), "start": start, "end": end},
             ),
             "transaction_export_url": export_url(
                 "/reports/transactions.xlsx",
-                {"action": action, "product_id": str(product_id or ""), "start": start, "end": end},
+                {"action": action, "product_id": str(parsed_product_id or ""), "start": start, "end": end},
             ),
             "scan_export_url": export_url(
                 "/reports/scans.xlsx",
-                {"action": action, "product_id": str(product_id or ""), "start": start, "end": end},
+                {"action": action, "product_id": str(parsed_product_id or ""), "start": start, "end": end},
             ),
         },
     )
@@ -386,8 +406,8 @@ def director_report_live(
                 "total": reconciliation["total"],
             },
             "product_rows_html": templates.env.get_template(
-                "partials/director_product_stock_rows.html"
-            ).render(report=report),
+                "partials/product_stock_summary_rows.html"
+            ).render(product_rows=report["product_rows"]),
             "warehouse_rows_html": templates.env.get_template(
                 "partials/director_warehouse_rows.html"
             ).render(report=report),
@@ -407,16 +427,17 @@ def director_report_live(
 @router.get("/missing-stock")
 def missing_stock_report(
     request: Request,
-    product_id: int | None = None,
+    product_id: str = "",
     start: str = "",
     end: str = "",
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "reports_data")
+    parsed_product_id = parse_optional_product_id(product_id)
     refresh_expired_audit_assignments(db)
     products = db.scalars(select(Product).order_by(Product.product_code, Product.product_name)).all()
-    selected_product = db.get(Product, product_id) if product_id is not None else None
-    findings = db.scalars(missing_stock_query("", start, end, product_id)).all()
+    selected_product = db.get(Product, parsed_product_id) if parsed_product_id is not None else None
+    findings = db.scalars(missing_stock_query("", start, end, parsed_product_id)).all()
     return templates.TemplateResponse(
         request,
         "missing_stock_report.html",
@@ -436,12 +457,12 @@ def missing_stock_report(
                     }
                 ),
             },
-            "product_id": product_id or "",
+            "product_id": parsed_product_id or "",
             "products": products,
             "selected_product": selected_product,
             "missing_stock_export_url": export_url(
                 "/reports/missing-stock.xlsx",
-                {"product_id": str(product_id or ""), "start": start, "end": end},
+                {"product_id": str(parsed_product_id or ""), "start": start, "end": end},
             ),
             "start": start,
             "end": end,
@@ -496,14 +517,15 @@ def audit_reconciliation_excel(
 def scans_excel(
     request: Request,
     action: str = "",
-    product_id: int | None = None,
+    product_id: str = "",
     start: str = "",
     end: str = "",
     fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
-    scans = db.scalars(scan_query(action, start, end, product_id)).all()
+    parsed_product_id = parse_optional_product_id(product_id)
+    scans = db.scalars(scan_query(action, start, end, parsed_product_id)).all()
     return Response(
         scans_xlsx(scans, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -516,14 +538,15 @@ def transactions_excel(
     request: Request,
     action: str = "",
     q: str = "",
-    product_id: int | None = None,
+    product_id: str = "",
     start: str = "",
     end: str = "",
     fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
-    transactions = db.scalars(transaction_query(action, q, start, end, product_id)).all()
+    parsed_product_id = parse_optional_product_id(product_id)
+    transactions = db.scalars(transaction_query(action, q, start, end, parsed_product_id)).all()
     return Response(
         transactions_xlsx(transactions, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -535,15 +558,16 @@ def transactions_excel(
 def missing_stock_excel(
     request: Request,
     q: str = "",
-    product_id: int | None = None,
+    product_id: str = "",
     start: str = "",
     end: str = "",
     fields: str = "",
     db: Session = Depends(get_db),
 ):
     require_permission(request, db, "reports_export")
+    parsed_product_id = parse_optional_product_id(product_id)
     refresh_expired_audit_assignments(db)
-    findings = db.scalars(missing_stock_query(q, start, end, product_id)).all()
+    findings = db.scalars(missing_stock_query(q, start, end, parsed_product_id)).all()
     return Response(
         missing_stock_xlsx(findings, fields.split("|")),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -73,6 +73,7 @@
       const alerts = document.querySelector("[data-live-shelf-alerts]");
       if (alerts) alerts.outerHTML = data.shelf_alerts_html;
     }
+    replaceHtml("[data-dashboard-product-stock-rows]", data.product_stock_rows_html);
   }
 
   function tick() {

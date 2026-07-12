@@ -3,10 +3,20 @@ from __future__ import annotations
 from collections import Counter
 from datetime import datetime
 
-from sqlalchemy import and_, desc, func, or_, select
+from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import AuditFinding, Batch, BatchType, Product, Serial, StorageLocation
+from app.models import (
+    AuditFinding,
+    Batch,
+    BatchType,
+    InventoryTransaction,
+    Product,
+    Serial,
+    StorageLocation,
+    TransactionType,
+    WarehouseLevel,
+)
 from app.services.expiry import STOCK_STATUSES, expiry_summary
 
 
@@ -181,10 +191,11 @@ def director_audit_reconciliation_report(
 def director_product_stock_rows(
     db: Session,
     q: str = "",
-    limit: int = 40,
+    limit: int | None = None,
 ) -> list[dict[str, object]]:
     query = (
         select(
+            Product.id,
             Product.product_code,
             Product.product_name,
             func.count(Serial.id).label("stock"),
@@ -215,15 +226,78 @@ def director_product_stock_rows(
                 Product.brand.ilike(like),
             )
         )
-    rows = db.execute(query.limit(limit)).all()
+    if limit is not None:
+        query = query.limit(limit)
+    rows = db.execute(query).all()
+
+    product_codes = [product_code for _product_id, product_code, *_ in rows]
+    code_by_id = {product_id: product_code for product_id, product_code, *_ in rows}
+
+    transaction_counts: dict[str, dict[str, int]] = {
+        product_code: {"purchased": 0, "sold": 0} for product_code in product_codes
+    }
+    if code_by_id:
+        for product_id, transaction_type, quantity in db.execute(
+            select(
+                InventoryTransaction.product_id,
+                InventoryTransaction.transaction_type,
+                func.count(InventoryTransaction.id),
+            )
+            .where(
+                InventoryTransaction.product_id.in_(tuple(code_by_id)),
+                InventoryTransaction.transaction_type.in_(
+                    {TransactionType.PURCHASE.value, TransactionType.SALE.value}
+                ),
+            )
+            .group_by(InventoryTransaction.product_id, InventoryTransaction.transaction_type)
+        ).all():
+            key = "purchased" if transaction_type == TransactionType.PURCHASE.value else "sold"
+            transaction_counts[code_by_id[product_id]][key] = int(quantity or 0)
+
+    latest_audits: dict[str, dict[str, object]] = {}
+    if product_codes:
+        audit_at = func.coalesce(Batch.submitted_at, Batch.created_at)
+        audit_rows = db.execute(
+            select(
+                AuditFinding.product_code,
+                Batch.id,
+                audit_at.label("audit_at"),
+                func.count(AuditFinding.id).label("audited_quantity"),
+            )
+            .join(Batch, Batch.id == AuditFinding.batch_id)
+            .where(
+                Batch.batch_type == BatchType.AUDIT.value,
+                AuditFinding.product_code.in_(product_codes),
+            )
+            .group_by(
+                AuditFinding.product_code,
+                Batch.id,
+                Batch.submitted_at,
+                Batch.created_at,
+            )
+            .order_by(AuditFinding.product_code, desc(audit_at), desc(Batch.id))
+        ).all()
+        for product_code, _batch_id, last_audit_at, audited_quantity in audit_rows:
+            if product_code not in latest_audits:
+                latest_audits[product_code] = {
+                    "last_audit_at": last_audit_at,
+                    "last_audited_quantity": int(audited_quantity or 0),
+                }
+
     return [
         {
             "product_code": product_code,
             "product_name": product_name,
-            "stock": stock or 0,
+            "stock": int(stock or 0),
+            "purchased": transaction_counts[product_code]["purchased"],
+            "sold": transaction_counts[product_code]["sold"],
+            "last_audit_at": latest_audits.get(product_code, {}).get("last_audit_at"),
+            "last_audited_quantity": latest_audits.get(product_code, {}).get(
+                "last_audited_quantity", 0
+            ),
             "nearest_expiry": nearest_expiry,
         }
-        for product_code, product_name, stock, nearest_expiry in rows
+        for _product_id, product_code, product_name, stock, nearest_expiry in rows
     ]
 
 
@@ -240,10 +314,22 @@ def director_product_filter_options(db: Session) -> list[dict[str, str]]:
     ]
 
 
+WAREHOUSE_LEVEL_VALUES = tuple(level.value for level in WarehouseLevel)
+
+
+def _warehouse_name(column):
+    """Return a populated warehouse name, excluding franchise-level labels."""
+    value = func.nullif(func.trim(column), "")
+    return case(
+        (value.not_in(WAREHOUSE_LEVEL_VALUES), value),
+        else_=None,
+    )
+
+
 def _current_warehouse_name():
     return func.coalesce(
-        func.nullif(func.trim(StorageLocation.warehouse), ""),
-        func.nullif(func.trim(Serial.warehouse), ""),
+        _warehouse_name(StorageLocation.warehouse),
+        _warehouse_name(Serial.warehouse),
         "Unassigned",
     )
 

@@ -1,0 +1,14 @@
+{% for row in product_rows %}
+<tr>
+  <td><strong>{{ row.product_name }}</strong></td>
+  <td>{{ row.product_code }}</td>
+  <td><strong>{{ row.stock }}</strong></td>
+  <td>{{ row.purchased }}</td>
+  <td>{{ row.sold }}</td>
+  <td>{{ report_date(row.last_audit_at) if row.last_audit_at else 'No audit' }}</td>
+  <td>{{ row.last_audited_quantity if row.last_audit_at else '-' }}</td>
+  <td>{{ report_date(row.nearest_expiry) if row.nearest_expiry else '-' }}</td>
+</tr>
+{% else %}
+<tr><td colspan="8" class="empty">No products found</td></tr>
+{% endfor %}
