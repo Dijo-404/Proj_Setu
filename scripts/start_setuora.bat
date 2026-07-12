@@ -2,9 +2,7 @@
 setlocal
 set "SETUORA_SCRIPT_DIR=%~dp0"
 cd /d "%SETUORA_SCRIPT_DIR%.."
-set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
-    set "SETUORA_NO_PAUSE=1"
     shift
 )
 
@@ -60,14 +58,12 @@ if not exist "%START_SCRIPT%" (
     echo %START_SCRIPT%
     echo.
     echo Check that the deployment\windows folder is present, then try again.
-    pause
     exit /b 1
 )
 
 if not exist "%PROJECT_DIR%\.venv\Scripts\python.exe" (
     echo Setuora is not set up yet. Run scripts\setup.bat first.
     echo.
-    pause
     exit /b 1
 )
 
@@ -77,5 +73,4 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%START_SCRIPT%" -ProjectDir
 set "START_EXIT=%ERRORLEVEL%"
 echo.
 if not "%START_EXIT%"=="0" echo Setuora stopped with error code %START_EXIT%.
-if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %START_EXIT%

@@ -82,11 +82,19 @@ Setuora.exe start
 Setuora.exe stop
 ```
 
-Setup checks for Python 3.11, installs the hash-verified dependency lock, creates `data/` and `logs/`, asks for the first admin login, writes `.env`, runs a smoke test, and offers an optional manually-started Windows service. It does not start Setuora automatically. If the Windows service is selected, NSSM is detected or installed automatically; no executable path is required.
+Setup, repair, update, and stop command windows close automatically when their
+work finishes. A console-mode start window remains open only while the Setuora
+server is running and closes after the server stops.
 
-To configure the optional LAN HTTPS proxy, run `Setuora.exe setup --with-caddy` as Administrator. Caddy is installed as a manually-started service and is started and stopped alongside Setuora by the executable.
+Setup checks for Python 3.11, installs the hash-verified dependency lock, creates
+`data/` and `logs/`, asks for the first admin login, writes `.env`, and runs a
+smoke test. By default it configures Caddy HTTPS, installs automatic Setuora and
+Caddy Windows services, starts both, and opens LAN firewall ports 80 and 443.
+Use `Setuora.exe setup --with-caddy=false` only when another reviewed HTTPS proxy
+is already in use.
 
-`Setuora.exe setup`, `repair`, and `update` request Administrator access automatically.
+`Setuora.exe setup`, `repair`, `update`, `start`, and `stop` request Administrator
+access automatically when launched through the unified executable.
 The updater refuses a dirty worktree, does nothing when the installation is
 already current, installs the hash-verified dependency lock, runs the test suite,
 and restores the app to the state it had before the update. Normal releases are
@@ -383,12 +391,14 @@ The current pinned dependencies are verified with Python 3.11. A Python 3.13 vir
 
 Phone camera access usually requires HTTPS when accessed from another device on the LAN. The Windows `scripts\setup.bat` helper can configure this automatically:
 
-1. Run `Setuora.exe setup --with-caddy` as Administrator.
-2. Confirm the Caddy setup prompt.
-3. Confirm the detected LAN IP address, or enter a local DNS name that resolves to this server.
-4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every phone that will use Setuora.
+1. Run `Setuora.exe setup` as Administrator.
+2. Confirm the detected LAN IP address, or enter a local DNS name that resolves to this server.
+3. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every phone and laptop that will use Setuora.
 
-The helper installs `CaddyServer.Caddy` with WinGet, writes and validates `deployment\caddy\Caddyfile`, creates the manually-started `SetuoraCaddy` Windows service, and opens ports 80 and 443 to the local subnet. It also sets `SESSION_COOKIE_SECURE=true`.
+The helper installs `CaddyServer.Caddy` with WinGet, writes and validates
+`deployment\caddy\Caddyfile`, creates the automatic `SetuoraCaddy` Windows
+service, and opens ports 80 and 443 to the local subnet. It also sets
+`SESSION_COOKIE_SECURE=true`.
 
 Recommended production shape:
 
@@ -405,7 +415,9 @@ Back up `deployment\caddy\state` with the app data, but do not share it because 
 
 ## 14. Windows Service Setup
 
-For production, run Setuora as a manually-started Windows service using NSSM. Use `Setuora.exe start` and `Setuora.exe stop` to control it.
+For production, Setuora and Caddy run as automatic Windows services and recover
+after process failures. Use `Setuora.exe start` and `Setuora.exe stop` for manual
+control when needed.
 
 See:
 

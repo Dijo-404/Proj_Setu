@@ -69,6 +69,9 @@ func TestParseOptionsSupportsUnifiedCommands(t *testing.T) {
 	if options.command != "start" {
 		t.Fatalf("command = %q, want start", options.command)
 	}
+	if !options.withCaddy {
+		t.Fatal("Caddy should be enabled by default")
+	}
 
 	options, err = parseOptions([]string{"repair", "--install-dir", `C:\Setuora`, "--port", "8123"})
 	if err != nil {
@@ -85,17 +88,12 @@ func TestParseOptionsSupportsUnifiedCommands(t *testing.T) {
 	if options.command != "setup" {
 		t.Fatalf("legacy flags command = %q, want setup", options.command)
 	}
-}
 
-func TestRemoveArgument(t *testing.T) {
-	arguments := []string{"/d", "/c", "scripts/update.bat", "--no-pause", "-Port", "8000"}
-	filtered := removeArgument(arguments, "--no-pause")
-	for _, argument := range filtered {
-		if argument == "--no-pause" {
-			t.Fatal("removeArgument left the unwanted argument in place")
-		}
+	options, err = parseOptions([]string{"setup", "--with-caddy=false", "--install-dir", `C:\Setuora`})
+	if err != nil {
+		t.Fatalf("parseOptions(Caddy opt-out) returned %v", err)
 	}
-	if got, want := len(filtered), 5; got != want {
-		t.Fatalf("len(filtered) = %d, want %d", got, want)
+	if options.withCaddy {
+		t.Fatal("--with-caddy=false did not disable Caddy")
 	}
 }

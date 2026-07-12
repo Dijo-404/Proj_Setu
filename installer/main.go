@@ -63,7 +63,7 @@ func main() {
 		return
 	}
 
-	if options.command == "setup" || options.command == "repair" || options.command == "update" {
+	if options.command == "setup" || options.command == "repair" || options.command == "update" || options.command == "start" || options.command == "stop" {
 		if !isAdministrator() {
 			if options.elevated {
 				fail(fmt.Errorf("administrator access is required for %s", options.command))
@@ -87,7 +87,7 @@ func main() {
 }
 
 func parseOptions(arguments []string) (installerOptions, error) {
-	options := installerOptions{}
+	options := installerOptions{withCaddy: true}
 	hadArguments := len(arguments) > 0
 	if hadArguments && !strings.HasPrefix(arguments[0], "-") {
 		options.command = strings.ToLower(strings.TrimSpace(arguments[0]))
@@ -99,7 +99,7 @@ func parseOptions(arguments []string) (installerOptions, error) {
 	flags.StringVar(&options.installDir, "install-dir", defaultInstallDirectory(), "Setuora installation directory")
 	flags.StringVar(&options.branch, "branch", defaultBranch, "Git branch to install")
 	flags.IntVar(&options.port, "port", 8000, "local Setuora port")
-	flags.BoolVar(&options.withCaddy, "with-caddy", false, "configure the optional LAN HTTPS/Caddy service during setup")
+	flags.BoolVar(&options.withCaddy, "with-caddy", true, "configure LAN HTTPS/Caddy during setup (use --with-caddy=false to opt out)")
 	flags.BoolVar(&options.elevated, "elevated", false, "internal UAC flag")
 	flags.BoolVar(&options.interactive, "interactive", false, "internal interactive-menu flag")
 	if err := flags.Parse(arguments); err != nil {
@@ -459,9 +459,6 @@ func runProjectCommand(options installerOptions) error {
 		// The checked-in Setuora.exe may itself be part of the update. Hand the
 		// workflow to cmd.exe and exit so Windows releases the executable before
 		// Git replaces it.
-		if options.interactive {
-			arguments = removeArgument(arguments, "--no-pause")
-		}
 		command := exec.Command("cmd.exe", arguments...)
 		command.Dir = options.installDir
 		command.Stdin = os.Stdin
@@ -475,16 +472,6 @@ func runProjectCommand(options installerOptions) error {
 		return nil
 	}
 	return runVisibleInDir(options.installDir, "cmd.exe", arguments...)
-}
-
-func removeArgument(arguments []string, unwanted string) []string {
-	filtered := arguments[:0]
-	for _, argument := range arguments {
-		if argument != unwanted {
-			filtered = append(filtered, argument)
-		}
-	}
-	return filtered
 }
 
 func chooseCommand() (string, error) {
@@ -519,7 +506,7 @@ func chooseCommand() (string, error) {
 func printUsage() {
 	fmt.Println("Usage: Setuora.exe <setup|repair|update|start|stop> [options]")
 	fmt.Println("  setup  Installs Setuora or safely updates an existing clean installation.")
-	fmt.Println("         Add --with-caddy to configure the optional HTTPS proxy.")
+	fmt.Println("         Configures Caddy HTTPS and Windows autostart by default; use --with-caddy=false to opt out.")
 	fmt.Println("  repair Repairs Python, packages, services, and app startup without changing data, settings, or source files.")
 	fmt.Println("  update Downloads a verified update, tests it, and restores the prior runtime state.")
 	fmt.Println("  start  Starts Setuora and the optional HTTPS proxy.")
@@ -583,9 +570,7 @@ func relaunchElevated(options installerOptions) error {
 		return err
 	}
 	arguments := []string{options.command, "--elevated", "--install-dir", options.installDir, "--branch", options.branch, "--port", fmt.Sprint(options.port)}
-	if options.withCaddy {
-		arguments = append(arguments, "--with-caddy")
-	}
+	arguments = append(arguments, fmt.Sprintf("--with-caddy=%t", options.withCaddy))
 	if options.interactive {
 		arguments = append(arguments, "--interactive")
 	}

@@ -51,12 +51,11 @@ def test_setup_has_a_data_preserving_repair_mode():
 
     assert "[switch]$Repair" in setup_script
     assert 'Write-Host "Existing .env settings preserved."' in setup_script
-    assert 'Write-Host "Existing HTTPS configuration preserved."' in setup_script
+    assert "Existing Caddy HTTPS service repaired and configured for automatic startup." in setup_script
     assert "The virtual environment is damaged or incompatible. Rebuilding it" in setup_script
     assert "& $VenvPython -m pytest -q" in setup_script
-    assert 'Write-Section "Restore Previous Running State"' in setup_script
     assert "Get-SetuoraServerLaunchInfo" in setup_script
-    assert 'Start-Service -Name $AppServiceName' in setup_script
+    assert 'Start-ManagedService -Name $AppServiceName -DisplayName "Setuora"' in setup_script
 
 
 def test_updater_preserves_clean_diverged_history_before_realigning():
@@ -76,12 +75,17 @@ def test_updater_preserves_clean_diverged_history_before_realigning():
     assert "$worktreeChanges = @(& git status --porcelain)" in update_script
 
 
-def test_updater_exits_before_changing_an_already_current_installation():
+def test_updater_starts_services_without_changing_current_source():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert 'if ("$fetchedHead" -eq "$previousHead")' not in update_script
     assert "if ($fetchedHead -eq $previousHead)" in update_script
-    assert "Setuora is already up to date. Nothing was stopped or changed." in update_script
+    assert "Setuora source is already up to date." in update_script
+    current_block = update_script.split("if ($fetchedHead -eq $previousHead)", 1)[1].split(
+        "# Prefer a normal fast-forward", 1
+    )[0]
+    assert "Start-SetuoraServer | Out-Null" in current_block
+    assert "return" in current_block
     assert update_script.index("if ($fetchedHead -eq $previousHead)") < update_script.index(
         '& git merge --ff-only FETCH_HEAD'
     )
@@ -102,7 +106,7 @@ def test_unified_updater_releases_the_executable_before_git_merge():
 def test_updater_checks_service_permissions_before_fetching():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
-    permission_check = update_script.index("if ($restartAsService -and -not (Test-AdminShell))")
+    permission_check = update_script.index("if (($service -or $caddyService) -and -not (Test-AdminShell))")
     fetch = update_script.index("& git fetch --no-tags origin $branch")
 
     assert permission_check < fetch
@@ -118,15 +122,15 @@ def test_updater_repairs_pip_and_checks_dependencies():
     assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in update_script
 
 
-def test_updater_restarts_based_on_running_server_state():
+def test_updater_starts_setuora_by_default_after_update():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert "deployment\\windows\\server_processes.ps1" in update_script
-    assert '$restartAsService = $service -and $service.Status -ne "Stopped"' in update_script
+    assert "$restartAsService = [bool]$service" in update_script
     assert "$runningSetuoraProcesses = @(Get-SetuoraServerProcesses" in update_script
-    assert "$restartAsConsole = (-not $restartAsService) -and $runningSetuoraProcesses.Count -gt 0" in update_script
+    assert "$restartAsConsole = -not $restartAsService" in update_script
     assert 'Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")' in update_script
-    assert "Setuora was not running before the update; leaving it stopped." in update_script
+    assert "Setuora was not running before the update; leaving it stopped." not in update_script
 
 
 def test_start_script_uses_state_aware_windows_helper():
@@ -143,6 +147,23 @@ def test_start_script_uses_state_aware_windows_helper():
     assert 'if "%CONSOLE_ONLY%"=="1" set "CONSOLE_ONLY_ARG=-ConsoleOnly"' in start_script
     assert "Get-SetuoraServerProcesses" in helper
     assert "Setuora is already running in another window or background process." in helper
+    assert "function Start-CaddyProxy" in helper
+    assert "sc.exe config $ServiceName start= auto" in helper
+    assert "sc.exe config $CaddyServiceName start= auto depend= $ServiceName" in helper
+    assert "Caddy HTTPS started and then stopped" in helper
+    assert 'Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health"' in helper
+    assert 'Wait-HealthEndpoint -Uri "https://$caddyAddress/health"' in helper
+    assert helper.index('Start-Service -Name $ServiceName') < helper.index(
+        "Start-CaddyProxy | Out-Null"
+    )
+
+
+def test_unified_start_and_stop_request_administrator_access():
+    installer_source = (PROJECT_ROOT / "installer" / "main.go").read_text(encoding="utf-8")
+
+    elevation_condition = installer_source.split('if options.command == "setup"', 1)[1].split("{", 1)[0]
+    assert 'options.command == "start"' in elevation_condition
+    assert 'options.command == "stop"' in elevation_condition
 
 
 def test_start_helper_repairs_missing_dependencies_before_launch():
@@ -159,7 +180,7 @@ def test_start_helper_repairs_missing_dependencies_before_launch():
     assert "& $PythonExe -m pip install --require-hashes -r $RequirementsPath" in helper
     assert "Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath" in helper
     assert helper.index("Ensure-AppDependencies -PythonExe $pythonExe") < helper.index(
-        "Get-Service -Name $ServiceName"
+        "$service = Get-Service -Name $ServiceName"
     )
 
 
@@ -174,19 +195,23 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     assert "StartName = $CaddyServiceStartName" in setup_script
     assert "StartPassword = $null" in setup_script
     assert "sc.exe config $CaddyServiceName obj=" not in setup_script
-    assert 'StartMode = "Manual"' in setup_script
+    assert 'StartMode = "Automatic"' in setup_script
     assert "Grant-LocalServiceAccess -Path $dataDir -Access \"M\"" in installer
     assert "Grant-LocalServiceAccess -Path $stateDir -Access \"M\"" in setup_script
-    assert "Invoke-Nssm set $ServiceName Start SERVICE_DEMAND_START" in installer
+    assert "Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START" in installer
     assert "Invoke-Nssm start $ServiceName" not in installer
+    assert "sc.exe config $CaddyServiceName start= auto" in setup_script
+    assert "sc.exe config $CaddyServiceName depend= $AppServiceName" in setup_script
+    assert "sc.exe failureflag $ServiceName 1" in installer
 
 
-def test_windows_workflows_can_run_from_the_unified_executable_without_pausing():
+def test_windows_workflows_close_when_their_work_finishes():
     for filename in ("setup.bat", "start_setuora.bat", "stop_setuora.bat", "update.bat"):
         script = (WORKFLOWS_DIR / filename).read_text(encoding="utf-8")
 
         assert 'if /I "%~1"=="--no-pause"' in script
-        assert 'if not "%SETUORA_NO_PAUSE%"=="1" pause' in script
+        assert "\npause" not in script.lower()
+        assert "exit /b" in script
 
 
 def test_windows_workflows_do_not_forward_no_pause_to_powershell_helpers():
@@ -207,13 +232,20 @@ def test_windows_workflows_do_not_forward_no_pause_to_powershell_helpers():
     assert '"%PROJECT_DIR%\\.venv\\Scripts\\python.exe"' in start_script
 
 
-def test_setup_does_not_start_services_or_caddy_by_default():
+def test_setup_configures_and_starts_services_and_caddy_by_default():
     setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 
     assert '[switch]$ConfigureCaddy' in setup_script
-    assert 'Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $false' in setup_script
-    assert 'Read-YesNo "Start Setuora now in a new window?" $false' in setup_script
-    assert 'Stop-Service -Name $CaddyServiceName -Force' in setup_script
+    assert 'Read-YesNo "Install and configure Caddy for HTTPS access from phones and laptops?" $true' in setup_script
+    assert 'Read-YesNo "Install Setuora as an automatic Windows service?" $true' in setup_script
+    assert 'Start-ManagedService -Name $AppServiceName -DisplayName "Setuora"' in setup_script
+    assert 'Start-ManagedService -Name $CaddyServiceName -DisplayName "Setuora Caddy HTTPS proxy"' in setup_script
+    assert 'Read-YesNo "Start Setuora and Caddy now in a new window?" $true' in setup_script
+    assert 'Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health"' in setup_script
+    assert 'Wait-HealthEndpoint -Uri "https://$startupCaddyAddress/health"' in setup_script
+    assert setup_script.index('Set-EnvSetting -Name "TRUSTED_HOSTS"') < setup_script.index(
+        "$rootCertificate = Install-CaddyService"
+    )
 
 
 def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
@@ -221,6 +253,12 @@ def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
 
     assert '$CaddyServiceName = "SetuoraCaddy"' in update_script
     assert "Start-Service -Name $CaddyServiceName" in update_script
+    assert "sc.exe config $ServiceName start= auto" in update_script
+    assert "sc.exe config $CaddyServiceName start= auto depend= $ServiceName" in update_script
+    assert 'Wait-HealthEndpoint -Uri "https://$caddyAddress/health"' in update_script
+    assert update_script.index("Start-Service -Name $ServiceName") < update_script.index(
+        "Start-Service -Name $CaddyServiceName"
+    )
 
 
 def test_target_server_preflight_is_available():
@@ -229,6 +267,8 @@ def test_target_server_preflight_is_available():
     )
 
     assert "Assert-LocalServiceIdentity -ServiceName $AppServiceName" in preflight
+    assert '$service.StartMode -eq "Auto"' in preflight
+    assert "$caddyService.ServicesDependedOn" in preflight
     assert "https://$Address/health" in preflight
     assert "create_scheduled_backup" in preflight
     assert "git -C $projectRoot status --porcelain" in preflight

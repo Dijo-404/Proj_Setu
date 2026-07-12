@@ -2,16 +2,13 @@
 setlocal
 set "SETUORA_SETUP_BAT=%~f0"
 cd /d "%~dp0.."
-set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
-    set "SETUORA_NO_PAUSE=1"
     shift
 )
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='Stop'; $path=$env:SETUORA_SETUP_BAT; $marker='### POWERSHELL SETUP SCRIPT ###'; $raw=Get-Content -Raw -LiteralPath $path; $start=$raw.LastIndexOf($marker); if ($start -lt 0) { throw 'Embedded setup script marker not found.' }; $code=$raw.Substring($start + $marker.Length); & ([scriptblock]::Create($code)) @args" %1 %2 %3 %4 %5 %6 %7 %8 %9
 set "SETUP_EXIT=%ERRORLEVEL%"
 echo.
 if not "%SETUP_EXIT%"=="0" echo Setup did not complete successfully.
-if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %SETUP_EXIT%
 
 ### POWERSHELL SETUP SCRIPT ###
@@ -45,7 +42,6 @@ $LegacyCaddyServiceNames = @("SetuCaddy")
 $LocalServiceSid = "*S-1-5-19"
 $restartAsService = $false
 $restartAsConsole = $false
-$restartCaddyService = $false
 $restartHostAddress = "127.0.0.1"
 $restartPort = $Port
 
@@ -650,7 +646,7 @@ function Install-CaddyService {
             -Arguments @{
                 PathName = $serviceCommand
                 DisplayName = "Setuora Caddy HTTPS Proxy"
-                StartMode = "Manual"
+                StartMode = "Automatic"
                 StartName = $CaddyServiceStartName
                 StartPassword = $null
             }
@@ -665,7 +661,7 @@ function Install-CaddyService {
                 DisplayName = "Setuora Caddy HTTPS Proxy"
                 PathName = $serviceCommand
                 ServiceType = 16
-                StartMode = "Manual"
+                StartMode = "Automatic"
                 StartName = $CaddyServiceStartName
                 StartPassword = $null
             }
@@ -677,7 +673,18 @@ function Install-CaddyService {
     Grant-LocalServiceAccess -Path $CaddyDir -Access "RX"
 
     & sc.exe description $CaddyServiceName "HTTPS reverse proxy for Setuora QR Tally Bridge" | Out-Null
+    & sc.exe config $CaddyServiceName start= auto | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not configure the Caddy service to start automatically with Windows."
+    }
     & sc.exe failure $CaddyServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not configure automatic recovery for the Caddy service."
+    }
+    & sc.exe failureflag $CaddyServiceName 1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not enable failure recovery for the Caddy service."
+    }
 
     $stateDir = Join-Path $CaddyDir "state"
     New-Item -ItemType Directory -Force -Path $stateDir | Out-Null
@@ -688,21 +695,31 @@ function Install-CaddyService {
         "XDG_CONFIG_HOME=$stateDir"
     ) -Force | Out-Null
 
-    $firewallRuleName = "Setuora Caddy HTTPS"
-    if (-not (Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue)) {
-        New-NetFirewallRule `
-            -DisplayName $firewallRuleName `
-            -Direction Inbound `
-            -Action Allow `
-            -Protocol TCP `
-            -LocalPort 80, 443 `
-            -RemoteAddress LocalSubnet `
-            -Profile Any | Out-Null
-    }
+    Set-CaddyAppServiceDependency
 
-    Start-Service -Name $CaddyServiceName
-    $service = Get-Service -Name $CaddyServiceName
-    $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(15))
+    $firewallRuleName = "Setuora Caddy HTTPS"
+    $existingFirewallRules = @(Get-NetFirewallRule -DisplayName $firewallRuleName -ErrorAction SilentlyContinue)
+    if ($existingFirewallRules.Count -gt 0) {
+        $existingFirewallRules | Remove-NetFirewallRule
+    }
+    New-NetFirewallRule `
+        -DisplayName $firewallRuleName `
+        -Direction Inbound `
+        -Action Allow `
+        -Protocol TCP `
+        -LocalPort 80, 443 `
+        -RemoteAddress LocalSubnet `
+        -Profile Any `
+        -Enabled True | Out-Null
+
+    try {
+        Start-Service -Name $CaddyServiceName
+        $service = Get-Service -Name $CaddyServiceName
+        $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+    }
+    catch {
+        throw "Caddy HTTPS could not start. Check whether another program uses ports 80 or 443, then review '$Caddyfile' and Windows Event Viewer. $($_.Exception.Message)"
+    }
 
     $rootCertificate = Join-Path $stateDir "caddy\pki\authorities\local\root.crt"
     $deadline = [DateTime]::UtcNow.AddSeconds(15)
@@ -725,8 +742,6 @@ function Install-CaddyService {
         Write-Host "Caddy is running, but its root certificate was not ready to export yet." -ForegroundColor Yellow
     }
 
-    Stop-Service -Name $CaddyServiceName -Force
-    $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(15))
     return $exportedCertificate
 }
 
@@ -735,7 +750,7 @@ function Offer-CaddySetup {
         return $null
     }
 
-    $installCaddy = if ($ConfigureCaddy) { $true } else { Read-YesNo "Install and configure Caddy for HTTPS access from phones?" $false }
+    $installCaddy = if ($ConfigureCaddy) { $true } else { Read-YesNo "Install and configure Caddy for HTTPS access from phones and laptops?" $true }
     if (-not $installCaddy) {
         return $null
     }
@@ -757,19 +772,94 @@ function Offer-CaddySetup {
 
     $caddyExe = Ensure-Caddy
     Write-CaddyConfig -Address $address -UpstreamPort $Port
-    $rootCertificate = Install-CaddyService -CaddyExe $caddyExe
     Set-EnvSetting -Name "SESSION_COOKIE_SECURE" -Value "true"
     Set-EnvSetting -Name "TRUSTED_HOSTS" -Value "$address,127.0.0.1,localhost,testserver"
+    $rootCertificate = Install-CaddyService -CaddyExe $caddyExe
     return @{
         Address = $address
         RootCertificate = $rootCertificate
     }
 }
 
+function Set-CaddyAppServiceDependency {
+    $appService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
+    $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+    if (-not $appService -or -not $caddyService) {
+        return
+    }
+
+    & sc.exe config $CaddyServiceName depend= $AppServiceName | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not configure Caddy to wait for the Setuora service during Windows startup."
+    }
+}
+
+function Start-ManagedService {
+    param(
+        [Parameter(Mandatory=$true)][string]$Name,
+        [Parameter(Mandatory=$true)][string]$DisplayName
+    )
+
+    $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
+    if (-not $service) {
+        throw "$DisplayName service '$Name' is not installed."
+    }
+    if ($service.Status -ne "Running") {
+        try {
+            Start-Service -Name $Name
+            $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+        }
+        catch {
+            throw "$DisplayName could not start. Check Windows Event Viewer and the Setuora logs. $($_.Exception.Message)"
+        }
+    }
+    $service.Refresh()
+    if ($service.Status -ne "Running") {
+        throw "$DisplayName did not remain running after startup."
+    }
+}
+
+function Get-CaddyAddress {
+    if (-not (Test-Path -LiteralPath $Caddyfile)) {
+        return $null
+    }
+    foreach ($line in Get-Content -LiteralPath $Caddyfile) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^https://([^\s{]+)') {
+            return $Matches[1]
+        }
+    }
+    return $null
+}
+
+function Wait-HealthEndpoint {
+    param(
+        [Parameter(Mandatory=$true)][string]$Uri,
+        [Parameter(Mandatory=$true)][string]$DisplayName
+    )
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    $lastError = $null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec 5
+            if ($response.StatusCode -eq 200) {
+                Write-Host "$DisplayName is reachable: $Uri" -ForegroundColor Green
+                return
+            }
+        }
+        catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Seconds 1
+    }
+    throw "$DisplayName did not become reachable at '$Uri'. $lastError"
+}
+
 function Offer-ServiceInstall {
     $existingService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
     if ($existingService) {
-        Write-Host "Existing Setuora Windows service found. Updating it without starting it."
+        Write-Host "Existing Setuora Windows service found. Updating its automatic-start configuration."
         if (-not (Test-AdminShell)) {
             throw "Updating the existing Windows service needs Administrator access. Right-click scripts\setup.bat and choose 'Run as administrator'."
         }
@@ -780,6 +870,7 @@ function Offer-ServiceInstall {
         if ($LASTEXITCODE -ne 0) {
             throw "Windows service update failed."
         }
+        Set-CaddyAppServiceDependency
         return $true
     }
 
@@ -788,7 +879,7 @@ function Offer-ServiceInstall {
         return $false
     }
 
-    $installService = Read-YesNo "Install Setuora as a manually started Windows service now?" $false
+    $installService = Read-YesNo "Install Setuora as an automatic Windows service?" $true
     if (-not $installService) {
         return $false
     }
@@ -803,6 +894,7 @@ function Offer-ServiceInstall {
     if ($LASTEXITCODE -ne 0) {
         throw "Windows service install failed."
     }
+    Set-CaddyAppServiceDependency
     return $true
 }
 
@@ -835,9 +927,6 @@ if ($Repair -and (Test-Path $ProcessHelper)) {
     . $ProcessHelper
     $existingService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
     $restartAsService = [bool]($existingService -and $existingService.Status -ne "Stopped")
-    $existingCaddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
-    $restartCaddyService = [bool]($existingCaddyService -and $existingCaddyService.Status -ne "Stopped")
-
     if (-not $restartAsService) {
         $runningSetuoraProcesses = @(Get-SetuoraServerProcesses -ProjectRoot $ProjectRoot -ExcludeProcessIds @($PID))
         $restartAsConsole = $runningSetuoraProcesses.Count -gt 0
@@ -900,17 +989,51 @@ if ($Repair) {
     }
 }
 
+Write-Section "Windows Autostart"
+$serviceInstalled = Offer-ServiceInstall
+
 Write-Section "HTTPS with Caddy"
 if ($Repair) {
-    Write-Host "Existing HTTPS configuration preserved."
+    $existingCaddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+    if ($existingCaddyService) {
+        if (-not (Test-Path -LiteralPath $Caddyfile)) {
+            throw "The Caddy service exists, but its configuration is missing: '$Caddyfile'. Run Setuora.exe setup to configure LAN HTTPS again."
+        }
+        $managedCaddyExe = Join-Path $CaddyDir "caddy.exe"
+        if (-not (Test-Path -LiteralPath $managedCaddyExe)) {
+            $managedCaddyExe = Ensure-Caddy
+        }
+        Install-CaddyService -CaddyExe $managedCaddyExe | Out-Null
+        Write-Host "Existing Caddy HTTPS service repaired and configured for automatic startup."
+    }
+    else {
+        Write-Host "No Caddy HTTPS service is installed. Run Setuora.exe setup to enable phone and laptop access." -ForegroundColor Yellow
+    }
     $caddySetup = $null
 }
 else {
     $caddySetup = Offer-CaddySetup
 }
 
-Write-Section "Optional Service"
-$serviceInstalled = Offer-ServiceInstall
+if ($serviceInstalled) {
+    Set-CaddyAppServiceDependency
+    Start-ManagedService -Name $AppServiceName -DisplayName "Setuora"
+    $installedCaddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+    if ($installedCaddyService) {
+        Start-ManagedService -Name $CaddyServiceName -DisplayName "Setuora Caddy HTTPS proxy"
+        $startupCaddyAddress = Get-CaddyAddress
+        if (-not $startupCaddyAddress) {
+            throw "Caddy is installed, but no HTTPS address could be read from '$Caddyfile'."
+        }
+    }
+    else {
+        Write-Host "Setuora is running, but Caddy is not installed; phone and laptop HTTPS access is unavailable." -ForegroundColor Yellow
+    }
+    Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health" -DisplayName "Setuora local health check"
+    if ($installedCaddyService) {
+        Wait-HealthEndpoint -Uri "https://$startupCaddyAddress/health" -DisplayName "Setuora Caddy HTTPS"
+    }
+}
 
 Write-Section "Done"
 if ($Repair) {
@@ -921,11 +1044,12 @@ else {
 }
 Write-Host "Local URL: http://127.0.0.1:$Port"
 $lanIp = Get-LocalIPv4
-if ($caddySetup) {
-    Write-Host "Secure LAN URL: https://$($caddySetup.Address)" -ForegroundColor Green
-    if ($caddySetup.RootCertificate) {
+$caddyAddress = if ($caddySetup) { $caddySetup.Address } else { Get-CaddyAddress }
+if ($caddyAddress) {
+    Write-Host "Secure LAN URL: https://$caddyAddress" -ForegroundColor Green
+    if ($caddySetup -and $caddySetup.RootCertificate) {
         Write-Host "Phone certificate: $($caddySetup.RootCertificate)"
-        Write-Host "Install this certificate as a trusted CA certificate on every phone that uses Setuora."
+        Write-Host "Install this certificate as a trusted CA certificate on every phone and laptop that uses Setuora."
     }
 }
 elseif ($lanIp) {
@@ -941,17 +1065,8 @@ if ($credentials) {
 }
 
 if ($Repair) {
-    Write-Section "Restore Previous Running State"
-    if ($restartCaddyService) {
-        Start-Service -Name $CaddyServiceName
-        $caddy = Get-Service -Name $CaddyServiceName
-        $caddy.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
-    }
-    if ($restartAsService) {
-        Start-Service -Name $AppServiceName
-        $appService = Get-Service -Name $AppServiceName
-        $appService.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
-        Write-Host "Setuora was repaired and restarted as a Windows service." -ForegroundColor Green
+    if ($serviceInstalled) {
+        Write-Host "Setuora and Caddy were repaired, started, and configured for Windows autostart." -ForegroundColor Green
     }
     elseif ($restartAsConsole) {
         Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")
@@ -962,11 +1077,10 @@ if ($Repair) {
     }
 }
 elseif ($serviceInstalled) {
-    Write-Host "Setuora was installed as a manually started Windows service." -ForegroundColor Green
-    Write-Host "Start it when ready with Setuora.exe start or scripts\start_setuora.bat."
+    Write-Host "Setuora and Caddy are running and will start automatically with Windows." -ForegroundColor Green
 }
 elseif (-not $SkipStart) {
-    $startNow = Read-YesNo "Start Setuora now in a new window?" $false
+    $startNow = Read-YesNo "Start Setuora and Caddy now in a new window?" $true
     if ($startNow) {
         Start-Process -FilePath $StartScript -ArgumentList @("-Port", "$Port")
         Start-Sleep -Seconds 2

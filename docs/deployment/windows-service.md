@@ -1,6 +1,8 @@
 # Windows Service Guide
 
-Use NSSM to run Setuora automatically after reboot. The easier path is to run `scripts\setup.bat` as Administrator and accept the optional service install when prompted. Use this guide when installing or repairing the service manually.
+Use NSSM to run Setuora automatically after reboot. The easier path is to run
+`Setuora.exe setup` as Administrator; automatic Setuora and Caddy services are
+the default. Use this guide when installing or repairing the service manually.
 
 ## Files
 

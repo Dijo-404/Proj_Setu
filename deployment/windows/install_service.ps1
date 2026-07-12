@@ -61,10 +61,18 @@ Invoke-Nssm set $ServiceName AppStdout (Join-Path $logDir "setuora-out.log")
 Invoke-Nssm set $ServiceName AppStderr (Join-Path $logDir "setuora-err.log")
 Invoke-Nssm set $ServiceName AppRotateFiles 1
 Invoke-Nssm set $ServiceName AppRotateBytes 10485760
-Invoke-Nssm set $ServiceName Start SERVICE_DEMAND_START
+Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START
 Invoke-Nssm set $ServiceName AppExit Default Restart
 Invoke-Nssm set $ServiceName AppThrottle 15000
 Invoke-Nssm set $ServiceName AppRestartDelay 5000
 # Never run the web application as LocalSystem. LocalService has no administrator
 # privileges and only has write access to the runtime directories above.
 Invoke-Nssm set $ServiceName ObjectName "NT AUTHORITY\LocalService" ""
+& sc.exe failure $ServiceName reset= 86400 actions= restart/5000/restart/10000/restart/30000 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not configure automatic recovery for the Setuora Windows service."
+}
+& sc.exe failureflag $ServiceName 1 | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not enable failure recovery for the Setuora Windows service."
+}

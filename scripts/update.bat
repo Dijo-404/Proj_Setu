@@ -2,9 +2,7 @@
 setlocal
 set "SETUORA_UPDATE_BAT=%~f0"
 cd /d "%~dp0.."
-set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
-    set "SETUORA_NO_PAUSE=1"
     shift
 )
 if "%SETUORA_LAUNCHED_UPDATE%"=="1" (
@@ -15,7 +13,6 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command "$ErrorActionPreference='
 set "UPDATE_EXIT=%ERRORLEVEL%"
 echo.
 if not "%UPDATE_EXIT%"=="0" echo Update did not complete successfully. The error above explains what needs attention.
-if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %UPDATE_EXIT%
 
 ### POWERSHELL UPDATE SCRIPT ###
@@ -32,6 +29,7 @@ $RequirementsLock = Join-Path $ProjectRoot "requirements.lock"
 $StartScript = Join-Path $ProjectRoot "scripts\start_setuora.bat"
 $StopScript = Join-Path $ProjectRoot "deployment\windows\stop_setuora.ps1"
 $ProcessHelper = Join-Path $ProjectRoot "deployment\windows\server_processes.ps1"
+$Caddyfile = Join-Path $ProjectRoot "deployment\caddy\Caddyfile"
 $ServiceName = "SetuoraQrTallyBridge"
 $CaddyServiceName = "SetuoraCaddy"
 $restartAsService = $false
@@ -70,28 +68,98 @@ function Ensure-Pip {
     }
 }
 
+function Get-CaddyAddress {
+    if (-not (Test-Path -LiteralPath $Caddyfile)) {
+        return $null
+    }
+    foreach ($line in Get-Content -LiteralPath $Caddyfile) {
+        $trimmed = $line.Trim()
+        if ($trimmed -match '^https://([^\s{]+)') {
+            return $Matches[1]
+        }
+    }
+    return $null
+}
+
+function Wait-HealthEndpoint {
+    param([string]$Uri, [string]$DisplayName)
+
+    $deadline = [DateTime]::UtcNow.AddSeconds(30)
+    $lastError = $null
+    while ([DateTime]::UtcNow -lt $deadline) {
+        try {
+            $response = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec 5
+            if ($response.StatusCode -eq 200) {
+                Write-Host "$DisplayName is reachable: $Uri" -ForegroundColor Green
+                return
+            }
+        }
+        catch {
+            $lastError = $_.Exception.Message
+        }
+        Start-Sleep -Seconds 1
+    }
+    throw "$DisplayName did not become reachable at '$Uri'. $lastError"
+}
+
 function Start-SetuoraServer {
     if ($restartAsService) {
-        $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
-        if ($caddyService -and $caddyService.Status -ne "Running") {
-            Start-Service -Name $CaddyServiceName
-            $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
+        & sc.exe config $ServiceName start= auto | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not configure Setuora to start automatically with Windows."
         }
-        Start-Service -Name $ServiceName
         $svc = Get-Service -Name $ServiceName
-        $svc.WaitForStatus("Running", [TimeSpan]::FromSeconds(20))
-        Write-Host "Setuora is running as a Windows service." -ForegroundColor Green
+        if ($svc.Status -ne "Running") {
+            Start-Service -Name $ServiceName
+            $svc.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+        }
+        $svc.Refresh()
+        if ($svc.Status -ne "Running") {
+            throw "Setuora did not remain running after the update. Check logs\setuora-err.log."
+        }
+
+        $caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+        if ($caddyService) {
+            & sc.exe config $CaddyServiceName start= auto depend= $ServiceName | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "Could not configure Caddy HTTPS for automatic startup after Setuora."
+            }
+            if ($caddyService.Status -ne "Running") {
+                Start-Service -Name $CaddyServiceName
+                $caddyService.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
+            }
+            $caddyService.Refresh()
+            if ($caddyService.Status -ne "Running") {
+                throw "Caddy HTTPS did not remain running after the update. Run Setuora.exe repair."
+            }
+            Write-Host "Setuora and Caddy HTTPS are running as Windows services." -ForegroundColor Green
+        }
+        else {
+            Write-Host "Setuora is running, but Caddy HTTPS is not installed. Run Setuora.exe setup to enable phone and laptop access." -ForegroundColor Yellow
+        }
+        Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health" -DisplayName "Setuora local health check"
+        if ($caddyService) {
+            $caddyAddress = Get-CaddyAddress
+            if (-not $caddyAddress) {
+                throw "Caddy is running, but no HTTPS address could be read from '$Caddyfile'."
+            }
+            Wait-HealthEndpoint -Uri "https://$caddyAddress/health" -DisplayName "Setuora Caddy HTTPS"
+        }
         return $true
     }
 
     if ($restartAsConsole) {
         Start-Process -FilePath $StartScript -ArgumentList @("-HostAddress", "$restartHostAddress", "-Port", "$restartPort", "--console-only")
+        Wait-HealthEndpoint -Uri "http://127.0.0.1:$restartPort/health" -DisplayName "Setuora local health check"
+        $caddyAddress = Get-CaddyAddress
+        if ($caddyAddress) {
+            Wait-HealthEndpoint -Uri "https://$caddyAddress/health" -DisplayName "Setuora Caddy HTTPS"
+        }
         Write-Host "Setuora is running in a new window." -ForegroundColor Green
         return $true
     }
 
-    Write-Host "Setuora was not running before the update; leaving it stopped." -ForegroundColor Yellow
-    return $false
+    throw "Setuora could not be restarted after the update."
 }
 
 function Restore-PreviousVersion {
@@ -139,16 +207,17 @@ if ($originUrl -notmatch "(?i)github\.com[:/]Dijo-404/Proj_Setu(?:\.git)?/?$") {
 }
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-$restartAsService = $service -and $service.Status -ne "Stopped"
+$caddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
+$restartAsService = [bool]$service
 $runningSetuoraProcesses = @(Get-SetuoraServerProcesses -ProjectRoot $ProjectRoot -ExcludeProcessIds @($PID))
-$restartAsConsole = (-not $restartAsService) -and $runningSetuoraProcesses.Count -gt 0
-if ($restartAsConsole) {
+$restartAsConsole = -not $restartAsService
+if ($runningSetuoraProcesses.Count -gt 0) {
     $launchInfo = Get-SetuoraServerLaunchInfo -Process $runningSetuoraProcesses[0] -DefaultHostAddress $restartHostAddress -DefaultPort $restartPort
     $restartHostAddress = $launchInfo.HostAddress
     $restartPort = $launchInfo.Port
 }
-if ($restartAsService -and -not (Test-AdminShell)) {
-    throw "Setuora is installed as a Windows service. Right-click scripts\update.bat, choose 'Run as administrator', and try again."
+if (($service -or $caddyService) -and -not (Test-AdminShell)) {
+    throw "Setuora or Caddy is installed as a Windows service. Right-click scripts\update.bat, choose 'Run as administrator', and try again."
 }
 
 $worktreeChanges = @(& git status --porcelain)
@@ -177,7 +246,10 @@ if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($fetchedHead)) {
     throw "The downloaded version could not be verified. Your existing files were left intact."
 }
 if ($fetchedHead -eq $previousHead) {
-    Write-Host "Setuora is already up to date. Nothing was stopped or changed." -ForegroundColor Green
+    Write-Host "Setuora source is already up to date." -ForegroundColor Green
+    Write-Section "Ensure Services Are Running"
+    Start-SetuoraServer | Out-Null
+    Write-Host "Setuora and its available HTTPS services are running." -ForegroundColor Green
     return
 }
 

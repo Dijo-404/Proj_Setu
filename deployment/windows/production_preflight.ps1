@@ -55,6 +55,7 @@ function Assert-LocalServiceIdentity {
     $service = Get-CimInstance Win32_Service -Filter "Name='$ServiceName'" -ErrorAction SilentlyContinue
     Assert-Check ($null -ne $service) "Windows service '$ServiceName' is not installed."
     Assert-Check ($service.State -eq "Running") "Windows service '$ServiceName' is not running."
+    Assert-Check ($service.StartMode -eq "Auto") "Windows service '$ServiceName' is not configured for automatic startup."
     Assert-Check ($service.StartName -eq "NT AUTHORITY\LocalService") (
         "Windows service '$ServiceName' runs as '$($service.StartName)', not the least-privilege LocalService account."
     )
@@ -82,6 +83,10 @@ Assert-Check ($dirty.Count -eq 0) "The release worktree has uncommitted changes.
 
 Assert-LocalServiceIdentity -ServiceName $AppServiceName
 Assert-LocalServiceIdentity -ServiceName $CaddyServiceName
+$caddyService = Get-Service -Name $CaddyServiceName
+Assert-Check (($caddyService.ServicesDependedOn | ForEach-Object { $_.Name }) -contains $AppServiceName) (
+    "Caddy is not configured to wait for the Setuora service during Windows startup."
+)
 
 & $caddyExe validate --config $caddyfile --adapter caddyfile | Out-Host
 Assert-Check ($LASTEXITCODE -eq 0) "Caddy configuration validation failed."

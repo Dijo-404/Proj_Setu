@@ -1,9 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0.."
-set "SETUORA_NO_PAUSE=0"
 if /I "%~1"=="--no-pause" (
-    set "SETUORA_NO_PAUSE=1"
     shift
 )
 
@@ -15,7 +13,6 @@ if not exist "%STOP_SCRIPT%" (
     echo %STOP_SCRIPT%
     echo.
     echo Check that the deployment\windows folder is present, then try again.
-    pause
     exit /b 1
 )
 
@@ -31,5 +28,4 @@ if "%STOP_EXIT%"=="0" (
     echo right-click scripts\stop_setuora.bat and choose Run as administrator.
 )
 
-if not "%SETUORA_NO_PAUSE%"=="1" pause
 exit /b %STOP_EXIT%

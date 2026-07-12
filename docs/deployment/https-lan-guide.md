@@ -16,10 +16,11 @@ Phone browser
 
 The easiest Windows path is:
 
-1. Right-click `scripts\setup.bat` and choose **Run as administrator**.
-2. Accept the Caddy setup prompt.
-3. Confirm the detected LAN IP address, or enter a local DNS name.
-4. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate on every staff phone.
+1. Run `Setuora.exe setup` as Administrator, or right-click `scripts\setup.bat`
+   and choose **Run as administrator**.
+2. Confirm the detected LAN IP address, or enter a local DNS name.
+3. Install `deployment\caddy\setuora-caddy-root.crt` as a trusted CA certificate
+   on every staff phone and laptop.
 
 Setup installs Caddy through WinGet, generates and validates the Caddyfile,
 registers the auto-start `SetuoraCaddy` service, and permits LAN traffic on ports

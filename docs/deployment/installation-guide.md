@@ -32,16 +32,16 @@ The helper:
 - asks for the first admin username and password
 - writes `.env`
 - verifies that the app imports correctly
-- installs Caddy with WinGet and configures LAN HTTPS when accepted
+- installs Caddy with WinGet and configures LAN HTTPS by default
 - creates an auto-start Caddy service and a local-subnet firewall rule
 - exports Caddy's public root certificate for installation on staff phones
-- can install the optional NSSM Windows service when run as Administrator
-- can start the app when finished
+- installs the automatic NSSM Windows service when accepted (default: yes)
+- starts Setuora and Caddy when finished
 
 `Setuora.exe repair` preserves `.env`, database files, backups, and source files.
 It validates or rebuilds the virtual environment, reinstalls hash-verified
-dependencies, refreshes an existing Windows service, runs the app smoke test and
-full regression suite, and restores the server to its previous running state.
+dependencies, refreshes automatic Setuora and Caddy services, runs the app smoke
+test and full regression suite, and starts both services.
 
 After setup, start the app anytime with:
 
