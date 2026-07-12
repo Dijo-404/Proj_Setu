@@ -43,3 +43,8 @@ Setuora.exe update
 Setuora.exe start
 Setuora.exe stop
 ```
+
+Updates refuse uncommitted source changes. If a clean installed checkout has
+diverged from official release history, its prior commit is preserved on a
+timestamped `setuora-backup/...` branch before the verified release is applied.
+Application data, settings, and backups are not changed.

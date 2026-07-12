@@ -59,14 +59,19 @@ def test_setup_has_a_data_preserving_repair_mode():
     assert 'Start-Service -Name $AppServiceName' in setup_script
 
 
-def test_updater_never_uses_pull_or_rebase():
+def test_updater_preserves_clean_diverged_history_before_realigning():
     update_script = (WORKFLOWS_DIR / "update.bat").read_text(encoding="utf-8")
 
     assert "& git pull " not in update_script
     assert "& git rebase " not in update_script
     assert "& git fetch --no-tags origin $branch" in update_script
+    assert "& git merge-base --is-ancestor $previousHead $fetchedHead" in update_script
     assert "& git merge --ff-only FETCH_HEAD" in update_script
-    assert "git reset --hard FETCH_HEAD" not in update_script
+    assert "& git branch $backupBranch $previousHead" in update_script
+    assert "& git reset --hard FETCH_HEAD" in update_script
+    assert update_script.index("& git branch $backupBranch $previousHead") < update_script.index(
+        "& git reset --hard FETCH_HEAD"
+    )
     assert "Refusing to update because local source changes are present." in update_script
     assert "$worktreeChanges = @(& git status --porcelain)" in update_script
 
@@ -89,7 +94,8 @@ def test_unified_updater_releases_the_executable_before_git_merge():
     assert 'if "%SETUORA_LAUNCHED_UPDATE%"=="1"' in update_script
     assert '"SETUORA_LAUNCHED_UPDATE=1"' in installer_source
     assert "command.Start()" in installer_source
-    assert 'runGitVisible(gitPath, installDir, "reset", "--hard", "FETCH_HEAD")' not in installer_source
+    assert 'runGitVisible(gitPath, installDir, "branch", backupBranch, currentHead)' in installer_source
+    assert 'runGitVisible(gitPath, installDir, "reset", "--hard", "FETCH_HEAD")' in installer_source
     assert "local source changes are present; setup will not overwrite them" in installer_source
 
 

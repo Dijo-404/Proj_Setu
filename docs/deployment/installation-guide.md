@@ -68,8 +68,35 @@ scripts\update.bat
 ```
 
 Run the updater as Administrator when Setuora is installed as a Windows service.
-The updater fetches and applies only a fast-forward Git update. It never
-rebases and will not overwrite conflicting local code changes.
+The updater refuses uncommitted local code changes and never rebases. It normally
+applies a fast-forward update. If a clean installation has diverged from official
+release history, it preserves the installed commit on a timestamped
+`setuora-backup/...` branch before realigning source files to the downloaded
+release. Runtime data, `.env`, and backups remain untouched.
+
+### One-time recovery for an older diverged updater
+
+Older installations may stop with `Not possible to fast-forward, aborting`
+before they can receive the improved updater. In an Administrator PowerShell,
+run the following only when that exact divergence error appears:
+
+```powershell
+Set-Location C:\Setuora
+.\Setuora.exe stop
+$changes = @(git status --porcelain)
+if ($changes.Count -gt 0) { throw "Local source changes exist; stop and have an administrator review them." }
+git fetch --no-tags origin main
+$oldHead = (git rev-parse HEAD).Trim()
+$shortHead = (git rev-parse --short HEAD).Trim()
+$backupBranch = "setuora-backup/$(Get-Date -Format 'yyyyMMdd-HHmmssfff')-$shortHead"
+git branch $backupBranch $oldHead
+git reset --hard FETCH_HEAD
+.\Setuora.exe repair
+.\Setuora.exe start
+```
+
+The backup branch preserves the prior committed installation. The Git reset
+does not touch ignored `.env`, `data`, `logs`, or backup files.
 
 Pass `-SkipCaddy` to `scripts\setup.bat` if another reverse proxy already provides
 HTTPS. When Caddy is configured, install

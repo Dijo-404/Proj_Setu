@@ -388,8 +388,33 @@ func synchronizeRepository(gitPath, installDir, branch string) error {
 	if err := runGitVisible(gitPath, installDir, "fetch", "--no-tags", "origin", branch); err != nil {
 		return fmt.Errorf("download the latest Setuora files: %w", err)
 	}
-	if err := runGitVisible(gitPath, installDir, "merge", "--ff-only", "FETCH_HEAD"); err != nil {
-		return errors.New("a safe fast-forward update was not possible; local files were left unchanged. Use 'Setuora.exe repair' to repair the current version, or have an administrator review the Git history")
+	currentHead, err := gitOutput(gitPath, installDir, "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Errorf("read the installed Setuora version: %w", err)
+	}
+	currentHead = strings.TrimSpace(currentHead)
+	canFastForward, err := gitIsAncestor(gitPath, installDir, currentHead, "FETCH_HEAD")
+	if err != nil {
+		return fmt.Errorf("compare installed and downloaded Setuora histories: %w", err)
+	}
+	if canFastForward {
+		if err := runGitVisible(gitPath, installDir, "merge", "--ff-only", "FETCH_HEAD"); err != nil {
+			return errors.New("the downloaded fast-forward could not be applied; local files were left unchanged")
+		}
+		return nil
+	}
+
+	shortHead, err := gitOutput(gitPath, installDir, "rev-parse", "--short", currentHead)
+	if err != nil {
+		return fmt.Errorf("name the installed Setuora version for backup: %w", err)
+	}
+	backupBranch := "setuora-backup/" + time.Now().Format("20060102-150405000") + "-" + strings.TrimSpace(shortHead)
+	fmt.Printf("Release history differs from this installation. Preserving the installed commit as %s before updating...\n", backupBranch)
+	if err := runGitVisible(gitPath, installDir, "branch", backupBranch, currentHead); err != nil {
+		return errors.New("the installed commit could not be preserved on a backup branch; local files were left unchanged")
+	}
+	if err := runGitVisible(gitPath, installDir, "reset", "--hard", "FETCH_HEAD"); err != nil {
+		return fmt.Errorf("apply the downloaded release; the previous commit remains available as %s", backupBranch)
 	}
 	return nil
 }
@@ -493,10 +518,10 @@ func chooseCommand() (string, error) {
 
 func printUsage() {
 	fmt.Println("Usage: Setuora.exe <setup|repair|update|start|stop> [options]")
-	fmt.Println("  setup  Installs Setuora or safely fast-forwards an existing installation.")
+	fmt.Println("  setup  Installs Setuora or safely updates an existing clean installation.")
 	fmt.Println("         Add --with-caddy to configure the optional HTTPS proxy.")
 	fmt.Println("  repair Repairs Python, packages, services, and app startup without changing data, settings, or source files.")
-	fmt.Println("  update Downloads a verified fast-forward update, tests it, and restores the prior runtime state.")
+	fmt.Println("  update Downloads a verified update, tests it, and restores the prior runtime state.")
 	fmt.Println("  start  Starts Setuora and the optional HTTPS proxy.")
 	fmt.Println("  stop   Stops Setuora and the optional HTTPS proxy.")
 }
@@ -521,6 +546,19 @@ func gitOutput(gitPath, installDir string, arguments ...string) (string, error) 
 		return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(output)))
 	}
 	return string(output), nil
+}
+
+func gitIsAncestor(gitPath, installDir, ancestor, descendant string) (bool, error) {
+	arguments := []string{"-c", "safe.directory=" + installDir, "-C", installDir, "merge-base", "--is-ancestor", ancestor, descendant}
+	err := exec.Command(gitPath, arguments...).Run()
+	if err == nil {
+		return true, nil
+	}
+	var exitError *exec.ExitError
+	if errors.As(err, &exitError) && exitError.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, err
 }
 
 func runVisible(name string, arguments ...string) error {

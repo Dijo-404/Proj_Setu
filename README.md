@@ -87,10 +87,13 @@ Setup checks for Python 3.11, installs the hash-verified dependency lock, create
 To configure the optional LAN HTTPS proxy, run `Setuora.exe setup --with-caddy` as Administrator. Caddy is installed as a manually-started service and is started and stopped alongside Setuora by the executable.
 
 `Setuora.exe setup`, `repair`, and `update` request Administrator access automatically.
-The updater accepts only a clean fast-forward update, refuses a dirty worktree,
-does nothing when the installation is already current, installs the hash-verified
-dependency lock, runs the test suite, and restores the app to the state it had
-before the update. It never overwrites divergent or locally edited source files.
+The updater refuses a dirty worktree, does nothing when the installation is
+already current, installs the hash-verified dependency lock, runs the test suite,
+and restores the app to the state it had before the update. Normal releases are
+fast-forwarded. If official release history differs from a clean installation,
+the installed commit is first preserved on a timestamped `setuora-backup/...`
+branch before source files are realigned. Runtime data, `.env`, and backups are
+not changed.
 
 Before going live on the target server, run the [production release
 checklist](docs/deployment/production-release-checklist.md). It verifies the

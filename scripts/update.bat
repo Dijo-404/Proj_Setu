@@ -100,7 +100,7 @@ function Restore-PreviousVersion {
     }
     Write-Host "Rolling back to the previous version ($previousHead)..." -ForegroundColor Yellow
     # This is safe because scripts\update.bat requires a clean worktree before changing
-    # source files, and this reset only returns the updater's own fast-forward.
+    # source files, and this reset returns to the commit recorded before the update.
     & git reset --hard $previousHead | Out-Host
     Ensure-Pip
     & $VenvPython -m pip install --require-hashes -r $RequirementsLock | Out-Host
@@ -181,11 +181,36 @@ if ($fetchedHead -eq $previousHead) {
     return
 }
 
-# Only accept a clean fast-forward. A rewritten or divergent remote must be
-# reviewed manually; the updater never resets an installation to another commit.
-& git merge --ff-only FETCH_HEAD
-if ($LASTEXITCODE -ne 0) {
-    throw "A clean fast-forward was not possible. No files were replaced; review the remote history before updating."
+# Prefer a normal fast-forward. If release history was rewritten, preserve the
+# clean installed commit on a backup branch before realigning source to the
+# verified origin. Ignored runtime data and settings are not touched by Git.
+& git merge-base --is-ancestor $previousHead $fetchedHead
+$ancestryResult = $LASTEXITCODE
+if ($ancestryResult -eq 0) {
+    & git merge --ff-only FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) {
+        throw "The downloaded fast-forward could not be applied. Your existing files were left unchanged."
+    }
+}
+elseif ($ancestryResult -eq 1) {
+    $shortHead = (@(& git rev-parse --short $previousHead) -join "").Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($shortHead)) {
+        throw "The current version could not be named for safe backup. Your existing files were left unchanged."
+    }
+    $backupBranch = "setuora-backup/$(Get-Date -Format 'yyyyMMdd-HHmmssfff')-$shortHead"
+    Write-Host "Release history differs from this installation." -ForegroundColor Yellow
+    Write-Host "Preserving the installed commit as '$backupBranch' before updating..." -ForegroundColor Yellow
+    & git branch $backupBranch $previousHead
+    if ($LASTEXITCODE -ne 0) {
+        throw "The installed commit could not be preserved on a backup branch. Your existing files were left unchanged."
+    }
+    & git reset --hard FETCH_HEAD
+    if ($LASTEXITCODE -ne 0) {
+        throw "The downloaded release could not be applied. The previous commit remains available as '$backupBranch'."
+    }
+}
+else {
+    throw "Git could not compare the installed and downloaded histories. Your existing files were left unchanged."
 }
 $updateStarted = $true
 
