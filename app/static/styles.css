@@ -1661,7 +1661,7 @@ tfoot td {
 }
 
 .director-warehouse-table {
-  min-width: 0;
+  min-width: 880px;
 }
 
 .director-warehouse-table th:last-child,
@@ -1741,12 +1741,6 @@ tfoot td {
   min-width: 104px;
 }
 
-.director-reconciliation__metrics {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 12px;
-  margin: 0;
-}
-
 .director-reconciliation__metric {
   min-height: 102px;
   padding: 15px;
@@ -1775,6 +1769,12 @@ tfoot td {
 
 .director-detail-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.director-reconciliation__metrics {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
 }
 
 .director-metric-link {

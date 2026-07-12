@@ -637,7 +637,7 @@ def test_directors_role_gets_report_only_summary_and_audit_detail():
     assert "Director dead stock product" in report_text
     assert "Live data" in report_text
     assert "Product stock" in report_text
-    assert "Warehouse totals" in report_text
+    assert "Warehouse level totals" in report_text
     assert "Audit reconciliation Excel" in report_text
     assert "Audit reconciliation" in report_text
     assert "Transactions Excel" not in report_text
@@ -693,6 +693,7 @@ def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
                     status=SerialStatus.IN_STOCK.value,
                     warehouse="Old warehouse name",
                     location_id=main_location.id,
+                    expiry_date=today() + timedelta(days=20),
                 ),
                 Serial(
                     serial_number="WH100-000002",
@@ -705,6 +706,7 @@ def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
                     product_id=product.id,
                     status=SerialStatus.IN_STOCK.value,
                     warehouse="Branch warehouse",
+                    warehouse_level=WarehouseLevel.C_AND_F.value,
                 ),
             ]
         )
@@ -728,17 +730,18 @@ def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
         report_text = response.body.decode()
         live_response = director_report_live(signed_request(), db=db)
         live_data = json.loads(live_response.body)
+        warehouse_rows = director_warehouse_stock_rows(db)
         filtered_response = reports_route(
             signed_request(),
             product_q="Warehouse stock",
-            warehouse_q="Branch",
+            warehouse_q=WarehouseLevel.C_AND_F.value,
             db=db,
         )
         filtered_text = filtered_response.body.decode()
         filtered_live_response = director_report_live(
             signed_request(),
             product_q="Warehouse stock",
-            warehouse_q="Branch",
+            warehouse_q=WarehouseLevel.C_AND_F.value,
             db=db,
         )
         filtered_live_data = json.loads(filtered_live_response.body)
@@ -748,28 +751,48 @@ def test_director_report_groups_current_stock_by_warehouse_and_prioritizes_it():
     assert live_response.status_code == 200
     assert 'data-live-url="/reports/live"' in report_text
     assert report_text.index("<h2>Product stock</h2>") < report_text.index("<h2>Audit reconciliation</h2>")
-    assert report_text.index("<h2>Warehouse totals</h2>") < report_text.index("<h2>Audit reconciliation</h2>")
-    assert "Main warehouse" in report_text
-    assert "Branch warehouse" in report_text
-    assert "Old warehouse name" not in report_text
+    assert report_text.index("<h2>Warehouse level totals</h2>") < report_text.index("<h2>Audit reconciliation</h2>")
+    warehouse_table_rows = report_text.split(
+        "data-director-live-warehouse-rows>", 1
+    )[1].split("</tbody>", 1)[0]
+    assert WarehouseLevel.COMPANY_WAREHOUSE.value in warehouse_table_rows
+    assert "C&amp;F" in warehouse_table_rows
+    assert "Old warehouse name" not in warehouse_table_rows
     assert live_data["director_metrics"]["total_stock"] == 3
     assert live_data["director_metrics"]["total_products"] == 1
-    assert "Main warehouse" in live_data["warehouse_rows_html"]
-    assert "Branch warehouse" in live_data["warehouse_rows_html"]
+    assert WarehouseLevel.COMPANY_WAREHOUSE.value in live_data["warehouse_rows_html"]
+    assert "C&amp;F" in live_data["warehouse_rows_html"]
+    assert "Products" in report_text
+    assert "Locations" in report_text
+    assert "Unlocated" in report_text
+    assert "Expiry ≤30 days" in report_text
+    assert "Nearest expiry" in report_text
+    company_warehouse = next(
+        row
+        for row in warehouse_rows
+        if row["warehouse_level"] == WarehouseLevel.COMPANY_WAREHOUSE.value
+    )
+    assert company_warehouse["stock"] == 2
+    assert company_warehouse["warehouses"] == 1
+    assert company_warehouse["products"] == 1
+    assert company_warehouse["locations"] == 1
+    assert company_warehouse["unlocated"] == 1
+    assert company_warehouse["expiring_soon"] == 1
+    assert company_warehouse["nearest_expiry"] == today() + timedelta(days=20)
     assert 'data-director-stock-filter' in report_text
     assert 'aria-label="Filter product stock by product"' in report_text
-    assert 'aria-label="Filter warehouse totals by warehouse"' in report_text
+    assert 'aria-label="Filter warehouse totals by warehouse level"' in report_text
     assert '<option value="WH100"' in report_text
-    assert '<option value="Branch warehouse"' in report_text
-    assert 'data-live-url="/reports/live?product_q=Warehouse+stock&amp;warehouse_q=Branch"' in filtered_text
+    assert '<option value="C&amp;F"' in report_text
+    assert 'data-live-url="/reports/live?product_q=Warehouse+stock&amp;warehouse_q=C%26F"' in filtered_text
     filtered_warehouse_rows = filtered_text.split('data-director-live-warehouse-rows>', 1)[1].split("</tbody>", 1)[0]
-    assert "Main warehouse" not in filtered_warehouse_rows
-    assert "Branch warehouse" in filtered_warehouse_rows
-    assert "Main warehouse" not in filtered_live_data["warehouse_rows_html"]
-    assert "Branch warehouse" in filtered_live_data["warehouse_rows_html"]
+    assert WarehouseLevel.COMPANY_WAREHOUSE.value not in filtered_warehouse_rows
+    assert "C&amp;F" in filtered_warehouse_rows
+    assert WarehouseLevel.COMPANY_WAREHOUSE.value not in filtered_live_data["warehouse_rows_html"]
+    assert "C&amp;F" in filtered_live_data["warehouse_rows_html"]
 
 
-def test_director_warehouse_filter_does_not_treat_warehouse_levels_as_names():
+def test_director_warehouse_filter_uses_levels_instead_of_warehouse_names():
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -833,13 +856,18 @@ def test_director_warehouse_filter_does_not_treat_warehouse_levels_as_names():
 
     engine.dispose()
 
-    assert options == ["Bengaluru warehouse", "Unassigned"]
-    assert {row["warehouse"]: row["stock"] for row in rows} == {
-        "Unassigned": 2,
-        "Bengaluru warehouse": 1,
+    assert options == [
+        WarehouseLevel.COMPANY_WAREHOUSE.value,
+        WarehouseLevel.C_AND_F.value,
+        WarehouseLevel.MASTER_FRANCHISE.value,
+        WarehouseLevel.TALUK_FRANCHISE.value,
+        WarehouseLevel.HOME_FRANCHISE.value,
+    ]
+    assert {row["warehouse_level"]: row["stock"] for row in rows} == {
+        WarehouseLevel.COMPANY_WAREHOUSE.value: 2,
+        WarehouseLevel.C_AND_F.value: 1,
     }
-    for level in WarehouseLevel:
-        assert level.value not in options
+    assert "Bengaluru warehouse" not in options
 
 
 def test_admin_and_director_stock_summary_is_cumulative_and_product_searchable():

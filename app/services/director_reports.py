@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import and_, case, desc, func, or_, select
 from sqlalchemy.orm import Session, selectinload
@@ -17,7 +17,7 @@ from app.models import (
     TransactionType,
     WarehouseLevel,
 )
-from app.services.expiry import STOCK_STATUSES, expiry_summary
+from app.services.expiry import STOCK_STATUSES, expiry_summary, today
 
 
 def audit_time(batch: Batch) -> datetime | None:
@@ -363,45 +363,82 @@ def _current_warehouse_name():
     )
 
 
+def _current_warehouse_level():
+    return func.coalesce(
+        StorageLocation.warehouse_level,
+        Serial.warehouse_level,
+        WarehouseLevel.COMPANY_WAREHOUSE.value,
+    )
+
+
 def director_warehouse_stock_rows(
     db: Session,
     q: str = "",
     limit: int = 20,
 ) -> list[dict[str, object]]:
-    """Return current in-stock units grouped by their present warehouse."""
-    warehouse = _current_warehouse_name()
+    """Return current in-stock units grouped by their warehouse level."""
+    warehouse_level = _current_warehouse_level()
+    warehouse_name = _current_warehouse_name()
+    expiry_deadline = today() + timedelta(days=30)
     query = (
         select(
-            warehouse.label("warehouse"),
+            warehouse_level.label("warehouse_level"),
             func.count(Serial.id).label("stock"),
+            func.count(func.distinct(warehouse_name)).label("warehouses"),
+            func.count(func.distinct(Serial.product_id)).label("products"),
+            func.count(func.distinct(Serial.location_id)).label("locations"),
+            func.sum(case((Serial.location_id.is_(None), 1), else_=0)).label(
+                "unlocated"
+            ),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Serial.expiry_date.is_not(None),
+                            Serial.expiry_date <= expiry_deadline,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("expiring_soon"),
+            func.min(Serial.expiry_date).label("nearest_expiry"),
         )
         .outerjoin(StorageLocation, Serial.location_id == StorageLocation.id)
         .where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
-        .group_by(warehouse)
-        .order_by(desc(func.count(Serial.id)), warehouse)
+        .group_by(warehouse_level)
+        .order_by(desc(func.count(Serial.id)), warehouse_level)
     )
     if q.strip():
-        query = query.where(warehouse.ilike(f"%{q.strip()}%"))
+        query = query.where(warehouse_level.ilike(f"%{q.strip()}%"))
     rows = db.execute(query.limit(limit)).all()
     return [
-        {"warehouse": warehouse_name, "stock": int(stock or 0)}
-        for warehouse_name, stock in rows
+        {
+            "warehouse_level": warehouse_level_name,
+            "stock": int(stock or 0),
+            "warehouses": int(warehouses or 0),
+            "products": int(products or 0),
+            "locations": int(locations or 0),
+            "unlocated": int(unlocated or 0),
+            "expiring_soon": int(expiring_soon or 0),
+            "nearest_expiry": nearest_expiry,
+        }
+        for (
+            warehouse_level_name,
+            stock,
+            warehouses,
+            products,
+            locations,
+            unlocated,
+            expiring_soon,
+            nearest_expiry,
+        ) in rows
     ]
 
 
 def director_warehouse_filter_options(db: Session) -> list[str]:
-    """Return every warehouse with current stock for the Director Report picker."""
-    warehouse = _current_warehouse_name()
-    return list(
-        db.scalars(
-            select(warehouse)
-            .select_from(Serial)
-            .outerjoin(StorageLocation, Serial.location_id == StorageLocation.id)
-            .where(Serial.active.is_(True), Serial.status.in_(STOCK_STATUSES))
-            .group_by(warehouse)
-            .order_by(warehouse)
-        ).all()
-    )
+    """Return every warehouse level in business hierarchy order."""
+    return [level.value for level in WarehouseLevel]
 
 
 def director_product_totals(db: Session) -> dict[str, int]:

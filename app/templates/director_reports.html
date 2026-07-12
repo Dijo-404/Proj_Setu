@@ -52,15 +52,15 @@
     <div class="section-title">
       <div>
         <p class="eyebrow">Live data</p>
-        <h2>Warehouse totals</h2>
+        <h2>Warehouse level totals</h2>
       </div>
       <div class="director-live-tools">
-        <span>Current stock by warehouse</span>
+        <span>Current stock, location coverage, and expiry risk by warehouse level</span>
         <form method="get" class="director-stock-filter" data-director-stock-filter>
-          <select name="warehouse_q" aria-label="Filter warehouse totals by warehouse">
-            <option value="">All warehouses</option>
-            {% for warehouse in director_warehouse_options %}
-            <option value="{{ warehouse }}" {{ 'selected' if warehouse_q == warehouse }}>{{ warehouse }}</option>
+          <select name="warehouse_q" aria-label="Filter warehouse totals by warehouse level">
+            <option value="">All warehouse levels</option>
+            {% for warehouse_level in director_warehouse_options %}
+            <option value="{{ warehouse_level }}" {{ 'selected' if warehouse_q == warehouse_level }}>{{ warehouse_level }}</option>
             {% endfor %}
           </select>
           <input type="hidden" name="product_q" value="{{ product_q }}">
@@ -71,7 +71,7 @@
     </div>
     <div class="table-scroll director-table-scroll">
       <table class="director-table director-warehouse-table">
-        <thead><tr><th>Warehouse</th><th>Total stock</th></tr></thead>
+        <thead><tr><th>Warehouse level</th><th>Warehouses</th><th>Products</th><th>Locations</th><th>Unlocated</th><th>Expiry ≤30 days</th><th>Nearest expiry</th><th>Total stock</th></tr></thead>
         <tbody data-director-live-warehouse-rows>
           {% include "partials/director_warehouse_rows.html" %}
         </tbody>
