@@ -382,7 +382,7 @@ python -m pytest
 Expected result:
 
 ```text
-66 passed
+All collected tests pass.
 ```
 
 The current pinned dependencies are verified with Python 3.11. A Python 3.13 virtual environment may fail before tests start with the current SQLAlchemy pin.

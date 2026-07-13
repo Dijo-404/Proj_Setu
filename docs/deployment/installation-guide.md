@@ -207,5 +207,5 @@ python -m pytest -q
 Expected current result:
 
 ```text
-66 passed
+All collected tests pass.
 ```

@@ -46,6 +46,16 @@ def test_setup_repairs_pip_and_checks_dependencies():
     assert 'import uvicorn; from app.main import app; print(\'App import OK\')' in setup_script
 
 
+def test_setup_requires_the_verified_python_311_runtime():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    version_check = "sys.version_info[:2] == (3, 11)"
+    assert setup_script.count(version_check) == 2
+    assert "sys.version_info >= (3, 11)" not in setup_script
+    assert 'Read-YesNo "Python 3.11 is required. Install it now with winget?"' in setup_script
+    assert 'throw "Python 3.11 was not found.' in setup_script
+
+
 def test_setup_has_a_data_preserving_repair_mode():
     setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 

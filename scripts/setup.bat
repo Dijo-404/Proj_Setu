@@ -149,7 +149,7 @@ function Get-PythonCommand {
     )
 
     foreach ($candidate in $candidates) {
-        $versionArgs = @($candidate.Args) + @("-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)")
+        $versionArgs = @($candidate.Args) + @("-c", "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)")
         try {
             & $candidate.Exe @versionArgs | Out-Null
             if ($LASTEXITCODE -eq 0) {
@@ -170,7 +170,7 @@ function Install-PythonWithWinget {
         return $false
     }
 
-    Write-Host "Python 3.11+ was not found. Trying to install Python 3.11 using winget..."
+    Write-Host "Python 3.11 was not found. Trying to install it using winget..."
     & winget install --id Python.Python.3.11 -e --source winget --accept-package-agreements --accept-source-agreements
     return ($LASTEXITCODE -eq 0)
 }
@@ -181,7 +181,7 @@ function Ensure-Python {
         return $python
     }
 
-    $install = Read-YesNo "Python 3.11 or newer is required. Install Python 3.11 now with winget?" $true
+    $install = Read-YesNo "Python 3.11 is required. Install it now with winget?" $true
     if ($install -and (Install-PythonWithWinget)) {
         $python = Get-PythonCommand
         if ($python) {
@@ -189,7 +189,7 @@ function Ensure-Python {
         }
     }
 
-    throw "Python 3.11+ was not found. Install it from https://www.python.org/downloads/ and run setup again."
+    throw "Python 3.11 was not found. Install it from https://www.python.org/downloads/ and run setup again."
 }
 
 function Ensure-Venv {
@@ -198,7 +198,7 @@ function Ensure-Venv {
     if (Test-Path $VenvPython) {
         $venvHealthy = $false
         try {
-            & $VenvPython -c "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)" | Out-Null
+            & $VenvPython -c "import sys; raise SystemExit(0 if sys.version_info[:2] == (3, 11) else 1)" | Out-Null
             $venvHealthy = ($LASTEXITCODE -eq 0)
         }
         catch {

@@ -29,10 +29,11 @@ Implemented:
 - SQLite-safe backup download
 - Deployment docs and Windows service helper
 
-Latest verified test result in Linux workspace using Python 3.11.14 (`.venv311`):
+Run the complete current test suite using Python 3.11 and the hash-verified
+dependency lock. The release is ready only when:
 
 ```text
-66 passed
+All collected tests pass.
 ```
 
 ## Windows Setup Commands
