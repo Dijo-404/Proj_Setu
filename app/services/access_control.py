@@ -12,6 +12,7 @@ from app.services.settings import get_setting, update_settings
 SETTING_KEY = "role_access_config"
 DENY_VALUES = {"hidden", "no"}
 SUPER_ADMIN_ONLY_KEYS = {"page_role_access", "role_access_edit", "database_reset"}
+ADMIN_ONLY_KEYS = {"tally_excel_export"}
 
 
 @dataclass(frozen=True)
@@ -233,6 +234,14 @@ def access_section_definitions() -> list[AccessSectionDefinition]:
                 AccessRowDefinition("manual_serial_entry", "Manual serial entry", "Type serial numbers into batches", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS, "Locked to admin and super admin; non-admin users can scan by camera/photo only."),
                 AccessRowDefinition("fefo_pick", "FEFO pick", "Auto-pick sale, issue, purchase return", _defaults(ACTION_OPTIONS, "edit", _roles(Role.ADMIN, Role.PURCHASE, Role.SALES)), ACTION_OPTIONS),
                 AccessRowDefinition("tally_xml", "Tally XML", "Download purchase/sale/sales-return XML", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
+                AccessRowDefinition(
+                    "tally_excel_export",
+                    "Tally Excel export",
+                    "Download purchase/sale Tally workbooks",
+                    _admin(ACTION_OPTIONS, "yes"),
+                    ACTION_OPTIONS,
+                    "Locked to admin and super admin.",
+                ),
                 AccessRowDefinition("tally_sync_retry", "Tally sync retry", "Retry pending or failed sync", _admin(ACTION_OPTIONS, "yes"), ACTION_OPTIONS),
                 AccessRowDefinition("product_create", "Products", "Create products and generate serials", _admin(ACTION_OPTIONS, "edit"), ACTION_OPTIONS),
                 AccessRowDefinition(
@@ -361,6 +370,9 @@ def normalize_role_access_config(raw_config: dict | None) -> dict[str, dict[str,
             for role in ROLE_COLUMNS:
                 if role.key != Role.SUPER_ADMIN.value:
                     config[row_key][role.key] = denied
+        if row_key in ADMIN_ONLY_KEYS:
+            for role in ROLE_COLUMNS:
+                config[row_key][role.key] = row.defaults[role.key]
     return config
 
 

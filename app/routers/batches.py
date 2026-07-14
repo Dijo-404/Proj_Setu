@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse, RedirectResponse, Response
 from sqlalchemy import desc, func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.auth import require_permission
+from app.auth import ADMIN_ROLES, require_permission, require_user
 from app.database import get_db
 from app.models import (
     AuditFinding,
@@ -317,12 +317,18 @@ def batch_permission_context(db: Session, user, batch: Batch) -> dict[str, bool]
     action_key = action_key_for_batch(BatchType(batch.batch_type))
     can_edit = role_has_access(db, user.role, action_key)
     can_fefo = can_edit and role_has_access(db, user.role, "fefo_pick", {"edit", "yes"})
-    can_tally_export = role_has_access(db, user.role, "tally_xml", {"edit", "yes"})
+    can_tally_xml = role_has_access(db, user.role, "tally_xml", {"edit", "yes"})
+    can_tally_excel_export = has_any_role(user.role, ADMIN_ROLES) and role_has_access(
+        db,
+        user.role,
+        "tally_excel_export",
+        {"edit", "yes"},
+    )
     return {
         "can_edit_batch": can_edit,
         "can_fefo": can_fefo,
-        "can_tally_xml": can_tally_export,
-        "can_tally_excel_export": can_tally_export,
+        "can_tally_xml": can_tally_xml,
+        "can_tally_excel_export": can_tally_excel_export,
         "can_tally_excel_import": can_fefo,
         "can_retry_sync": role_has_access(db, user.role, "tally_sync_retry", {"edit", "yes"}),
         "can_view_attempts": role_has_access(db, user.role, "tally_attempts"),
@@ -1152,7 +1158,8 @@ def tally_excel_export(
     )
     if not batch:
         return RedirectResponse("/batches", status_code=303)
-    require_permission(request, db, "tally_xml", {"edit", "yes"})
+    require_user(request, db, ADMIN_ROLES)
+    require_permission(request, db, "tally_excel_export", {"edit", "yes"})
     if batch.batch_type not in TALLY_EXCEL_EXPORT_BATCH_TYPES or not batch.items:
         return RedirectResponse(f"/batches/{batch.id}", status_code=303)
     try:

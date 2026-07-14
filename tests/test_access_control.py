@@ -74,6 +74,38 @@ def test_multi_role_access_uses_union_of_selected_roles():
     assert configured_role_has_access(config, "purchase", "barcode_assignment")
 
 
+def test_tally_excel_export_is_locked_to_admin_roles():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        save_role_access_config(
+            db,
+            {
+                "tally_excel_export": {
+                    "admin": "no",
+                    "purchase": "yes",
+                    "sales": "yes",
+                    "directors": "yes",
+                }
+            },
+        )
+        config = get_role_access_config(db)
+
+    engine.dispose()
+
+    assert config["tally_excel_export"]["super_admin"] == "yes"
+    assert config["tally_excel_export"]["admin"] == "yes"
+    assert config["tally_excel_export"]["purchase"] == "no"
+    assert config["tally_excel_export"]["sales"] == "no"
+    assert config["tally_excel_export"]["directors"] == "no"
+
+
 def test_role_access_partial_save_merges_existing_values_and_ignores_bad_keys():
     engine = create_engine(
         "sqlite://",

@@ -3,9 +3,12 @@ from decimal import Decimal
 from io import BytesIO
 
 import pytest
+from fastapi import HTTPException
 from openpyxl import Workbook, load_workbook
 from sqlalchemy import select
+from starlette.requests import Request
 
+from app.auth import SESSION_COOKIE
 from app.models import (
     BatchItem,
     BatchType,
@@ -16,9 +19,12 @@ from app.models import (
     SerialStatus,
     User,
 )
+from app.routers.batches import tally_excel_export
+from app.security import create_session_token
 from app.services.assignment import parse_bulk_assignment_xlsx
 from app.services.inventory import InventoryError, add_serial_to_batch, create_batch, generate_serials
 from app.services.sale_returns import scan_sale_return_product
+from app.services.settings import update_settings
 from app.services.tally_excel import (
     TALLY_ACCOUNTING_REQUIRED_EXPORT_FIELDS,
     TALLY_ACCOUNTING_VOUCHER_HEADERS,
@@ -49,6 +55,20 @@ def _workbook_bytes(headers: list[str], rows: list[list[object]]) -> bytes:
     stream = BytesIO()
     workbook.save(stream)
     return stream.getvalue()
+
+
+def _signed_request(user_id: int, batch_id: int) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": f"/batches/{batch_id}/tally.xlsx",
+            "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(user_id)}".encode())],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
 
 
 def _product(code: str = "TALLYXL") -> Product:
@@ -82,6 +102,26 @@ def test_tally_excel_default_fields_for_registered_interstate_sale(db_session):
     fields = tally_accounting_default_deselected_fields(batch)
 
     assert fields == ["CGST Rate", "SGST/UTGST Rate"]
+
+
+def test_tally_excel_download_route_is_admin_only(db_session):
+    admin = User(username="xlsx-admin", password_hash="x", role="admin", active=True)
+    sales = User(username="xlsx-sales", password_hash="x", role="sales", active=True)
+    product = _product("TALLY-ADMIN")
+    db_session.add_all([admin, sales, product])
+    db_session.commit()
+    update_settings(db_session, VALID_TALLY_EXCEL_SETTINGS)
+    serial = generate_serials(db_session, product, 1, initial_status=SerialStatus.IN_STOCK)[0]
+    batch = create_batch(db_session, sales, BatchType.SALE, "Customer Ledger", "")
+    add_serial_to_batch(db_session, batch, sales, serial.serial_number)
+
+    admin_response = tally_excel_export(_signed_request(admin.id, batch.id), batch.id, db=db_session)
+
+    assert admin_response.status_code == 200
+    assert admin_response.body.startswith(b"PK")
+    with pytest.raises(HTTPException) as exc:
+        tally_excel_export(_signed_request(sales.id, batch.id), batch.id, db=db_session)
+    assert exc.value.status_code == 403
 
 
 def test_tally_excel_default_fields_for_registered_intrastate_sale(db_session):

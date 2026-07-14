@@ -94,7 +94,8 @@
       <label>Company name<input name="company_name" value="{{ settings.company_name }}" required></label>
       <label class="checkline">
         <input type="checkbox" name="tally_enabled" value="true" data-no-autosave {{ 'checked' if settings.tally_enabled == 'true' else '' }}>
-        Enable Tally sync <small class="muted" style="display:inline">- saved only with the button below</small>
+        Automatically sync completed purchases and sales with Tally
+        <small class="muted" style="display:inline">- saved only with the button below; pending syncs retry in the background</small>
       </label>
       <div class="two-col">
         <label>Tally host<input name="tally_host" value="{{ settings.tally_host }}" required></label>

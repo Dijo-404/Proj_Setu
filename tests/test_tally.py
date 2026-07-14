@@ -4,7 +4,9 @@ from types import SimpleNamespace
 from xml.etree import ElementTree as ET
 
 import pytest
+from starlette.requests import Request
 
+from app.auth import SESSION_COOKIE
 from app.models import (
     BatchStatus,
     BatchType,
@@ -15,6 +17,8 @@ from app.models import (
     StorageLocation,
     User,
 )
+from app.routers import batches as batches_router
+from app.security import create_session_token
 from app.services.access_control import default_role_access_config
 from app.services import tally as tally_service
 from app.services.inventory import apply_batch_statuses, add_serial_to_batch, create_batch, generate_serials
@@ -70,6 +74,20 @@ VALID_SETTINGS = {
 }
 
 
+def _signed_request(user_id: int, path: str, method: str = "POST") -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [(b"cookie", f"{SESSION_COOKIE}={create_session_token(user_id)}".encode())],
+            "query_string": b"",
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+
 def test_tally_xml_requires_party_on_the_batch(db_session):
     user = User(username="sales", password_hash="x", role="sales")
     db_session.add(user)
@@ -78,6 +96,65 @@ def test_tally_xml_requires_party_on_the_batch(db_session):
 
     with pytest.raises(TallySyncError, match="customer or supplier"):
         build_voucher_xml(batch, VALID_SETTINGS)
+
+
+@pytest.mark.parametrize(
+    ("batch_type", "role", "initial_status"),
+    [
+        (BatchType.PURCHASE, "purchase", SerialStatus.GENERATED),
+        (BatchType.SALE, "sales", SerialStatus.IN_STOCK),
+    ],
+)
+def test_submitting_purchase_or_sale_automatically_starts_tally_sync(
+    monkeypatch,
+    db_session,
+    batch_type,
+    role,
+    initial_status,
+):
+    user = User(username=f"auto-{role}", password_hash="x", role=role, active=True)
+    product = Product(
+        product_code=f"AUTO-{batch_type.value}",
+        product_name=f"Automatic {batch_type.value}",
+        hsn="0910",
+        gst_rate=5,
+        unit="Pcs",
+        default_rate=100,
+        tally_stock_item_name=f"Automatic {batch_type.value}",
+    )
+    location = StorageLocation(
+        code=f"AUTO-{batch_type.value}-SHELF",
+        warehouse="MAIN",
+        zone="A",
+        section="1",
+        rack="R1",
+        shelf="S1",
+        bin="B1",
+    )
+    db_session.add_all([user, product, location])
+    db_session.commit()
+    serial = generate_serials(db_session, product, 1, initial_status=initial_status)[0]
+    batch = create_batch(db_session, user, batch_type, "Tally Party", "")
+    add_serial_to_batch(db_session, batch, user, serial.serial_number)
+    if batch_type == BatchType.PURCHASE:
+        verify_pending_items_on_shelf(db_session, batch=batch, location=location, user=user)
+
+    synced_batch_ids: list[int] = []
+    monkeypatch.setattr(
+        batches_router,
+        "sync_batch",
+        lambda _db, submitted_batch: synced_batch_ids.append(submitted_batch.id),
+    )
+
+    response = batches_router.submit_batch(
+        _signed_request(user.id, f"/batches/{batch.id}/submit"),
+        batch.id,
+        db_session,
+    )
+
+    assert response.status_code == 303
+    assert synced_batch_ids == [batch.id]
+    assert batch.status == BatchStatus.SUBMITTED.value
 
 
 def test_sale_batch_xml_groups_serials_by_product(db_session):

@@ -19,7 +19,7 @@ In Setuora:
    ledger. Use
    `Add product ledger` again for every additional GST rate. Products without a
    matching rate use the default Sales, CGST, and SGST ledgers.
-4. Leave `Enable Tally sync` off during setup.
+4. Leave `Automatically sync completed purchases and sales with Tally` off during setup.
 5. Open `Tally Check`.
 6. Confirm each required master only after comparing exact spelling in Tally.
 7. Use a purchase, sale, or sales-return batch page to download the generated Tally XML.
@@ -36,7 +36,11 @@ Live XML posting is supported for:
 - Sale
 - Sales return as Credit Note
 
-These are queued until Tally sync is enabled.
+These are queued until automatic Tally sync is enabled. Once enabled, every
+completed purchase/receive, sale, and sales-return batch is posted automatically;
+temporary failures are retried in the background.
+
+Manual Tally Excel exports are available only to admin and super-admin users.
 
 The following local workflows are implemented but their Tally XML is intentionally not posted yet:
 
