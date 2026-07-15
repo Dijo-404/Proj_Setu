@@ -13,6 +13,7 @@ Setuora is a LAN-first barcode transaction bridge for Tally Prime. It lets staff
 - FEFO picking and expiry control for sale, issue, and purchase-return batches
 - Tally XML generation for purchase/receive, sale, and sales-return batches
 - Tally Check screen for exact-name master readiness
+- Live Tally company, ledger-name, and dated sales-book discovery for sync setup
 - Saved Tally company profiles with active-company settings
 - Editable admin role access controls for pages, actions, and data areas
 - Pending sync queue, manual retry, and automatic retry worker

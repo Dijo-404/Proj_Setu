@@ -1,5 +1,10 @@
-{% macro sales_ledger_editor(value='') %}
-<details class="ledger-mapping-editor" data-ledger-mapping-editor {{ 'open' if value else '' }}>
+{% macro sales_ledger_editor(value='', ledger_list_id='') %}
+<details
+  class="ledger-mapping-editor"
+  data-ledger-mapping-editor
+  {% if ledger_list_id %}data-ledger-list-id="{{ ledger_list_id }}"{% endif %}
+  {{ 'open' if value else '' }}
+>
   <summary><span data-ledger-summary>Add product ledger</span></summary>
   <input type="hidden" name="sales_gst_ledger_mappings" value="{{ value }}">
   <p class="muted ledger-mapping-help">

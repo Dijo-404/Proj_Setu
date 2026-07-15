@@ -33,7 +33,9 @@ Only super admins can delete users. Deleted users with old batches, scans, or re
 4. Keep `Enable Tally sync` off until setup is validated.
 5. Open `Products` and create product masters with exact Tally stock item names.
 6. Open `Tally Check`. Click a company name to edit its Tally settings in the
-   popup. For the active company, use the same popup to test the gateway and
+   popup. Click `Load from Tally` to select a loaded company, choose exact ledger
+   names in the settings fields, and review the Sales Book for a selected date
+   range. For the active company, use the same popup to test the gateway and
    confirm each required master only after comparing it with Tally.
 7. Create named users from `Users`.
 

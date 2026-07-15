@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date, datetime
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
@@ -30,6 +31,27 @@ class GatewayCheckResult:
     ok: bool
     message: str
     response_excerpt: str = ""
+
+
+class TallyDataError(RuntimeError):
+    """Raised when read-only data discovery from Tally cannot be completed."""
+
+
+@dataclass(frozen=True)
+class TallyLedger:
+    name: str
+    parent: str = ""
+    closing_balance: str = ""
+
+
+@dataclass(frozen=True)
+class TallySalesVoucher:
+    date: str
+    voucher_number: str
+    voucher_type: str
+    party_ledger: str
+    amount: str
+    narration: str = ""
 
 
 def _status(name: str | None) -> str:
@@ -158,6 +180,246 @@ def build_company_list_xml() -> str:
     ET.SubElement(collection, "TYPE").text = "Company"
     ET.SubElement(collection, "NATIVEMETHOD").text = "Name"
     return ET.tostring(envelope, encoding="unicode")
+
+
+def _build_collection_export(
+    collection_name: str,
+    object_type: str,
+    methods: tuple[str, ...],
+    *,
+    company_name: str = "",
+) -> tuple[ET.Element, ET.Element]:
+    envelope = ET.Element("ENVELOPE")
+    header = ET.SubElement(envelope, "HEADER")
+    ET.SubElement(header, "VERSION").text = "1"
+    ET.SubElement(header, "TALLYREQUEST").text = "Export"
+    ET.SubElement(header, "TYPE").text = "Collection"
+    ET.SubElement(header, "ID").text = collection_name
+    body = ET.SubElement(envelope, "BODY")
+    desc = ET.SubElement(body, "DESC")
+    static_variables = ET.SubElement(desc, "STATICVARIABLES")
+    ET.SubElement(static_variables, "SVEXPORTFORMAT").text = "$$SysName:XML"
+    if company_name:
+        ET.SubElement(static_variables, "SVCURRENTCOMPANY").text = company_name
+    tdl = ET.SubElement(desc, "TDL")
+    tdl_message = ET.SubElement(tdl, "TDLMESSAGE")
+    collection = ET.SubElement(tdl_message, "COLLECTION", {"NAME": collection_name})
+    ET.SubElement(collection, "TYPE").text = object_type
+    for method in methods:
+        ET.SubElement(collection, "NATIVEMETHOD").text = method
+    return envelope, tdl_message
+
+
+def build_ledger_list_xml(company_name: str) -> str:
+    envelope, _ = _build_collection_export(
+        "Setuora Ledger List",
+        "Ledger",
+        ("Name", "Parent", "ClosingBalance"),
+        company_name=company_name.strip(),
+    )
+    return ET.tostring(envelope, encoding="unicode")
+
+
+def build_sales_book_xml(company_name: str, from_date: date, to_date: date) -> str:
+    envelope, tdl_message = _build_collection_export(
+        "Setuora Sales Book",
+        "Voucher",
+        (
+            "Date",
+            "VoucherNumber",
+            "VoucherTypeName",
+            "PartyLedgerName",
+            "Amount",
+            "Narration",
+            "AllLedgerEntries",
+        ),
+        company_name=company_name.strip(),
+    )
+    static_variables = envelope.find("./BODY/DESC/STATICVARIABLES")
+    if static_variables is None:  # pragma: no cover - constructed immediately above
+        raise RuntimeError("Tally request is missing static variables")
+    ET.SubElement(static_variables, "SVFROMDATE", {"TYPE": "Date"}).text = from_date.strftime("%Y%m%d")
+    ET.SubElement(static_variables, "SVTODATE", {"TYPE": "Date"}).text = to_date.strftime("%Y%m%d")
+    collection = next(node for node in tdl_message if _local_tag(node) == "COLLECTION")
+    ET.SubElement(collection, "FILTER").text = "SetuoraSalesVoucherFilter"
+    formula = ET.SubElement(
+        tdl_message,
+        "SYSTEM",
+        {"TYPE": "Formulae", "NAME": "SetuoraSalesVoucherFilter"},
+    )
+    formula.text = (
+        "$$IsSales:$VoucherTypeName "
+        "AND $Date >= ##SVFromDate AND $Date <= ##SVToDate"
+    )
+    return ET.tostring(envelope, encoding="unicode")
+
+
+def _local_tag(node: ET.Element) -> str:
+    return node.tag.rsplit("}", 1)[-1].upper()
+
+
+def _direct_text(node: ET.Element, *names: str) -> str:
+    expected = {name.upper() for name in names}
+    for child in node:
+        if _local_tag(child) in expected and child.text:
+            return child.text.strip()
+    return ""
+
+
+def _first_text(node: ET.Element, *names: str) -> str:
+    expected = {name.upper() for name in names}
+    for child in node.iter():
+        if _local_tag(child) in expected and child.text:
+            return child.text.strip()
+    return ""
+
+
+def _response_errors(root: ET.Element) -> list[str]:
+    return [
+        node.text.strip()
+        for node in root.iter()
+        if _local_tag(node) in {"LINEERROR", "ERROR"} and node.text and node.text.strip()
+    ]
+
+
+def _post_read_request(settings: dict[str, str], xml: str) -> tuple[str, ET.Element]:
+    host = settings.get("tally_host", "").strip()
+    port = settings.get("tally_port", "").strip()
+    if not host or not port:
+        raise TallyDataError("Tally host and port are not configured.")
+    url = f"http://{host}:{port}"
+    request = Request(url, data=xml.encode("utf-8"), headers={"Content-Type": "text/xml"}, method="POST")
+    try:
+        with urlopen(request, timeout=8) as response:
+            body = response.read().decode("utf-8", errors="replace")
+    except URLError as exc:
+        reason = getattr(exc, "reason", exc)
+        raise TallyDataError(f"Tally gateway did not respond: {reason}") from exc
+    except TimeoutError as exc:
+        raise TallyDataError("Tally gateway timed out.") from exc
+    except OSError as exc:
+        raise TallyDataError(f"Tally gateway did not respond: {exc}") from exc
+    if not body.strip():
+        raise TallyDataError("Tally gateway returned an empty response.")
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError as exc:
+        raise TallyDataError("Tally gateway returned unreadable XML.") from exc
+    errors = _response_errors(root)
+    if errors:
+        raise TallyDataError(f"Tally rejected the request: {'; '.join(errors)}")
+    status = _first_text(root, "STATUS")
+    if status == "0":
+        raise TallyDataError("Tally rejected the request.")
+    return body, root
+
+
+def fetch_tally_companies(settings: dict[str, str]) -> list[str]:
+    _, root = _post_read_request(settings, build_company_list_xml())
+    names: list[str] = []
+    seen: set[str] = set()
+    for node in root.iter():
+        if _local_tag(node) != "COMPANY":
+            continue
+        name = _direct_text(node, "NAME") or (node.attrib.get("NAME") or "").strip()
+        if name and name.casefold() not in seen:
+            names.append(name)
+            seen.add(name.casefold())
+    return sorted(names, key=str.casefold)
+
+
+def fetch_tally_ledgers(settings: dict[str, str], company_name: str) -> list[TallyLedger]:
+    clean_company = company_name.strip()
+    if not clean_company:
+        raise TallyDataError("Choose a Tally company before loading ledgers.")
+    _, root = _post_read_request(settings, build_ledger_list_xml(clean_company))
+    ledgers: list[TallyLedger] = []
+    seen: set[str] = set()
+    for node in root.iter():
+        if _local_tag(node) != "LEDGER":
+            continue
+        name = _direct_text(node, "NAME") or (node.attrib.get("NAME") or "").strip()
+        if not name or name.casefold() in seen:
+            continue
+        ledgers.append(
+            TallyLedger(
+                name=name,
+                parent=_direct_text(node, "PARENT"),
+                closing_balance=_direct_text(node, "CLOSINGBALANCE"),
+            )
+        )
+        seen.add(name.casefold())
+    return sorted(ledgers, key=lambda ledger: ledger.name.casefold())
+
+
+def _party_ledger(voucher: ET.Element) -> str:
+    direct = _direct_text(voucher, "PARTYLEDGERNAME", "LEDGERNAME")
+    if direct:
+        return direct
+    for entry in voucher:
+        if _local_tag(entry) not in {"ALLLEDGERENTRIES.LIST", "LEDGERENTRIES.LIST"}:
+            continue
+        if _direct_text(entry, "ISPARTYLEDGER").casefold() == "yes":
+            return _direct_text(entry, "LEDGERNAME")
+    return ""
+
+
+def _voucher_amount(voucher: ET.Element) -> str:
+    direct = _direct_text(voucher, "AMOUNT")
+    if direct:
+        return direct
+    for entry in voucher:
+        if _local_tag(entry) not in {"ALLLEDGERENTRIES.LIST", "LEDGERENTRIES.LIST"}:
+            continue
+        if _direct_text(entry, "ISPARTYLEDGER").casefold() == "yes":
+            return _direct_text(entry, "AMOUNT")
+    return ""
+
+
+def _display_tally_date(raw: str) -> str:
+    clean = raw.strip()
+    if len(clean) == 8 and clean.isdigit():
+        try:
+            return datetime.strptime(clean, "%Y%m%d").date().isoformat()
+        except ValueError:
+            pass
+    return clean
+
+
+def fetch_tally_sales_book(
+    settings: dict[str, str],
+    company_name: str,
+    from_date: date,
+    to_date: date,
+) -> list[TallySalesVoucher]:
+    clean_company = company_name.strip()
+    if not clean_company:
+        raise TallyDataError("Choose a Tally company before loading the sales book.")
+    if from_date > to_date:
+        raise TallyDataError("Sales book start date must be on or before the end date.")
+    _, root = _post_read_request(
+        settings,
+        build_sales_book_xml(clean_company, from_date, to_date),
+    )
+    vouchers: list[TallySalesVoucher] = []
+    for node in root.iter():
+        if _local_tag(node) != "VOUCHER":
+            continue
+        vouchers.append(
+            TallySalesVoucher(
+                date=_display_tally_date(_direct_text(node, "DATE")),
+                voucher_number=_direct_text(node, "VOUCHERNUMBER"),
+                voucher_type=_direct_text(node, "VOUCHERTYPENAME"),
+                party_ledger=_party_ledger(node),
+                amount=_voucher_amount(node),
+                narration=_direct_text(node, "NARRATION"),
+            )
+        )
+    return sorted(
+        vouchers,
+        key=lambda voucher: (voucher.date, voucher.voucher_number),
+        reverse=True,
+    )
 
 
 def test_tally_gateway(settings: dict[str, str]) -> GatewayCheckResult:

@@ -28,6 +28,7 @@
     if (options.min !== undefined) input.min = options.min;
     if (options.max !== undefined) input.max = options.max;
     if (options.step !== undefined) input.step = options.step;
+    if (options.listId) input.setAttribute("list", options.listId);
     wrapper.appendChild(input);
     return wrapper;
   }
@@ -91,6 +92,7 @@
 
       const grid = document.createElement("div");
       grid.className = "ledger-mapping-grid";
+      const ledgerListId = editor.dataset.ledgerListId || "";
       grid.append(
         rowField("GST rate %", "rate", values[0], {
           type: "number",
@@ -102,15 +104,19 @@
         }),
         rowField("Sales ledger", "sales", values[1], {
           placeholder: "e.g. Sales @ 5%",
+          listId: ledgerListId,
         }),
         rowField("CGST ledger", "cgst", values[2], {
           placeholder: "e.g. Output CGST @ 2.5%",
+          listId: ledgerListId,
         }),
         rowField("SGST ledger", "sgst", values[3], {
           placeholder: "e.g. Output SGST @ 2.5%",
+          listId: ledgerListId,
         }),
         rowField("IGST ledger", "igst", values[4], {
           placeholder: "e.g. Output IGST @ 5%",
+          listId: ledgerListId,
         }),
       );
       grid.querySelectorAll("input").forEach(function (input) {

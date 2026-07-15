@@ -1,11 +1,17 @@
+from datetime import date
 from unittest.mock import patch
 
 from app.models import Product, User
 from app.services.tally_masters import (
     build_company_list_xml,
+    build_ledger_list_xml,
+    build_sales_book_xml,
     collect_master_requirements,
     confirm_master,
     confirmation_lookup,
+    fetch_tally_companies,
+    fetch_tally_ledgers,
+    fetch_tally_sales_book,
     live_sync_readiness,
     readiness_counts,
     test_tally_gateway as check_tally_gateway,
@@ -108,6 +114,23 @@ def test_company_list_xml_is_read_only_export_request():
     assert "VOUCHER" not in xml
 
 
+def test_ledger_and_sales_book_xml_are_scoped_to_selected_company():
+    ledger_xml = build_ledger_list_xml("Selected Company")
+    sales_xml = build_sales_book_xml(
+        "Selected Company",
+        date(2026, 4, 1),
+        date(2026, 7, 15),
+    )
+
+    assert "<ID>Setuora Ledger List</ID>" in ledger_xml
+    assert "<SVCURRENTCOMPANY>Selected Company</SVCURRENTCOMPANY>" in ledger_xml
+    assert "<NATIVEMETHOD>ClosingBalance</NATIVEMETHOD>" in ledger_xml
+    assert "<ID>Setuora Sales Book</ID>" in sales_xml
+    assert '<SVFROMDATE TYPE="Date">20260401</SVFROMDATE>' in sales_xml
+    assert '<SVTODATE TYPE="Date">20260715</SVTODATE>' in sales_xml
+    assert "$$IsSales:$VoucherTypeName" in sales_xml
+
+
 class _GatewayResponse:
     def __init__(self, body: str):
         self.body = body
@@ -120,6 +143,55 @@ class _GatewayResponse:
 
     def read(self):
         return self.body.encode()
+
+
+def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
+    responses = [
+        _GatewayResponse(
+            """
+            <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+              <COMPANY NAME="Second Company"><NAME>Second Company</NAME></COMPANY>
+              <COMPANY><NAME>First Company</NAME></COMPANY>
+            </COLLECTION></DATA></BODY></ENVELOPE>
+            """
+        ),
+        _GatewayResponse(
+            """
+            <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+              <LEDGER NAME="Sales @ 5%"><NAME>Sales @ 5%</NAME><PARENT>Sales Accounts</PARENT><CLOSINGBALANCE>1250.00</CLOSINGBALANCE></LEDGER>
+              <LEDGER><NAME>Customer A</NAME><PARENT>Sundry Debtors</PARENT><CLOSINGBALANCE>-500.00</CLOSINGBALANCE></LEDGER>
+            </COLLECTION></DATA></BODY></ENVELOPE>
+            """
+        ),
+        _GatewayResponse(
+            """
+            <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+              <VOUCHER>
+                <DATE>20260715</DATE><VOUCHERNUMBER>42</VOUCHERNUMBER>
+                <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME><PARTYLEDGERNAME>Customer A</PARTYLEDGERNAME>
+                <AMOUNT>500.00</AMOUNT><NARRATION>Test sale</NARRATION>
+              </VOUCHER>
+            </COLLECTION></DATA></BODY></ENVELOPE>
+            """
+        ),
+    ]
+    settings = {"tally_host": "127.0.0.1", "tally_port": "9000"}
+    with patch("app.services.tally_masters.urlopen", side_effect=responses):
+        companies = fetch_tally_companies(settings)
+        ledgers = fetch_tally_ledgers(settings, "First Company")
+        vouchers = fetch_tally_sales_book(
+            settings,
+            "First Company",
+            date(2026, 4, 1),
+            date(2026, 7, 15),
+        )
+
+    assert companies == ["First Company", "Second Company"]
+    assert [ledger.name for ledger in ledgers] == ["Customer A", "Sales @ 5%"]
+    assert ledgers[0].parent == "Sundry Debtors"
+    assert vouchers[0].date == "2026-07-15"
+    assert vouchers[0].voucher_number == "42"
+    assert vouchers[0].party_ledger == "Customer A"
 
 
 def test_gateway_check_rejects_tally_line_error():

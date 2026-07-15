@@ -21,10 +21,14 @@ In Setuora:
    matching rate use the default Sales, CGST, and SGST ledgers.
 4. Leave `Automatically sync completed purchases and sales with Tally` off during setup.
 5. Open `Tally Check`.
-6. Confirm each required master only after comparing exact spelling in Tally.
-7. Use a purchase, sale, or sales-return batch page to download the generated Tally XML.
-8. Validate that XML against the real Tally company.
-9. Enable sync only after validation.
+6. Open the company profile and click `Load from Tally`. Select a loaded Tally
+   company, review its ledger names and dated Sales Book, then click `Use for sync`
+   and save the profile. Loaded ledger names appear as exact-name choices in the
+   round-off and product GST ledger fields.
+7. Confirm each required master only after comparing exact spelling in Tally.
+8. Use a purchase, sale, or sales-return batch page to download the generated Tally XML.
+9. Validate that XML against the real Tally company.
+10. Enable sync only after validation.
 
 Changing the active company disables sync again. Recheck that company's masters before posting live vouchers.
 

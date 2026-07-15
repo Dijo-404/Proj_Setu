@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -9,6 +11,7 @@ from app.main import app
 from app.models import Company, User
 from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
+from app.services.tally_masters import TallyLedger, TallySalesVoucher
 
 
 COMPANY_CONFIG = {
@@ -83,6 +86,47 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                 "company_name": "Edited Tally Company",
             },
         )
+        with (
+            patch(
+                "app.routers.tally_check.fetch_tally_companies",
+                return_value=["Live Company", "Other Company"],
+            ),
+            patch(
+                "app.routers.tally_check.fetch_tally_ledgers",
+                return_value=[TallyLedger("Customer A", "Sundry Debtors", "-500.00")],
+            ),
+            patch(
+                "app.routers.tally_check.fetch_tally_sales_book",
+                return_value=[
+                    TallySalesVoucher(
+                        "2026-07-15",
+                        "42",
+                        "Sales",
+                        "Customer A",
+                        "500.00",
+                        "Test sale",
+                    )
+                ],
+            ),
+        ):
+            live_companies = client.get(
+                f"/tally-check/companies/{company_id}/live/companies",
+                cookies=cookies,
+            )
+            live_ledgers = client.get(
+                f"/tally-check/companies/{company_id}/live/ledgers",
+                params={"tally_company": "Live Company"},
+                cookies=cookies,
+            )
+            live_sales = client.get(
+                f"/tally-check/companies/{company_id}/live/sales-book",
+                params={
+                    "tally_company": "Live Company",
+                    "from_date": "2026-04-01",
+                    "to_date": "2026-07-15",
+                },
+                cookies=cookies,
+            )
     finally:
         app.dependency_overrides.clear()
 
@@ -105,8 +149,16 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert "Mark checked" not in page.text
     assert "Unmark" not in page.text
     assert "tally-check-toggle" in page.text
+    assert "Live Tally data" in page.text
+    assert 'data-tally-live-company' in page.text
+    assert 'data-tally-live-ledgers' in page.text
+    assert 'data-tally-live-sales' in page.text
     assert update.status_code == 200
     assert update.json()["ok"]
     assert saved_name == "Edited Label"
     assert saved_tally_name == "Edited Tally Company"
     assert settings["sales_ledger_name"] == COMPANY_CONFIG["sales_ledger_name"]
+    assert live_companies.status_code == 200
+    assert live_companies.json()["companies"] == ["Live Company", "Other Company"]
+    assert live_ledgers.json()["ledgers"][0]["name"] == "Customer A"
+    assert live_sales.json()["vouchers"][0]["voucher_number"] == "42"

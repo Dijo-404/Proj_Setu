@@ -1,3 +1,6 @@
+from dataclasses import asdict
+from datetime import date
+
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
@@ -18,8 +21,12 @@ from app.services.tally_masters import (
     collect_master_requirements,
     confirmation_lookup,
     confirm_master,
+    fetch_tally_companies,
+    fetch_tally_ledgers,
+    fetch_tally_sales_book,
     readiness_counts,
     remove_confirmation,
+    TallyDataError,
     test_tally_gateway,
 )
 from app.templates import templates
@@ -49,6 +56,8 @@ def render_check_page(
     confirmations = confirmation_lookup(db)
     companies = list_companies(db)
     active = get_active_company(db)
+    today = date.today()
+    financial_year_start = date(today.year if today.month >= 4 else today.year - 1, 4, 1)
     return templates.TemplateResponse(
         request,
         "tally_check.html",
@@ -66,12 +75,23 @@ def render_check_page(
             ],
             "active": active,
             "can_edit_companies": role_has_access(db, user.role, "settings_edit"),
+            "live_sales_from": financial_year_start.isoformat(),
+            "live_sales_to": today.isoformat(),
             "open_company_id": (
                 open_company_id
                 or (active.id if result is not None and active is not None else None)
             ),
         },
     )
+
+
+def _live_company_config(db: Session, company_id: int) -> tuple[Company | None, dict[str, str] | None]:
+    company = db.get(Company, company_id)
+    return company, company_config(company) if company else None
+
+
+def _live_error(message: str, status_code: int = 502) -> JSONResponse:
+    return JSONResponse({"ok": False, "error": message}, status_code=status_code)
 
 
 @router.get("")
@@ -188,4 +208,86 @@ def test_gateway(request: Request, db: Session = Depends(get_db)):
         db,
         result,
         open_company_id=active.id if active else None,
+    )
+
+
+@router.get("/companies/{company_id}/live/companies")
+def live_companies(
+    request: Request,
+    company_id: int,
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "tally_check_edit")
+    company, config = _live_company_config(db, company_id)
+    if not company or config is None:
+        return _live_error("Company profile not found.", 404)
+    try:
+        names = fetch_tally_companies(config)
+    except TallyDataError as exc:
+        return _live_error(str(exc))
+    return JSONResponse(
+        {
+            "ok": True,
+            "profile": {"id": company.id, "name": company.name},
+            "selected_company": config.get("company_name", ""),
+            "companies": names,
+        }
+    )
+
+
+@router.get("/companies/{company_id}/live/ledgers")
+def live_ledgers(
+    request: Request,
+    company_id: int,
+    tally_company: str,
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "tally_check_edit")
+    company, config = _live_company_config(db, company_id)
+    if not company or config is None:
+        return _live_error("Company profile not found.", 404)
+    try:
+        ledgers = fetch_tally_ledgers(config, tally_company)
+    except TallyDataError as exc:
+        return _live_error(str(exc))
+    return JSONResponse(
+        {
+            "ok": True,
+            "company": tally_company.strip(),
+            "count": len(ledgers),
+            "ledgers": [asdict(ledger) for ledger in ledgers],
+        }
+    )
+
+
+@router.get("/companies/{company_id}/live/sales-book")
+def live_sales_book(
+    request: Request,
+    company_id: int,
+    tally_company: str,
+    from_date: date,
+    to_date: date,
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "tally_check_edit")
+    company, config = _live_company_config(db, company_id)
+    if not company or config is None:
+        return _live_error("Company profile not found.", 404)
+    if from_date > to_date:
+        return _live_error("Sales book start date must be on or before the end date.", 400)
+    if (to_date - from_date).days > 370:
+        return _live_error("Choose a sales book period of 370 days or less.", 400)
+    try:
+        vouchers = fetch_tally_sales_book(config, tally_company, from_date, to_date)
+    except TallyDataError as exc:
+        return _live_error(str(exc))
+    return JSONResponse(
+        {
+            "ok": True,
+            "company": tally_company.strip(),
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "count": len(vouchers),
+            "vouchers": [asdict(voucher) for voucher in vouchers],
+        }
     )

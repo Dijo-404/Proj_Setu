@@ -3042,6 +3042,78 @@ dialog.company-config-modal {
   grid-column: 1 / -1;
 }
 
+.tally-live-head {
+  align-items: center;
+}
+
+.tally-live-head .button {
+  flex: none;
+}
+
+.tally-live-controls {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.5fr) auto minmax(150px, 0.8fr) minmax(150px, 0.8fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.tally-live-controls .button {
+  min-height: 42px;
+}
+
+.tally-live-status {
+  min-height: 20px;
+  margin: 12px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.tally-live-status.is-error {
+  color: var(--bad-fg);
+}
+
+.tally-live-results {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.tally-live-card {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: var(--parchment);
+  box-shadow: var(--control-shadow);
+}
+
+.tally-live-card__title {
+  margin: 0 0 10px;
+}
+
+.tally-live-card__title h4 {
+  margin: 0;
+}
+
+.tally-live-table-scroll {
+  max-height: 320px;
+}
+
+.tally-live-table-scroll table {
+  min-width: 520px;
+}
+
+.tally-live-sales-card .tally-live-table-scroll table {
+  min-width: 650px;
+}
+
+.tally-live-table-scroll th,
+.tally-live-table-scroll td {
+  padding: 9px 10px;
+  font-size: 13px;
+}
+
 .company-check-head {
   align-items: center;
 }
@@ -3180,6 +3252,14 @@ dialog.company-config-modal {
   .company-readiness-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .tally-live-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tally-live-results {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -3198,7 +3278,12 @@ dialog.company-config-modal {
     grid-template-columns: 1fr;
   }
 
-  .company-check-head {
+  .tally-live-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .company-check-head,
+  .tally-live-head {
     align-items: stretch;
     flex-direction: column;
   }
@@ -3211,7 +3296,9 @@ dialog.company-config-modal {
 
   .product-modal-actions .button,
   .product-danger-zone .button,
-  .company-check-head .button {
+  .company-check-head .button,
+  .tally-live-head .button,
+  .tally-live-controls .button {
     width: 100%;
   }
 }
