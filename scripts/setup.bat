@@ -797,10 +797,53 @@ function Set-CaddyAppServiceDependency {
     }
 }
 
+function Get-RecentServiceError {
+    if (-not (Test-Path -LiteralPath $LogsDir)) {
+        return $null
+    }
+
+    $errorLog = Get-ChildItem -LiteralPath $LogsDir -Filter "setuora-err*.log" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if (-not $errorLog) {
+        return $null
+    }
+
+    $lines = @(
+        Get-Content -LiteralPath $errorLog.FullName -Tail 15 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Trim() -ne "" }
+    )
+    if ($lines.Count -eq 0) {
+        return $null
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Get-ManagedServiceFailureMessage {
+    param(
+        [Parameter(Mandatory=$true)][string]$Summary,
+        [switch]$IncludeSetuoraLog,
+        [string]$ExceptionMessage
+    )
+
+    $message = $Summary
+    if ($IncludeSetuoraLog) {
+        $details = Get-RecentServiceError
+        if ($details) {
+            $message += [Environment]::NewLine + "Recent service log:" + [Environment]::NewLine + $details
+        }
+    }
+    if ($ExceptionMessage) {
+        $message += [Environment]::NewLine + $ExceptionMessage
+    }
+    return $message
+}
+
 function Start-ManagedService {
     param(
         [Parameter(Mandatory=$true)][string]$Name,
-        [Parameter(Mandatory=$true)][string]$DisplayName
+        [Parameter(Mandatory=$true)][string]$DisplayName,
+        [switch]$IncludeSetuoraLog
     )
 
     $service = Get-Service -Name $Name -ErrorAction SilentlyContinue
@@ -813,12 +856,17 @@ function Start-ManagedService {
             $service.WaitForStatus("Running", [TimeSpan]::FromSeconds(30))
         }
         catch {
-            throw "$DisplayName could not start. Check Windows Event Viewer and the Setuora logs. $($_.Exception.Message)"
+            throw (Get-ManagedServiceFailureMessage `
+                -Summary "$DisplayName could not start. Check Windows Event Viewer and the Setuora logs." `
+                -IncludeSetuoraLog:$IncludeSetuoraLog `
+                -ExceptionMessage $_.Exception.Message)
         }
     }
     $service.Refresh()
     if ($service.Status -ne "Running") {
-        throw "$DisplayName did not remain running after startup."
+        throw (Get-ManagedServiceFailureMessage `
+            -Summary "$DisplayName did not remain running after startup." `
+            -IncludeSetuoraLog:$IncludeSetuoraLog)
     }
 }
 
@@ -971,8 +1019,14 @@ Install-Dependencies
 
 Write-Section "Configuration"
 if ($Repair -and (Test-Path $EnvPath)) {
-    Write-Host "Existing .env settings preserved."
-    $credentials = $null
+    if (Test-EnvFileHasSafeBootstrapPassword) {
+        Write-Host "Existing .env settings preserved."
+        $credentials = $null
+    }
+    else {
+        Write-Host "The preserved .env has no safe first-admin password; Setuora cannot start until one is set." -ForegroundColor Yellow
+        $credentials = Ensure-EnvFile
+    }
 }
 else {
     $credentials = Ensure-EnvFile
@@ -1020,7 +1074,7 @@ else {
 
 if ($serviceInstalled) {
     Set-CaddyAppServiceDependency
-    Start-ManagedService -Name $AppServiceName -DisplayName "Setuora"
+    Start-ManagedService -Name $AppServiceName -DisplayName "Setuora" -IncludeSetuoraLog
     $installedCaddyService = Get-Service -Name $CaddyServiceName -ErrorAction SilentlyContinue
     if ($installedCaddyService) {
         Start-ManagedService -Name $CaddyServiceName -DisplayName "Setuora Caddy HTTPS proxy"

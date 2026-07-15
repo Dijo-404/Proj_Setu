@@ -215,6 +215,48 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     assert "sc.exe failureflag $ServiceName 1" in installer
 
 
+def test_service_install_grants_localservice_access_to_base_python():
+    installer = (PROJECT_ROOT / "deployment" / "windows" / "install_service.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    # The venv python.exe is a redirect stub that launches the base interpreter
+    # recorded in .venv\pyvenv.cfg. A per-user (winget) Python lives under a
+    # profile LocalService cannot read, so the service fails to start with
+    # "No Python at '...'". LocalService must be granted read/execute on the
+    # base interpreter home.
+    assert "function Get-VenvBasePythonHome" in installer
+    assert "pyvenv.cfg" in installer
+    assert 'Grant-LocalServiceAccess -Path $basePythonHome -Access "RX"' in installer
+
+
+def test_service_start_surfaces_the_service_error_log():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    # A failed service start must show the tail of setuora-err.log instead of
+    # only pointing at Event Viewer, so the real cause is visible immediately.
+    assert "function Get-RecentServiceError" in setup_script
+    assert "Recent service log:" in setup_script
+    assert (
+        'Start-ManagedService -Name $AppServiceName -DisplayName "Setuora" -IncludeSetuoraLog'
+        in setup_script
+    )
+
+
+def test_repair_fixes_an_unsafe_bootstrap_password_instead_of_preserving_it():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    config_block = setup_script.split('Write-Section "Configuration"', 1)[1].split(
+        'Write-Section "Smoke Test"', 1
+    )[0]
+
+    # Repair must not preserve a .env whose bootstrap password would make the
+    # service refuse to start on a fresh database; it repairs it instead.
+    assert "Test-EnvFileHasSafeBootstrapPassword" in config_block
+    assert "Existing .env settings preserved." in config_block
+    assert "$credentials = Ensure-EnvFile" in config_block
+
+
 def test_caddy_service_creation_uses_the_cim_servicetype_parameter_type():
     setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
 

@@ -41,10 +41,41 @@ function Grant-LocalServiceAccess {
     }
 }
 
+function Get-VenvBasePythonHome {
+    param([Parameter(Mandatory=$true)][string]$VenvDir)
+
+    $configPath = Join-Path $VenvDir "pyvenv.cfg"
+    if (-not (Test-Path -LiteralPath $configPath)) {
+        return $null
+    }
+    foreach ($line in Get-Content -LiteralPath $configPath) {
+        if ($line -match '^\s*home\s*=\s*(.+?)\s*$') {
+            return $Matches[1].Trim()
+        }
+    }
+    return $null
+}
+
 # The service can read application code but only write its database and logs.
 Grant-LocalServiceAccess -Path $ProjectDir -Access "RX"
 Grant-LocalServiceAccess -Path $dataDir -Access "M"
 Grant-LocalServiceAccess -Path $logDir -Access "M"
+
+# A per-user (winget) base Python lives in a profile LocalService cannot read,
+# which makes the venv stub fail with "No Python at '...'". Grant it access.
+$basePythonHome = Get-VenvBasePythonHome -VenvDir (Join-Path $ProjectDir ".venv")
+if ($basePythonHome) {
+    $basePythonHome = [IO.Path]::GetFullPath($basePythonHome).TrimEnd("\")
+    $projectFull = [IO.Path]::GetFullPath($ProjectDir).TrimEnd("\")
+    $insideProject = $basePythonHome.StartsWith(
+        $projectFull + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+    )
+    if ((Test-Path -LiteralPath $basePythonHome) -and -not $insideProject) {
+        Write-Host "Granting the service account access to the base Python at '$basePythonHome'..."
+        Grant-LocalServiceAccess -Path $basePythonHome -Access "RX"
+    }
+}
 
 $existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if (-not $existingService) {
