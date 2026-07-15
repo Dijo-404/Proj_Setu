@@ -7,6 +7,7 @@ from app.auth import SESSION_COOKIE
 from app.models import Batch, BatchItem, BatchType, GstTreatment, Product, SerialStatus, User
 from app.routers.batches import create_batch_route, party_ledger_options, sale_gst_treatment_for_state
 from app.security import create_session_token
+from app.services.access_control import default_role_access_config
 from app.services.inventory import create_batch, generate_serials
 from app.templates import templates
 
@@ -108,6 +109,7 @@ def test_sale_gst_treatment_is_inferred_from_customer_state():
 
 def test_sale_ledger_options_use_previous_sale_parties(db_session):
     user = User(username="sales", password_hash="x", role="sales")
+    user._access_config = default_role_access_config()
     db_session.add(user)
     db_session.commit()
     create_batch(db_session, user, BatchType.SALE, "Asha Traders", "")
@@ -198,6 +200,7 @@ def test_new_sale_batch_records_selected_igst_treatment(db_session):
 
 def test_sale_form_does_not_show_product_dropdown_even_when_stock_exists(db_session):
     user = User(username="sales", password_hash="x", role="sales", active=True)
+    user._access_config = default_role_access_config()
     product = Product(
         product_code="SCANONLY",
         product_name="Scan Only Product",

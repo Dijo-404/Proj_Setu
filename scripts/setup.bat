@@ -660,7 +660,10 @@ function Install-CaddyService {
                 Name = $CaddyServiceName
                 DisplayName = "Setuora Caddy HTTPS Proxy"
                 PathName = $serviceCommand
-                ServiceType = 16
+                # Win32_Service.Create declares ServiceType as CIM UInt8. An
+                # uncast PowerShell integer is Int32, which Invoke-CimMethod
+                # rejects with a type-mismatch error before creating the service.
+                ServiceType = [byte]16
                 StartMode = "Automatic"
                 StartName = $CaddyServiceStartName
                 StartPassword = $null

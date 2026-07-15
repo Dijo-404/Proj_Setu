@@ -215,6 +215,15 @@ def test_windows_services_use_the_least_privilege_localservice_account():
     assert "sc.exe failureflag $ServiceName 1" in installer
 
 
+def test_caddy_service_creation_uses_the_cim_servicetype_parameter_type():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    # Win32_Service.Create expects a CIM UInt8; Invoke-CimMethod does not coerce
+    # PowerShell's default Int32 literal and fails before the service is created.
+    assert "ServiceType = [byte]16" in setup_script
+    assert "ServiceType = 16" not in setup_script
+
+
 def test_windows_workflows_close_when_their_work_finishes():
     for filename in ("setup.bat", "start_setuora.bat", "stop_setuora.bat", "update.bat"):
         script = (WORKFLOWS_DIR / filename).read_text(encoding="utf-8")
