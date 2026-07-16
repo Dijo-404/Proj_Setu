@@ -11,7 +11,7 @@ from app.main import app
 from app.models import Company, User
 from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
-from app.services.tally_masters import TallyLedger, TallySalesVoucher
+from app.services.tally_masters import GatewayCheckResult, TallyLedger, TallySalesVoucher
 
 
 COMPANY_CONFIG = {
@@ -108,6 +108,14 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                     )
                 ],
             ),
+            patch(
+                "app.routers.tally_check.test_tally_gateway",
+                return_value=GatewayCheckResult(
+                    True,
+                    "Tally gateway responded",
+                    "<ENVELOPE><HEADER><STATUS>1</STATUS></HEADER></ENVELOPE>",
+                ),
+            ),
         ):
             live_companies = client.get(
                 f"/tally-check/companies/{company_id}/live/companies",
@@ -127,6 +135,16 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
                 },
                 cookies=cookies,
             )
+            cached_data = client.get(
+                f"/tally-check/companies/{company_id}/cached",
+                params={
+                    "tally_company": "Live Company",
+                    "from_date": "2026-04-01",
+                    "to_date": "2026-07-15",
+                },
+                cookies=cookies,
+            )
+            gateway_check = client.post("/tally-check/test-gateway", cookies=cookies)
     finally:
         app.dependency_overrides.clear()
 
@@ -153,6 +171,8 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert 'data-tally-live-company' in page.text
     assert 'data-tally-live-ledgers' in page.text
     assert 'data-tally-live-sales' in page.text
+    assert 'data-auto-refresh="true"' in page.text
+    assert '"/cached?"' in page.text
     assert update.status_code == 200
     assert update.json()["ok"]
     assert saved_name == "Edited Label"
@@ -162,3 +182,11 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert live_companies.json()["companies"] == ["Live Company", "Other Company"]
     assert live_ledgers.json()["ledgers"][0]["name"] == "Customer A"
     assert live_sales.json()["vouchers"][0]["voucher_number"] == "42"
+    assert cached_data.status_code == 200
+    assert cached_data.json()["ledger_count"] == 1
+    assert cached_data.json()["sales_count"] == 1
+    assert cached_data.json()["ledgers"][0]["name"] == "Customer A"
+    assert gateway_check.status_code == 200
+    assert 'class="alert success"' in gateway_check.text
+    assert "The configured Tally HTTP server is reachable and responding correctly." in gateway_check.text
+    assert "&lt;ENVELOPE&gt;" not in gateway_check.text

@@ -17,6 +17,13 @@ from app.services.settings import (
     list_companies,
     update_company,
 )
+from app.services.tally_cache import (
+    cached_ledgers,
+    cached_sales_book,
+    latest_cache_refresh,
+    replace_cached_ledgers,
+    replace_cached_sales_book,
+)
 from app.services.tally_masters import (
     collect_master_requirements,
     confirmation_lookup,
@@ -250,6 +257,7 @@ def live_ledgers(
         ledgers = fetch_tally_ledgers(config, tally_company)
     except TallyDataError as exc:
         return _live_error(str(exc))
+    replace_cached_ledgers(db, company.id, tally_company, ledgers)
     return JSONResponse(
         {
             "ok": True,
@@ -281,6 +289,14 @@ def live_sales_book(
         vouchers = fetch_tally_sales_book(config, tally_company, from_date, to_date)
     except TallyDataError as exc:
         return _live_error(str(exc))
+    replace_cached_sales_book(
+        db,
+        company.id,
+        tally_company,
+        from_date,
+        to_date,
+        vouchers,
+    )
     return JSONResponse(
         {
             "ok": True,
@@ -288,6 +304,40 @@ def live_sales_book(
             "from_date": from_date.isoformat(),
             "to_date": to_date.isoformat(),
             "count": len(vouchers),
+            "vouchers": [asdict(voucher) for voucher in vouchers],
+        }
+    )
+
+
+@router.get("/companies/{company_id}/cached")
+def cached_tally_data(
+    request: Request,
+    company_id: int,
+    tally_company: str,
+    from_date: date,
+    to_date: date,
+    db: Session = Depends(get_db),
+):
+    require_permission(request, db, "tally_check_edit")
+    company, _config = _live_company_config(db, company_id)
+    if not company:
+        return _live_error("Company profile not found.", 404)
+    if from_date > to_date:
+        return _live_error("Sales book start date must be on or before the end date.", 400)
+    ledgers = cached_ledgers(db, company.id, tally_company)
+    vouchers = cached_sales_book(db, company.id, tally_company, from_date, to_date)
+    refreshed_at = latest_cache_refresh(db, company.id, tally_company)
+    return JSONResponse(
+        {
+            "ok": True,
+            "source": "database",
+            "company": tally_company.strip(),
+            "from_date": from_date.isoformat(),
+            "to_date": to_date.isoformat(),
+            "refreshed_at": refreshed_at.isoformat() if refreshed_at else None,
+            "ledger_count": len(ledgers),
+            "sales_count": len(vouchers),
+            "ledgers": [asdict(ledger) for ledger in ledgers],
             "vouchers": [asdict(voucher) for voucher in vouchers],
         }
     )

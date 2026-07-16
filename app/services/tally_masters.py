@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import date, datetime
 from urllib.error import URLError
@@ -52,6 +53,7 @@ class TallySalesVoucher:
     party_ledger: str
     amount: str
     narration: str = ""
+    remote_id: str = ""
 
 
 def _status(name: str | None) -> str:
@@ -231,6 +233,8 @@ def build_sales_book_xml(company_name: str, from_date: date, to_date: date) -> s
             "PartyLedgerName",
             "Amount",
             "Narration",
+            "GUID",
+            "MasterID",
             "AllLedgerEntries",
         ),
         company_name=company_name.strip(),
@@ -282,6 +286,33 @@ def _response_errors(root: ET.Element) -> list[str]:
     ]
 
 
+_NUMERIC_CHARACTER_REFERENCE = re.compile(r"&#(?:x([0-9a-fA-F]+)|([0-9]+));")
+
+
+def _valid_xml_character(codepoint: int) -> bool:
+    return (
+        codepoint in {0x9, 0xA, 0xD}
+        or 0x20 <= codepoint <= 0xD7FF
+        or 0xE000 <= codepoint <= 0xFFFD
+        or 0x10000 <= codepoint <= 0x10FFFF
+    )
+
+
+def _sanitize_tally_xml(body: str) -> str:
+    """Remove XML 1.0 characters that Tally emits as invalid empty-value markers."""
+
+    def replace_reference(match: re.Match[str]) -> str:
+        codepoint = int(match.group(1), 16) if match.group(1) else int(match.group(2))
+        return match.group(0) if _valid_xml_character(codepoint) else ""
+
+    without_invalid_references = _NUMERIC_CHARACTER_REFERENCE.sub(replace_reference, body)
+    return "".join(
+        character
+        for character in without_invalid_references
+        if _valid_xml_character(ord(character))
+    )
+
+
 def _post_read_request(settings: dict[str, str], xml: str) -> tuple[str, ET.Element]:
     host = settings.get("tally_host", "").strip()
     port = settings.get("tally_port", "").strip()
@@ -301,8 +332,9 @@ def _post_read_request(settings: dict[str, str], xml: str) -> tuple[str, ET.Elem
         raise TallyDataError(f"Tally gateway did not respond: {exc}") from exc
     if not body.strip():
         raise TallyDataError("Tally gateway returned an empty response.")
+    sanitized_body = _sanitize_tally_xml(body)
     try:
-        root = ET.fromstring(body)
+        root = ET.fromstring(sanitized_body)
     except ET.ParseError as exc:
         raise TallyDataError("Tally gateway returned unreadable XML.") from exc
     errors = _response_errors(root)
@@ -311,7 +343,7 @@ def _post_read_request(settings: dict[str, str], xml: str) -> tuple[str, ET.Elem
     status = _first_text(root, "STATUS")
     if status == "0":
         raise TallyDataError("Tally rejected the request.")
-    return body, root
+    return sanitized_body, root
 
 
 def fetch_tally_companies(settings: dict[str, str]) -> list[str]:
@@ -405,16 +437,17 @@ def fetch_tally_sales_book(
     for node in root.iter():
         if _local_tag(node) != "VOUCHER":
             continue
-        vouchers.append(
-            TallySalesVoucher(
-                date=_display_tally_date(_direct_text(node, "DATE")),
-                voucher_number=_direct_text(node, "VOUCHERNUMBER"),
-                voucher_type=_direct_text(node, "VOUCHERTYPENAME"),
-                party_ledger=_party_ledger(node),
-                amount=_voucher_amount(node),
-                narration=_direct_text(node, "NARRATION"),
-            )
+        voucher = TallySalesVoucher(
+            date=_display_tally_date(_direct_text(node, "DATE")),
+            voucher_number=_direct_text(node, "VOUCHERNUMBER"),
+            voucher_type=_direct_text(node, "VOUCHERTYPENAME"),
+            party_ledger=_party_ledger(node),
+            amount=_voucher_amount(node),
+            narration=_direct_text(node, "NARRATION"),
+            remote_id=_direct_text(node, "GUID", "MASTERID"),
         )
+        if voucher.date:
+            vouchers.append(voucher)
     return sorted(
         vouchers,
         key=lambda voucher: (voucher.date, voucher.voucher_number),

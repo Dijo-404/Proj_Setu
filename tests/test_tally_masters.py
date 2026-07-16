@@ -128,6 +128,8 @@ def test_ledger_and_sales_book_xml_are_scoped_to_selected_company():
     assert "<ID>Setuora Sales Book</ID>" in sales_xml
     assert '<SVFROMDATE TYPE="Date">20260401</SVFROMDATE>' in sales_xml
     assert '<SVTODATE TYPE="Date">20260715</SVTODATE>' in sales_xml
+    assert "<NATIVEMETHOD>GUID</NATIVEMETHOD>" in sales_xml
+    assert "<NATIVEMETHOD>MasterID</NATIVEMETHOD>" in sales_xml
     assert "$$IsSales:$VoucherTypeName" in sales_xml
 
 
@@ -169,8 +171,9 @@ def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
               <VOUCHER>
                 <DATE>20260715</DATE><VOUCHERNUMBER>42</VOUCHERNUMBER>
                 <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME><PARTYLEDGERNAME>Customer A</PARTYLEDGERNAME>
-                <AMOUNT>500.00</AMOUNT><NARRATION>Test sale</NARRATION>
+                <AMOUNT>500.00</AMOUNT><NARRATION>Test sale</NARRATION><GUID>sale-guid-42</GUID>
               </VOUCHER>
+              <VOUCHER><VOUCHERNUMBER>metadata-only</VOUCHERNUMBER></VOUCHER>
             </COLLECTION></DATA></BODY></ENVELOPE>
             """
         ),
@@ -192,6 +195,30 @@ def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
     assert vouchers[0].date == "2026-07-15"
     assert vouchers[0].voucher_number == "42"
     assert vouchers[0].party_ledger == "Customer A"
+    assert vouchers[0].remote_id == "sale-guid-42"
+
+
+def test_live_tally_data_removes_invalid_xml_character_references():
+    response = _GatewayResponse(
+        """
+        <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+          <LEDGER NAME="Profit &amp; Loss A/c">
+            <NAME>Profit &amp; Loss A/c</NAME>
+            <PARENT>&#4; Primary</PARENT>
+            <CLOSINGBALANCE>-1913547.66</CLOSINGBALANCE>
+          </LEDGER>
+          <LEDGER NAME="Control marker"><NAME>Control marker</NAME><PARENT>&#x4; Primary</PARENT></LEDGER>
+        </COLLECTION></DATA></BODY></ENVELOPE>
+        """
+    )
+
+    with patch("app.services.tally_masters.urlopen", return_value=response):
+        ledgers = fetch_tally_ledgers(
+            {"tally_host": "127.0.0.1", "tally_port": "9000"},
+            "First Company",
+        )
+
+    assert [ledger.parent for ledger in ledgers] == ["Primary", "Primary"]
 
 
 def test_gateway_check_rejects_tally_line_error():

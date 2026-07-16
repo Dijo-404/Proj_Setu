@@ -510,6 +510,59 @@ class Company(Base):
             return ""
 
 
+class TallyLedgerCache(Base):
+    __tablename__ = "tally_ledger_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "tally_company_key",
+            "ledger_key",
+            name="uq_tally_ledger_cache_identity",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        index=True,
+    )
+    tally_company: Mapped[str] = mapped_column(String(220))
+    tally_company_key: Mapped[str] = mapped_column(String(220), index=True)
+    ledger_key: Mapped[str] = mapped_column(String(220))
+    name: Mapped[str] = mapped_column(String(220), index=True)
+    parent: Mapped[str] = mapped_column(String(220), default="")
+    closing_balance: Mapped[str] = mapped_column(String(80), default="")
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
+class TallySalesVoucherCache(Base):
+    __tablename__ = "tally_sales_voucher_cache"
+    __table_args__ = (
+        UniqueConstraint(
+            "company_id",
+            "tally_company_key",
+            "remote_id",
+            name="uq_tally_sales_voucher_cache_identity",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        index=True,
+    )
+    tally_company: Mapped[str] = mapped_column(String(220))
+    tally_company_key: Mapped[str] = mapped_column(String(220), index=True)
+    remote_id: Mapped[str] = mapped_column(String(500))
+    voucher_date: Mapped[str] = mapped_column(String(40), index=True)
+    voucher_number: Mapped[str] = mapped_column(String(120), default="")
+    voucher_type: Mapped[str] = mapped_column(String(120), default="")
+    party_ledger: Mapped[str] = mapped_column(String(220), default="")
+    amount: Mapped[str] = mapped_column(String(80), default="")
+    narration: Mapped[str] = mapped_column(Text, default="")
+    refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
+
+
 class LoginAudit(Base):
     __tablename__ = "login_audit"
 

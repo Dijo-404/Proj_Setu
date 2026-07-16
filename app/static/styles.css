@@ -3452,6 +3452,18 @@ table .status,
   background: var(--bad-bg);
   color: var(--bad-fg);
 }
+
+.alert.success {
+  background: var(--ok-bg);
+  color: var(--ok-fg);
+}
+
+.gateway-result-detail {
+  margin-top: 4px;
+  color: inherit;
+  font-weight: 400;
+}
+
 .alert.warn {
   background: var(--warn-bg);
   color: var(--warn-fg);

@@ -109,6 +109,7 @@
       data-tally-live-browser
       data-company-id="{{ row.company.id }}"
       data-current-company="{{ row.config.company_name }}"
+      data-auto-refresh="{{ 'true' if row.company.is_active else 'false' }}"
     >
       <div class="product-modal-section__head tally-live-head">
         <div>
@@ -192,9 +193,11 @@
       </div>
 
       {% if result %}
-      <div class="alert {{ '' if result.ok else 'error' }}">
-        {{ result.message }}
-        {% if result.response_excerpt %}
+      <div class="alert {{ 'success' if result.ok else 'error' }}" role="status">
+        <strong>{{ result.message }}</strong>
+        {% if result.ok %}
+        <small class="gateway-result-detail">The configured Tally HTTP server is reachable and responding correctly.</small>
+        {% elif result.response_excerpt %}
         <pre class="response-preview">{{ result.response_excerpt }}</pre>
         {% endif %}
       </div>
@@ -292,6 +295,7 @@
       if (!dialog) return;
       if (typeof dialog.showModal === "function") dialog.showModal();
       else dialog.setAttribute("open", "");
+      dialog.dispatchEvent(new CustomEvent("setuora:dialog-opened"));
     }
 
     document.querySelectorAll("[data-company-open]").forEach((button) => {
@@ -397,8 +401,27 @@
       const response = await fetch(url, {
         headers: { Accept: "application/json", "X-Setuora-Background": "true" }
       });
-      const payload = await response.json();
-      if (!response.ok || !payload.ok) throw new Error(payload.error || "Tally request failed");
+      if (response.redirected && new URL(response.url).pathname === "/login") {
+        window.location.assign(response.url);
+        throw new Error("Your session expired. Sign in again.");
+      }
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error(
+          response.ok
+            ? "The server returned an unexpected response. Refresh the page and try again."
+            : "Tally request failed (server response " + response.status + ")."
+        );
+      }
+      let payload;
+      try {
+        payload = await response.json();
+      } catch (_error) {
+        throw new Error("The server returned an unreadable response. Refresh the page and try again.");
+      }
+      if (!response.ok || !payload.ok) {
+        throw new Error(payload.error || payload.detail || "Tally request failed");
+      }
       return payload;
     }
 
@@ -419,6 +442,7 @@
       const salesBody = browser.querySelector("[data-tally-live-sales]");
       const ledgerCount = browser.querySelector("[data-tally-live-ledger-count]");
       const salesCount = browser.querySelector("[data-tally-live-sales-count]");
+      let initialized = false;
 
       function setStatus(message, isError) {
         status.textContent = message;
@@ -469,15 +493,22 @@
         salesCount.textContent = payload.count + " voucher" + (payload.count === 1 ? "" : "s");
       }
 
-      async function loadSelectedCompany() {
+      async function loadSelectedCompany(preserveExisting) {
         const company = selectedCompany();
         if (!company) return;
         refreshButton.disabled = true;
         if (useCompanyButton) useCompanyButton.disabled = true;
         results.hidden = false;
-        setStatus("Loading ledgers and sales book from " + company + "...", false);
-        tableMessage(ledgerBody, 3, "Loading ledgers...");
-        tableMessage(salesBody, 4, "Loading sales book...");
+        setStatus(
+          preserveExisting
+            ? "Saved data loaded. Checking Tally for new ledgers and vouchers..."
+            : "Loading ledgers and sales book from " + company + "...",
+          false
+        );
+        if (!preserveExisting) {
+          tableMessage(ledgerBody, 3, "Loading ledgers...");
+          tableMessage(salesBody, 4, "Loading sales book...");
+        }
         try {
           const ledgerUrl = "/tally-check/companies/" + companyId + "/live/ledgers?" + query({ tally_company: company });
           const salesUrl = "/tally-check/companies/" + companyId + "/live/sales-book?" + query({
@@ -488,14 +519,68 @@
           const payloads = await Promise.all([fetchPayload(ledgerUrl), fetchPayload(salesUrl)]);
           renderLedgers(payloads[0]);
           renderSales(payloads[1]);
-          setStatus("Live data loaded from " + company + ". Choose exact ledger names in the settings above.", false);
+          setStatus("Tally data refreshed and saved for " + company + ".", false);
         } catch (error) {
-          tableMessage(ledgerBody, 3, "Could not load ledgers.");
-          tableMessage(salesBody, 4, "Could not load the sales book.");
-          setStatus(error.message || "Could not load Tally data.", true);
+          if (!preserveExisting) {
+            tableMessage(ledgerBody, 3, "Could not load ledgers.");
+            tableMessage(salesBody, 4, "Could not load the sales book.");
+          }
+          setStatus(
+            (preserveExisting ? "Showing saved data. Automatic refresh failed: " : "") +
+              (error.message || "Could not load Tally data."),
+            true
+          );
         } finally {
           refreshButton.disabled = false;
           if (useCompanyButton) useCompanyButton.disabled = false;
+        }
+      }
+
+      function selectCurrentCompany() {
+        const company = currentCompany.trim();
+        if (!company) return false;
+        const option = document.createElement("option");
+        option.value = company;
+        option.textContent = company;
+        companySelect.replaceChildren(option);
+        companySelect.value = company;
+        companySelect.disabled = false;
+        refreshButton.disabled = false;
+        if (useCompanyButton) useCompanyButton.disabled = false;
+        return true;
+      }
+
+      async function loadCachedData() {
+        const company = selectedCompany();
+        if (!company) return false;
+        const cacheUrl = "/tally-check/companies/" + companyId + "/cached?" + query({
+          tally_company: company,
+          from_date: fromInput.value,
+          to_date: toInput.value
+        });
+        const payload = await fetchPayload(cacheUrl);
+        if (!payload.ledger_count && !payload.sales_count) return false;
+        results.hidden = false;
+        renderLedgers({ count: payload.ledger_count, ledgers: payload.ledgers });
+        renderSales({ count: payload.sales_count, vouchers: payload.vouchers });
+        setStatus("Saved Tally data loaded. Checking for updates...", false);
+        return true;
+      }
+
+      async function initializeAutomaticRefresh() {
+        if (initialized || !selectCurrentCompany()) return;
+        initialized = true;
+        connectButton.disabled = true;
+        let hasCachedData = false;
+        try {
+          hasCachedData = await loadCachedData();
+        } catch (_error) {
+          hasCachedData = false;
+        }
+        try {
+          await loadSelectedCompany(hasCachedData);
+        } finally {
+          connectButton.disabled = false;
         }
       }
 
@@ -525,7 +610,8 @@
           companySelect.disabled = false;
           refreshButton.disabled = false;
           if (useCompanyButton) useCompanyButton.disabled = false;
-          await loadSelectedCompany();
+          initialized = true;
+          await loadSelectedCompany(false);
         } catch (error) {
           setStatus(error.message || "Could not connect to Tally.", true);
         } finally {
@@ -533,8 +619,8 @@
         }
       });
 
-      companySelect.addEventListener("change", loadSelectedCompany);
-      refreshButton.addEventListener("click", loadSelectedCompany);
+      companySelect.addEventListener("change", () => loadSelectedCompany(false));
+      refreshButton.addEventListener("click", () => loadSelectedCompany(false));
       if (useCompanyButton) {
         useCompanyButton.addEventListener("click", () => {
           const form = browser.parentElement.querySelector("[data-company-settings-form]");
@@ -544,6 +630,12 @@
           companyInput.dispatchEvent(new Event("input", { bubbles: true }));
           setStatus("Selected " + selectedCompany() + " for sync. Save settings to apply it.", false);
         });
+      }
+
+      const dialog = browser.closest("dialog.company-config-modal");
+      if (dialog) dialog.addEventListener("setuora:dialog-opened", initializeAutomaticRefresh);
+      if (browser.dataset.autoRefresh === "true" || (dialog && dialog.open)) {
+        initializeAutomaticRefresh();
       }
     });
   })();
