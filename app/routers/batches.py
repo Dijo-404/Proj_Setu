@@ -20,6 +20,7 @@ from app.models import (
     Role,
     Serial,
     SyncAttempt,
+    TallyLedgerCache,
     has_any_role,
 )
 from app.services.audit import reconcile_audit_batch, summarize_audit_findings
@@ -40,7 +41,8 @@ from app.services.inventory import (
 )
 from app.services.preinvoice import sale_preinvoice_pdf
 from app.services.access_control import role_has_access
-from app.services.settings import get_all_settings
+from app.services.settings import get_active_company, get_all_settings
+from app.services.tally_access import allowed_ledger_names, resource_key
 from app.services.relocation import find_location_by_code
 from app.services.report_format import report_date
 from app.services.sale_returns import (
@@ -290,7 +292,7 @@ def fefo_product_options(db: Session, batch: Batch) -> list[dict[str, object]]:
     return fefo_product_options_for_type(db, batch.batch_type)
 
 
-def party_ledger_options(db: Session, batch_type: BatchType) -> list[str]:
+def party_ledger_options(db: Session, batch_type: BatchType, user=None) -> list[str]:
     related_types = {
         BatchType.SALE: (BatchType.SALE.value, BatchType.SALES_RETURN.value),
         BatchType.SALES_RETURN: (BatchType.SALE.value, BatchType.SALES_RETURN.value),
@@ -310,7 +312,38 @@ def party_ledger_options(db: Session, batch_type: BatchType) -> list[str]:
         .distinct()
         .order_by(Batch.party_name)
     ).all()
-    return [name for name in rows if name]
+    names = {name.strip() for name in rows if name and name.strip()}
+
+    active_company = get_active_company(db)
+    if active_company:
+        parent_group = (
+            "sundry debtors"
+            if batch_type in {BatchType.SALE, BatchType.SALES_RETURN}
+            else "sundry creditors"
+        )
+        cached_rows = db.scalars(
+            select(TallyLedgerCache)
+            .where(TallyLedgerCache.company_id == active_company.id)
+            .order_by(TallyLedgerCache.name)
+        ).all()
+        names.update(
+            row.name.strip()
+            for row in cached_rows
+            if row.name.strip() and resource_key(row.parent) == parent_group
+        )
+        if user is not None:
+            allowed = allowed_ledger_names(db, user, active_company.id)
+            if allowed is not None:
+                names = {name for name in names if resource_key(name) in allowed}
+    return sorted(names, key=str.casefold)
+
+
+def party_ledger_is_allowed(db: Session, user, party_name: str) -> bool:
+    active_company = get_active_company(db)
+    if not active_company:
+        return True
+    allowed = allowed_ledger_names(db, user, active_company.id)
+    return allowed is None or resource_key(party_name) in allowed
 
 
 def batch_permission_context(db: Session, user, batch: Batch) -> dict[str, bool]:
@@ -564,7 +597,7 @@ def new_batch(
             request,
             user,
             parsed,
-            party_name_options=party_ledger_options(db, parsed),
+            party_name_options=party_ledger_options(db, parsed, user),
             audit_assignments=open_audit_assignments(db, user) if parsed == BatchType.AUDIT else [],
             audit_assignment_id=audit_assignment_id,
         ),
@@ -667,7 +700,7 @@ def create_batch_route(
                     party_gst_name=party_gst_name,
                     party_gstin=party_gstin,
                     gst_treatment=selected_gst_treatment or gst_treatment,
-                    party_name_options=party_ledger_options(db, parsed),
+                    party_name_options=party_ledger_options(db, parsed, user),
                     notes=notes,
                     error=str(exc),
                 ),
@@ -697,11 +730,33 @@ def create_batch_route(
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
                 gst_treatment=selected_gst_treatment or gst_treatment,
-                party_name_options=party_ledger_options(db, parsed),
+                party_name_options=party_ledger_options(db, parsed, user),
                 notes=notes,
                 error=f"{party_label} is required.",
             ),
             status_code=400,
+        )
+    if party_required and not party_ledger_is_allowed(db, user, party_name):
+        return templates.TemplateResponse(
+            request,
+            "batch_new.html",
+            batch_form_context(
+                request,
+                user,
+                parsed,
+                party_name=party_name,
+                party_state=party_state,
+                party_gst_registration_type=(
+                    selected_gst_registration_type or party_gst_registration_type
+                ),
+                party_gst_name=party_gst_name,
+                party_gstin=party_gstin,
+                gst_treatment=selected_gst_treatment or gst_treatment,
+                party_name_options=party_ledger_options(db, parsed, user),
+                notes=notes,
+                error="This Tally ledger is not assigned to your account.",
+            ),
+            status_code=403,
         )
     try:
         batch = create_batch(
@@ -740,7 +795,7 @@ def create_batch_route(
                 party_gst_name=party_gst_name,
                 party_gstin=party_gstin,
                 gst_treatment=selected_gst_treatment or gst_treatment,
-                party_name_options=party_ledger_options(db, parsed),
+                party_name_options=party_ledger_options(db, parsed, user),
                 audit_assignments=open_audit_assignments(db, user) if parsed == BatchType.AUDIT else [],
                 audit_assignment_id=audit_assignment_id,
                 notes=notes,

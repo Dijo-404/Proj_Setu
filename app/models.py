@@ -157,6 +157,10 @@ class User(Base):
 
     batches: Mapped[list["Batch"]] = relationship(back_populates="user")
     inventory_transactions: Mapped[list["InventoryTransaction"]] = relationship(back_populates="user")
+    tally_access_assignments: Mapped[list["UserTallyAccess"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
     @property
     def role_values(self) -> tuple[str, ...]:
@@ -510,6 +514,36 @@ class Company(Base):
             return ""
 
 
+class UserTallyAccess(Base):
+    __tablename__ = "user_tally_access"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "company_id",
+            "resource_type",
+            "resource_key",
+            name="uq_user_tally_access_resource",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    company_id: Mapped[int] = mapped_column(
+        ForeignKey("companies.id", ondelete="CASCADE"),
+        index=True,
+    )
+    resource_type: Mapped[str] = mapped_column(String(24), index=True)
+    resource_key: Mapped[str] = mapped_column(String(220))
+    resource_label: Mapped[str] = mapped_column(String(220))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    user: Mapped[User] = relationship(back_populates="tally_access_assignments")
+    company: Mapped[Company] = relationship()
+
+
 class TallyLedgerCache(Base):
     __tablename__ = "tally_ledger_cache"
     __table_args__ = (
@@ -560,6 +594,7 @@ class TallySalesVoucherCache(Base):
     party_ledger: Mapped[str] = mapped_column(String(220), default="")
     amount: Mapped[str] = mapped_column(String(80), default="")
     narration: Mapped[str] = mapped_column(Text, default="")
+    tally_user: Mapped[str] = mapped_column(String(220), default="", index=True)
     refreshed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, index=True)
 
 

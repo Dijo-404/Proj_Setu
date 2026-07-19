@@ -128,6 +128,7 @@ def replace_cached_sales_book(
         row.party_ledger = voucher.party_ledger.strip()
         row.amount = voucher.amount.strip()
         row.narration = voucher.narration.strip()
+        row.tally_user = voucher.tally_user.strip()
         row.refreshed_at = refreshed_at
     for remote_id, row in existing.items():
         if remote_id not in seen:
@@ -179,6 +180,7 @@ def cached_sales_book(
             amount=row.amount,
             narration=row.narration,
             remote_id=row.remote_id,
+            tally_user=row.tally_user,
         )
         for row in rows
     ]

@@ -14,8 +14,15 @@ from app.services.settings import (
     company_config,
     get_active_company,
     get_all_settings,
-    list_companies,
     update_company,
+)
+from app.services.tally_access import (
+    can_access_company,
+    can_access_tally_company,
+    filter_ledgers,
+    filter_sales_vouchers,
+    filter_tally_company_names,
+    scoped_companies,
 )
 from app.services.tally_cache import (
     cached_ledgers,
@@ -61,8 +68,12 @@ def render_check_page(
     user = require_permission(request, db, "tally_check_edit")
     requirements = collect_master_requirements(db)
     confirmations = confirmation_lookup(db)
-    companies = list_companies(db)
+    companies = scoped_companies(db, user)
     active = get_active_company(db)
+    if active and active.id not in {company.id for company in companies}:
+        active = None
+    if open_company_id not in {company.id for company in companies}:
+        open_company_id = None
     today = date.today()
     financial_year_start = date(today.year if today.month >= 4 else today.year - 1, 4, 1)
     return templates.TemplateResponse(
@@ -97,6 +108,16 @@ def _live_company_config(db: Session, company_id: int) -> tuple[Company | None, 
     return company, company_config(company) if company else None
 
 
+def _scoped_live_company_config(
+    db: Session,
+    user,
+    company_id: int,
+) -> tuple[Company | None, dict[str, str] | None]:
+    if not can_access_company(db, user, company_id):
+        return None, None
+    return _live_company_config(db, company_id)
+
+
 def _live_error(message: str, status_code: int = 502) -> JSONResponse:
     return JSONResponse({"ok": False, "error": message}, status_code=status_code)
 
@@ -129,6 +150,11 @@ def save_company(
     db: Session = Depends(get_db),
 ):
     user = require_permission(request, db, "settings_edit")
+    if not can_access_company(db, user, company_id):
+        return JSONResponse(
+            {"ok": False, "error": "This company is not assigned to your account."},
+            status_code=403,
+        )
     company = db.get(Company, company_id)
     before = company_snapshot(company)
     current_config = company_config(company) if company else {}
@@ -224,14 +250,15 @@ def live_companies(
     company_id: int,
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "tally_check_edit")
-    company, config = _live_company_config(db, company_id)
+    user = require_permission(request, db, "tally_check_edit")
+    company, config = _scoped_live_company_config(db, user, company_id)
     if not company or config is None:
-        return _live_error("Company profile not found.", 404)
+        return _live_error("Company profile not found or not assigned to your account.", 404)
     try:
         names = fetch_tally_companies(config)
     except TallyDataError as exc:
         return _live_error(str(exc))
+    names = filter_tally_company_names(db, user, company, names)
     return JSONResponse(
         {
             "ok": True,
@@ -249,21 +276,24 @@ def live_ledgers(
     tally_company: str,
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "tally_check_edit")
-    company, config = _live_company_config(db, company_id)
+    user = require_permission(request, db, "tally_check_edit")
+    company, config = _scoped_live_company_config(db, user, company_id)
     if not company or config is None:
-        return _live_error("Company profile not found.", 404)
+        return _live_error("Company profile not found or not assigned to your account.", 404)
+    if not can_access_tally_company(db, user, company, tally_company):
+        return _live_error("This Tally company is not assigned to your account.", 403)
     try:
         ledgers = fetch_tally_ledgers(config, tally_company)
     except TallyDataError as exc:
         return _live_error(str(exc))
     replace_cached_ledgers(db, company.id, tally_company, ledgers)
+    visible_ledgers = filter_ledgers(db, user, company.id, ledgers)
     return JSONResponse(
         {
             "ok": True,
             "company": tally_company.strip(),
-            "count": len(ledgers),
-            "ledgers": [asdict(ledger) for ledger in ledgers],
+            "count": len(visible_ledgers),
+            "ledgers": [asdict(ledger) for ledger in visible_ledgers],
         }
     )
 
@@ -277,10 +307,12 @@ def live_sales_book(
     to_date: date,
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "tally_check_edit")
-    company, config = _live_company_config(db, company_id)
+    user = require_permission(request, db, "tally_check_edit")
+    company, config = _scoped_live_company_config(db, user, company_id)
     if not company or config is None:
-        return _live_error("Company profile not found.", 404)
+        return _live_error("Company profile not found or not assigned to your account.", 404)
+    if not can_access_tally_company(db, user, company, tally_company):
+        return _live_error("This Tally company is not assigned to your account.", 403)
     if from_date > to_date:
         return _live_error("Sales book start date must be on or before the end date.", 400)
     if (to_date - from_date).days > 370:
@@ -297,14 +329,15 @@ def live_sales_book(
         to_date,
         vouchers,
     )
+    visible_vouchers = filter_sales_vouchers(db, user, company.id, vouchers)
     return JSONResponse(
         {
             "ok": True,
             "company": tally_company.strip(),
             "from_date": from_date.isoformat(),
             "to_date": to_date.isoformat(),
-            "count": len(vouchers),
-            "vouchers": [asdict(voucher) for voucher in vouchers],
+            "count": len(visible_vouchers),
+            "vouchers": [asdict(voucher) for voucher in visible_vouchers],
         }
     )
 
@@ -318,14 +351,18 @@ def cached_tally_data(
     to_date: date,
     db: Session = Depends(get_db),
 ):
-    require_permission(request, db, "tally_check_edit")
-    company, _config = _live_company_config(db, company_id)
+    user = require_permission(request, db, "tally_check_edit")
+    company, _config = _scoped_live_company_config(db, user, company_id)
     if not company:
-        return _live_error("Company profile not found.", 404)
+        return _live_error("Company profile not found or not assigned to your account.", 404)
+    if not can_access_tally_company(db, user, company, tally_company):
+        return _live_error("This Tally company is not assigned to your account.", 403)
     if from_date > to_date:
         return _live_error("Sales book start date must be on or before the end date.", 400)
     ledgers = cached_ledgers(db, company.id, tally_company)
     vouchers = cached_sales_book(db, company.id, tally_company, from_date, to_date)
+    visible_ledgers = filter_ledgers(db, user, company.id, ledgers)
+    visible_vouchers = filter_sales_vouchers(db, user, company.id, vouchers)
     refreshed_at = latest_cache_refresh(db, company.id, tally_company)
     return JSONResponse(
         {
@@ -335,9 +372,9 @@ def cached_tally_data(
             "from_date": from_date.isoformat(),
             "to_date": to_date.isoformat(),
             "refreshed_at": refreshed_at.isoformat() if refreshed_at else None,
-            "ledger_count": len(ledgers),
-            "sales_count": len(vouchers),
-            "ledgers": [asdict(ledger) for ledger in ledgers],
-            "vouchers": [asdict(voucher) for voucher in vouchers],
+            "ledger_count": len(visible_ledgers),
+            "sales_count": len(visible_vouchers),
+            "ledgers": [asdict(ledger) for ledger in visible_ledgers],
+            "vouchers": [asdict(voucher) for voucher in visible_vouchers],
         }
     )

@@ -78,6 +78,40 @@ def test_runtime_schema_adds_product_alias_columns(tmp_path):
     assert {"nickname", "alternate_tally_stock_item_name", "purchase_qr_print_allowed"} <= columns
 
 
+def test_runtime_schema_adds_tally_user_to_cached_sales_vouchers(tmp_path):
+    engine = create_engine(f"sqlite:///{tmp_path / 'legacy-tally-cache.db'}")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE batches (id INTEGER PRIMARY KEY)"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE tally_sales_voucher_cache (
+                    id INTEGER PRIMARY KEY,
+                    company_id INTEGER,
+                    tally_company VARCHAR(220),
+                    tally_company_key VARCHAR(220),
+                    remote_id VARCHAR(500),
+                    voucher_date VARCHAR(40),
+                    voucher_number VARCHAR(120),
+                    voucher_type VARCHAR(120),
+                    party_ledger VARCHAR(220),
+                    amount VARCHAR(80),
+                    narration TEXT,
+                    refreshed_at DATETIME
+                )
+                """
+            )
+        )
+
+    ensure_runtime_schema(engine)
+
+    columns = {
+        column["name"]
+        for column in inspect(engine).get_columns("tally_sales_voucher_cache")
+    }
+    assert "tally_user" in columns
+
+
 def test_inventory_table_rebuild_preserves_rows_and_adds_all_foreign_keys(tmp_path):
     engine = create_engine(f"sqlite:///{tmp_path / 'legacy.db'}")
 

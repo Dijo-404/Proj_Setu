@@ -27,8 +27,11 @@ from app.models import (
     StockRelocation,
     StorageLocation,
     SyncAttempt,
+    TallyLedgerCache,
     TallyMasterConfirmation,
+    TallySalesVoucherCache,
     User,
+    UserTallyAccess,
     has_role,
 )
 from app.services.settings import DEFAULT_SETTINGS
@@ -43,6 +46,9 @@ DELETE_ALL_MODELS = (
     InventoryTransaction,
     ScanLog,
     TallyMasterConfirmation,
+    UserTallyAccess,
+    TallySalesVoucherCache,
+    TallyLedgerCache,
     StockRelocation,
     Batch,
     AuditAssignment,

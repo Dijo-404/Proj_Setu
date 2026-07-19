@@ -3310,6 +3310,151 @@ dialog.company-config-modal {
   justify-content: flex-end;
 }
 
+.tally-access-summary {
+  display: inline-block;
+  max-width: 250px;
+  color: var(--ink-48);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+dialog.tally-access-modal {
+  width: min(860px, calc(100vw - 32px));
+}
+
+.tally-access-rule {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--primary-soft);
+  border-radius: var(--r-md);
+  background: var(--primary-softer);
+  color: var(--ink-80);
+  font-size: 14px;
+}
+
+.tally-scope-section {
+  display: grid;
+  gap: 11px;
+  padding: 15px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-md);
+  background: var(--parchment);
+}
+
+.tally-scope-section__head {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tally-scope-section__head h3 {
+  font-family: var(--font);
+  font-size: 16px;
+}
+
+.tally-scope-section__head input {
+  width: min(260px, 42%);
+  min-height: 38px;
+  padding: 7px 10px;
+}
+
+.tally-scope-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 210px;
+  overflow: auto;
+  padding-right: 3px;
+}
+
+.tally-scope-options--tall {
+  max-height: 300px;
+}
+
+.tally-scope-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid var(--hairline-soft);
+  border-radius: var(--r-sm);
+  background: var(--canvas);
+  color: var(--ink-80);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tally-scope-option:hover {
+  border-color: var(--muted-soft);
+}
+
+.tally-scope-option:has(input:checked) {
+  border-color: var(--primary);
+  background: var(--primary-softer);
+  box-shadow: 0 0 0 2px var(--primary-ring);
+}
+
+.tally-scope-option input[type="checkbox"] {
+  flex: 0 0 18px;
+  width: 18px;
+  height: 18px;
+  min-height: 18px;
+  margin-top: 1px;
+  padding: 0;
+  accent-color: var(--primary);
+}
+
+.tally-scope-option span {
+  display: grid;
+  min-width: 0;
+}
+
+.tally-scope-option strong,
+.tally-scope-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tally-scope-option small {
+  color: var(--ink-48);
+  font-size: 12px;
+}
+
+.tally-scope-company {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  color: var(--ink-48);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.tally-user-custom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding-top: 3px;
+  border-top: 1px solid var(--hairline-soft);
+}
+
+.tally-user-custom-grid label {
+  min-width: 0;
+  font-size: 12px;
+}
+
+.tally-access-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding-top: 4px;
+}
+
 .fefo-form {
   display: grid;
   gap: 12px;
@@ -4001,6 +4146,25 @@ small {
   }
 
   .choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tally-scope-section__head,
+  .tally-access-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .tally-scope-section__head input,
+  .tally-access-actions .button {
+    width: 100%;
+  }
+
+  .tally-scope-options {
+    grid-template-columns: 1fr;
+  }
+
+  .tally-user-custom-grid {
     grid-template-columns: 1fr;
   }
 

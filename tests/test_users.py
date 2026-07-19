@@ -7,9 +7,17 @@ from starlette.requests import Request
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Batch, BatchType, User
+from app.models import (
+    Batch,
+    BatchType,
+    TallyLedgerCache,
+    TallySalesVoucherCache,
+    User,
+    UserTallyAccess,
+)
 from app.routers.users import create_user, users_page
 from app.security import create_session_token, hash_password, verify_password
+from app.services.settings import add_company
 
 
 def make_session():
@@ -249,3 +257,93 @@ def test_password_reset_is_super_admin_only_and_validates_input():
     assert short_reset.headers["location"] == "/users?error=password_too_short"
     assert mismatch_reset.headers["location"] == "/users?error=password_mismatch"
     assert self_reset.headers["location"] == "/users?error=password_reset_self"
+
+
+def test_users_menu_assigns_company_ledger_and_tally_user_access():
+    engine, Session = make_session()
+    with Session() as db:
+        db.add_all(
+            [
+                User(id=1, username="root", password_hash="x", role="super_admin", active=True),
+                User(id=2, username="staff", password_hash="x", role="sales", active=True),
+            ]
+        )
+        db.commit()
+        company = add_company(
+            db,
+            "Access Company",
+            {
+                "company_name": "Tally Access Company",
+                "tally_host": "127.0.0.1",
+                "tally_port": "9000",
+                "round_off_ledger_name": "Round Off",
+            },
+        )
+        ledger = TallyLedgerCache(
+            company_id=company.id,
+            tally_company="Tally Access Company",
+            tally_company_key="tally access company",
+            ledger_key="customer a",
+            name="Customer A",
+            parent="Sundry Debtors",
+        )
+        voucher = TallySalesVoucherCache(
+            company_id=company.id,
+            tally_company="Tally Access Company",
+            tally_company_key="tally access company",
+            remote_id="voucher-1",
+            voucher_date="2026-07-15",
+            party_ledger="Customer A",
+            tally_user="operator-a",
+        )
+        db.add_all([ledger, voucher])
+        db.commit()
+        company_id = company.id
+        ledger_id = ledger.id
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
+        cookies = {SESSION_COOKIE: create_session_token(1)}
+        before = client.get("/users", cookies=cookies)
+        saved = client.post(
+            "/users/2/tally-access",
+            cookies=cookies,
+            data={
+                "company_id": str(company_id),
+                "ledger_id": str(ledger_id),
+                "tally_user": f"{company_id}:operator-a",
+            },
+        )
+        after = client.get("/users", cookies=cookies)
+    finally:
+        app.dependency_overrides.clear()
+
+    with Session() as db:
+        assignments = db.scalars(
+            select(UserTallyAccess)
+            .where(UserTallyAccess.user_id == 2)
+            .order_by(UserTallyAccess.resource_type)
+        ).all()
+    engine.dispose()
+
+    assert before.status_code == 200
+    assert 'data-user-id="2"' in before.text
+    assert 'name="company_id"' in before.text
+    assert 'name="ledger_id"' in before.text
+    assert 'name="tally_user"' in before.text
+    assert saved.status_code == 303
+    assert saved.headers["location"] == "/users?success=tally_access_saved"
+    assert [(row.resource_type, row.resource_label) for row in assignments] == [
+        ("company", "Access Company"),
+        ("ledger", "Customer A"),
+        ("tally_user", "operator-a"),
+    ]
+    assert "1 company · 1 ledger · 1 Tally user" in after.text

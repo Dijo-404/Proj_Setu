@@ -25,6 +25,12 @@ Admins can open `Settings` -> `Role access` to review and change which pages are
 
 Only super admins can delete users. Deleted users with old batches, scans, or reports are removed from the Users list and cannot log in, but their historical records are kept.
 
+To limit Tally data for a user, open `Users`, click `Tally access`, and assign the
+allowed company profiles, ledgers, and Tally usernames. Tally usernames are
+discovered from saved sales vouchers and can also be entered manually. An empty
+section remains unrestricted for backward compatibility; super admins are always
+unrestricted.
+
 ## Admin Setup
 
 1. Open `Settings`.
@@ -37,7 +43,7 @@ Only super admins can delete users. Deleted users with old batches, scans, or re
    names in the settings fields, and review the Sales Book for a selected date
    range. For the active company, use the same popup to test the gateway and
    confirm each required master only after comparing it with Tally.
-7. Create named users from `Users`.
+7. Create named users from `Users`, then use `Tally access` to assign any required company, ledger, and Tally-user restrictions.
 
 Settings fields auto-save while editing. The sync checkbox is saved only by the `Save settings` button and is blocked until Tally Check is complete.
 

@@ -1,16 +1,19 @@
+from datetime import date
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.auth import SESSION_COOKIE
 from app.database import Base, get_db
 from app.main import app
-from app.models import Company, User
+from app.models import Company, TallyLedgerCache, User
 from app.security import create_session_token
 from app.services.settings import add_company, get_all_settings
+from app.services.tally_access import replace_user_access
+from app.services.tally_cache import replace_cached_ledgers, replace_cached_sales_book
 from app.services.tally_masters import GatewayCheckResult, TallyLedger, TallySalesVoucher
 
 
@@ -190,3 +193,138 @@ def test_tally_check_lists_company_names_and_updates_from_modal_endpoint():
     assert 'class="alert success"' in gateway_check.text
     assert "The configured Tally HTTP server is reachable and responding correctly." in gateway_check.text
     assert "&lt;ENVELOPE&gt;" not in gateway_check.text
+
+
+def test_tally_check_enforces_user_company_ledger_and_tally_user_assignments():
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(engine)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as db:
+        user = User(
+            id=1,
+            username="limited-admin",
+            password_hash="x",
+            role="admin",
+            active=True,
+        )
+        db.add(user)
+        db.commit()
+        assigned = add_company(db, "Assigned Company", COMPANY_CONFIG)
+        hidden = add_company(
+            db,
+            "Hidden Company",
+            {**COMPANY_CONFIG, "company_name": "Hidden Tally Company"},
+        )
+        ledgers = [
+            TallyLedger("Customer A", "Sundry Debtors", "-500"),
+            TallyLedger("Customer B", "Sundry Debtors", "-250"),
+        ]
+        replace_cached_ledgers(db, assigned.id, "Original Tally Company", ledgers)
+        replace_cached_sales_book(
+            db,
+            assigned.id,
+            "Original Tally Company",
+            date(2026, 4, 1),
+            date(2026, 7, 15),
+            [
+                TallySalesVoucher(
+                    "2026-07-15",
+                    "1",
+                    "Sales",
+                    "Customer A",
+                    "500",
+                    remote_id="voucher-1",
+                    tally_user="operator-a",
+                ),
+                TallySalesVoucher(
+                    "2026-07-15",
+                    "2",
+                    "Sales",
+                    "Customer A",
+                    "250",
+                    remote_id="voucher-2",
+                    tally_user="operator-b",
+                ),
+                TallySalesVoucher(
+                    "2026-07-15",
+                    "3",
+                    "Sales",
+                    "Customer B",
+                    "125",
+                    remote_id="voucher-3",
+                    tally_user="operator-a",
+                ),
+            ],
+        )
+        customer_a = db.scalar(
+            select(TallyLedgerCache).where(
+                TallyLedgerCache.company_id == assigned.id,
+                TallyLedgerCache.name == "Customer A",
+            )
+        )
+        replace_user_access(
+            db,
+            user,
+            company_ids=[assigned.id],
+            ledger_ids=[customer_a.id],
+            tally_user_values=[f"{assigned.id}:operator-a"],
+        )
+        assigned_id = assigned.id
+        hidden_id = hidden.id
+
+    def override_get_db():
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = override_get_db
+    try:
+        client = TestClient(app, follow_redirects=False, headers={"Origin": "http://testserver"})
+        cookies = {SESSION_COOKIE: create_session_token(1)}
+        page = client.get("/tally-check", cookies=cookies)
+        visible = client.get(
+            f"/tally-check/companies/{assigned_id}/cached",
+            params={
+                "tally_company": "Original Tally Company",
+                "from_date": "2026-04-01",
+                "to_date": "2026-07-15",
+            },
+            cookies=cookies,
+        )
+        blocked = client.get(
+            f"/tally-check/companies/{hidden_id}/cached",
+            params={
+                "tally_company": "Hidden Tally Company",
+                "from_date": "2026-04-01",
+                "to_date": "2026-07-15",
+            },
+            cookies=cookies,
+        )
+        wrong_tally_company = client.get(
+            f"/tally-check/companies/{assigned_id}/cached",
+            params={
+                "tally_company": "A Different Tally Company",
+                "from_date": "2026-04-01",
+                "to_date": "2026-07-15",
+            },
+            cookies=cookies,
+        )
+    finally:
+        app.dependency_overrides.clear()
+        engine.dispose()
+
+    assert page.status_code == 200
+    assert "Assigned Company" in page.text
+    assert "Hidden Company" not in page.text
+    assert visible.status_code == 200
+    assert [row["name"] for row in visible.json()["ledgers"]] == ["Customer A"]
+    assert [row["voucher_number"] for row in visible.json()["vouchers"]] == ["1"]
+    assert blocked.status_code == 404
+    assert wrong_tally_company.status_code == 403

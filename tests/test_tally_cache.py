@@ -42,7 +42,7 @@ def test_tally_cache_upserts_new_data_and_removes_stale_rows(db_session):
         period_start,
         period_end,
         [
-            TallySalesVoucher("2026-07-15", "42", "Sales", "Customer A", "500", remote_id="guid-42"),
+            TallySalesVoucher("2026-07-15", "42", "Sales", "Customer A", "500", remote_id="guid-42", tally_user="tally-a"),
             TallySalesVoucher("2026-07-14", "41", "Sales", "Customer B", "250", remote_id="guid-41"),
         ],
     )
@@ -63,7 +63,7 @@ def test_tally_cache_upserts_new_data_and_removes_stale_rows(db_session):
         period_start,
         period_end,
         [
-            TallySalesVoucher("2026-07-15", "42", "Sales", "Customer A", "600", remote_id="guid-42"),
+            TallySalesVoucher("2026-07-15", "42", "Sales", "Customer A", "600", remote_id="guid-42", tally_user="tally-b"),
         ],
     )
 
@@ -83,5 +83,6 @@ def test_tally_cache_upserts_new_data_and_removes_stale_rows(db_session):
     assert len(vouchers) == 1
     assert vouchers[0].remote_id == "guid-42"
     assert vouchers[0].amount == "600"
+    assert vouchers[0].tally_user == "tally-b"
     assert db_session.scalar(select(func.count(TallyLedgerCache.id))) == 2
     assert db_session.scalar(select(func.count(TallySalesVoucherCache.id))) == 1

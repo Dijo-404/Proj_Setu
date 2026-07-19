@@ -131,6 +131,25 @@ def ensure_runtime_schema(target_engine: Engine | None = None) -> None:
             if "must_change_password" not in user_columns:
                 connection.execute(text("ALTER TABLE users ADD COLUMN must_change_password BOOLEAN DEFAULT 0"))
 
+        if "tally_sales_voucher_cache" in inspector.get_table_names():
+            voucher_cache_columns = {
+                column["name"]
+                for column in inspector.get_columns("tally_sales_voucher_cache")
+            }
+            if "tally_user" not in voucher_cache_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE tally_sales_voucher_cache "
+                        "ADD COLUMN tally_user VARCHAR(220) DEFAULT ''"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_tally_sales_voucher_cache_tally_user "
+                        "ON tally_sales_voucher_cache (tally_user)"
+                    )
+                )
+
         if "storage_locations" in inspector.get_table_names():
             location_columns = {column["name"] for column in inspector.get_columns("storage_locations")}
             if "warehouse_level" not in location_columns:

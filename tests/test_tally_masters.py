@@ -130,6 +130,7 @@ def test_ledger_and_sales_book_xml_are_scoped_to_selected_company():
     assert '<SVTODATE TYPE="Date">20260715</SVTODATE>' in sales_xml
     assert "<NATIVEMETHOD>GUID</NATIVEMETHOD>" in sales_xml
     assert "<NATIVEMETHOD>MasterID</NATIVEMETHOD>" in sales_xml
+    assert "<NATIVEMETHOD>EnteredBy</NATIVEMETHOD>" in sales_xml
     assert "$$IsSales:$VoucherTypeName" in sales_xml
 
 
@@ -172,6 +173,7 @@ def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
                 <DATE>20260715</DATE><VOUCHERNUMBER>42</VOUCHERNUMBER>
                 <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME><PARTYLEDGERNAME>Customer A</PARTYLEDGERNAME>
                 <AMOUNT>500.00</AMOUNT><NARRATION>Test sale</NARRATION><GUID>sale-guid-42</GUID>
+                <ENTEREDBY>tally-sales-1</ENTEREDBY>
               </VOUCHER>
               <VOUCHER><VOUCHERNUMBER>metadata-only</VOUCHERNUMBER></VOUCHER>
             </COLLECTION></DATA></BODY></ENVELOPE>
@@ -196,6 +198,7 @@ def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
     assert vouchers[0].voucher_number == "42"
     assert vouchers[0].party_ledger == "Customer A"
     assert vouchers[0].remote_id == "sale-guid-42"
+    assert vouchers[0].tally_user == "tally-sales-1"
 
 
 def test_live_tally_data_removes_invalid_xml_character_references():

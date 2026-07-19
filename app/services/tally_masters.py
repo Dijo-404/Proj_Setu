@@ -54,6 +54,7 @@ class TallySalesVoucher:
     amount: str
     narration: str = ""
     remote_id: str = ""
+    tally_user: str = ""
 
 
 def _status(name: str | None) -> str:
@@ -235,6 +236,9 @@ def build_sales_book_xml(company_name: str, from_date: date, to_date: date) -> s
             "Narration",
             "GUID",
             "MasterID",
+            "EnteredBy",
+            "CreatedBy",
+            "AlteredBy",
             "AllLedgerEntries",
         ),
         company_name=company_name.strip(),
@@ -445,6 +449,7 @@ def fetch_tally_sales_book(
             amount=_voucher_amount(node),
             narration=_direct_text(node, "NARRATION"),
             remote_id=_direct_text(node, "GUID", "MASTERID"),
+            tally_user=_direct_text(node, "ENTEREDBY", "CREATEDBY", "ALTEREDBY"),
         )
         if voucher.date:
             vouchers.append(voucher)

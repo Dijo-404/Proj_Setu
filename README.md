@@ -210,8 +210,9 @@ After logging in:
 
 1. Open `Users`.
 2. Create named users for purchase, sales, auditor, and admin roles.
-3. Disable unused accounts or, as super admin, delete accounts that should no longer appear in the user list.
-4. Store the first-admin password securely; changing bootstrap settings after the database exists does not change existing users.
+3. Use `Tally access` on a user to assign specific company profiles, ledgers, and Tally usernames. Empty assignment sections allow all values; super admins always have full Tally access.
+4. Disable unused accounts or, as super admin, delete accounts that should no longer appear in the user list.
+5. Store the first-admin password securely; changing bootstrap settings after the database exists does not change existing users.
 
 Changing `BOOTSTRAP_ADMIN_PASSWORD` after `data/setuora.db` already exists does not reset an existing user. Create, disable, or delete users from the `Users` page. Deleted users with old activity are hidden from the list but kept internally for historical records.
 
