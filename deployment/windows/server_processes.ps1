@@ -186,3 +186,53 @@ function Get-SetuoraServerLaunchInfo {
         ProcessId = $Process.ProcessId
     }
 }
+
+function Remove-LegacySetuoraServices {
+    param(
+        [Parameter(Mandatory=$true)][string]$CanonicalServiceName,
+        [Parameter(Mandatory=$true)][string[]]$LegacyServiceNames
+    )
+
+    foreach ($legacyName in $LegacyServiceNames) {
+        if (
+            [string]::IsNullOrWhiteSpace($legacyName) -or
+            $legacyName -ieq $CanonicalServiceName
+        ) {
+            continue
+        }
+
+        $legacyService = Get-Service -Name $legacyName -ErrorAction SilentlyContinue
+        if (-not $legacyService) {
+            continue
+        }
+
+        Write-Host "Removing obsolete Setuora service '$legacyName'..." -ForegroundColor Yellow
+        if ($legacyService.Status -ne "Stopped") {
+            try {
+                Stop-Service -Name $legacyName -Force
+                $legacyService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+            }
+            catch {
+                throw "The obsolete Setuora service '$legacyName' could not be stopped. Run this command as Administrator. $($_.Exception.Message)"
+            }
+        }
+
+        & sc.exe delete $legacyName | Out-Host
+        if ($LASTEXITCODE -ne 0) {
+            throw "The obsolete Setuora service '$legacyName' could not be removed. Run this command as Administrator."
+        }
+
+        $legacyService.Dispose()
+        $legacyService = $null
+        for ($attempt = 0; $attempt -lt 20; $attempt++) {
+            if (-not (Get-Service -Name $legacyName -ErrorAction SilentlyContinue)) {
+                break
+            }
+            Start-Sleep -Milliseconds 500
+        }
+
+        if (Get-Service -Name $legacyName -ErrorAction SilentlyContinue) {
+            throw "The obsolete Setuora service '$legacyName' is marked for deletion. Restart Windows once, then run Setuora again."
+        }
+    }
+}

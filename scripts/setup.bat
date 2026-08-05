@@ -37,6 +37,7 @@ $CaddyDir = Join-Path $ProjectRoot "deployment\caddy"
 $Caddyfile = Join-Path $CaddyDir "Caddyfile"
 $CaddyServiceName = "SetuoraCaddy"
 $AppServiceName = "SetuoraQrTallyBridge"
+$LegacyAppServiceNames = @("SetuQrTallyBridge")
 $CaddyServiceStartName = "NT AUTHORITY\LocalService"
 $LegacyCaddyServiceNames = @("SetuCaddy")
 $LocalServiceSid = "*S-1-5-19"
@@ -889,6 +890,19 @@ function Wait-HealthEndpoint {
         [Parameter(Mandatory=$true)][string]$DisplayName
     )
 
+    $parsedUri = [Uri]$Uri
+    $configuredIp = [Net.IPAddress]::None
+    if (
+        [Net.IPAddress]::TryParse($parsedUri.Host, [ref]$configuredIp) -and
+        -not [Net.IPAddress]::IsLoopback($configuredIp)
+    ) {
+        $localAddress = Get-NetIPAddress -IPAddress $configuredIp.ToString() -ErrorAction SilentlyContinue
+        if (-not $localAddress) {
+            Write-Host "$DisplayName is configured for '$($parsedUri.Host)', but that address is not currently assigned to this PC. Setuora is running; run Setuora.exe setup to update HTTPS for the current network." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     $lastError = $null
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -909,8 +923,18 @@ function Wait-HealthEndpoint {
 
 function Offer-ServiceInstall {
     $existingService = Get-Service -Name $AppServiceName -ErrorAction SilentlyContinue
-    if ($existingService) {
-        Write-Host "Existing Setuora Windows service found. Updating its automatic-start configuration."
+    $legacyServices = @(
+        $LegacyAppServiceNames |
+            ForEach-Object { Get-Service -Name $_ -ErrorAction SilentlyContinue } |
+            Where-Object { $null -ne $_ }
+    )
+    if ($existingService -or $legacyServices.Count -gt 0) {
+        if ($legacyServices.Count -gt 0) {
+            Write-Host "Obsolete Setuora Windows service found. Migrating it to the current least-privilege service."
+        }
+        else {
+            Write-Host "Existing Setuora Windows service found. Updating its automatic-start configuration."
+        }
         if (-not (Test-AdminShell)) {
             throw "Updating the existing Windows service needs Administrator access. Right-click scripts\setup.bat and choose 'Run as administrator'."
         }

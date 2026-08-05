@@ -11,6 +11,7 @@ $projectRoot = [IO.Path]::GetFullPath($ProjectDir).TrimEnd("\")
 $startScript = [IO.Path]::GetFullPath((Join-Path $projectRoot "scripts\start_setuora.bat"))
 $startHelper = [IO.Path]::GetFullPath((Join-Path $projectRoot "deployment\windows\start_setuora.ps1"))
 $processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
+$legacyServiceNames = @("SetuQrTallyBridge")
 $stoppedAnything = $false
 
 if (-not (Test-Path -LiteralPath $processHelper)) {
@@ -19,6 +20,28 @@ if (-not (Test-Path -LiteralPath $processHelper)) {
 . $processHelper
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($service) {
+    Remove-LegacySetuoraServices `
+        -CanonicalServiceName $ServiceName `
+        -LegacyServiceNames $legacyServiceNames
+}
+else {
+    foreach ($legacyName in $legacyServiceNames) {
+        $legacyService = Get-Service -Name $legacyName -ErrorAction SilentlyContinue
+        if ($legacyService -and $legacyService.Status -ne "Stopped") {
+            Write-Host "Stopping the legacy Setuora Windows service..."
+            try {
+                Stop-Service -Name $legacyName -Force
+                $legacyService.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+            }
+            catch {
+                throw "Windows could not stop the legacy Setuora service. Run this script as Administrator. $($_.Exception.Message)"
+            }
+            $stoppedAnything = $true
+        }
+    }
+}
+
 if ($service -and $service.Status -ne "Stopped") {
     Write-Host "Stopping the Setuora Windows service..."
     try {

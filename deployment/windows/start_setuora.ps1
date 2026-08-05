@@ -15,6 +15,7 @@ $pythonExe = [IO.Path]::GetFullPath((Join-Path $projectRoot ".venv\Scripts\pytho
 $requirementsPath = Join-Path $projectRoot "requirements.lock"
 $processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
 $caddyfile = Join-Path $projectRoot "deployment\caddy\Caddyfile"
+$legacyServiceNames = @("SetuQrTallyBridge")
 Set-Location $projectRoot
 
 function Ensure-Pip {
@@ -139,6 +140,19 @@ function Get-CaddyAddress {
 function Wait-HealthEndpoint {
     param([string]$Uri, [string]$DisplayName)
 
+    $parsedUri = [Uri]$Uri
+    $configuredIp = [Net.IPAddress]::None
+    if (
+        [Net.IPAddress]::TryParse($parsedUri.Host, [ref]$configuredIp) -and
+        -not [Net.IPAddress]::IsLoopback($configuredIp)
+    ) {
+        $localAddress = Get-NetIPAddress -IPAddress $configuredIp.ToString() -ErrorAction SilentlyContinue
+        if (-not $localAddress) {
+            Write-Host "$DisplayName is configured for '$($parsedUri.Host)', but that address is not currently assigned to this PC. Setuora is running; run Setuora.exe setup to update HTTPS for the current network." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     $lastError = $null
     while ([DateTime]::UtcNow -lt $deadline) {
@@ -157,6 +171,53 @@ function Wait-HealthEndpoint {
     throw "$DisplayName did not become reachable at '$Uri'. $lastError"
 }
 
+function Get-RecentSetuoraError {
+    $logDir = Join-Path $projectRoot "logs"
+    if (-not (Test-Path -LiteralPath $logDir)) {
+        return $null
+    }
+
+    $errorLog = Get-ChildItem -LiteralPath $logDir -Filter "setuora-err*.log" -File -ErrorAction SilentlyContinue |
+        Sort-Object LastWriteTime -Descending |
+        Select-Object -First 1
+    if (-not $errorLog) {
+        return $null
+    }
+
+    $lines = @(
+        Get-Content -LiteralPath $errorLog.FullName -Tail 15 -ErrorAction SilentlyContinue |
+            Where-Object { $_.Trim() -ne "" }
+    )
+    if ($lines.Count -eq 0) {
+        return $null
+    }
+    return ($lines -join [Environment]::NewLine)
+}
+
+function Get-ServiceStartFailureMessage {
+    param([Parameter(Mandatory=$true)][string]$Summary)
+
+    $details = Get-RecentSetuoraError
+    if ($details) {
+        return "$Summary`nRecent service log:`n$details"
+    }
+    return $Summary
+}
+
+function Assert-PortAvailable {
+    param([int]$LocalPort)
+
+    $listeners = @(
+        Get-NetTCPConnection -LocalPort $LocalPort -State Listen -ErrorAction SilentlyContinue
+    )
+    if ($listeners.Count -eq 0) {
+        return
+    }
+
+    $processIds = @($listeners | Select-Object -ExpandProperty OwningProcess -Unique)
+    throw "Setuora cannot start because port $LocalPort is already in use by process ID(s): $($processIds -join ', '). Run Setuora.exe stop, close the other server, then try again."
+}
+
 if (-not (Test-Path -LiteralPath $processHelper)) {
     throw "The Setuora process helper was not found: '$processHelper'."
 }
@@ -169,6 +230,12 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 Ensure-AppDependencies -PythonExe $pythonExe -RequirementsPath $requirementsPath
 
 $service = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($service) {
+    Remove-LegacySetuoraServices `
+        -CanonicalServiceName $ServiceName `
+        -LegacyServiceNames $legacyServiceNames
+    $service.Refresh()
+}
 if ($service -and -not $ConsoleOnly) {
     & sc.exe config $ServiceName start= auto | Out-Null
     if ($LASTEXITCODE -ne 0) {
@@ -178,6 +245,18 @@ if ($service -and -not $ConsoleOnly) {
         Write-Host "Setuora is already running as the Windows service."
     }
     else {
+        if ($service.Status -eq "Paused") {
+            Write-Host "Resetting the Setuora Windows service after its previous failed-start backoff..."
+            try {
+                Stop-Service -Name $ServiceName -Force
+                $service.WaitForStatus("Stopped", [TimeSpan]::FromSeconds(20))
+                $service.Refresh()
+            }
+            catch {
+                throw (Get-ServiceStartFailureMessage -Summary "The paused Setuora Windows service could not be reset. $($_.Exception.Message)")
+            }
+        }
+        Assert-PortAvailable -LocalPort $Port
         Write-Host "Starting the Setuora Windows service..."
         try {
             Start-Service -Name $ServiceName
@@ -185,10 +264,10 @@ if ($service -and -not $ConsoleOnly) {
             Write-Host "Setuora is running as the Windows service." -ForegroundColor Green
         }
         catch [System.ServiceProcess.TimeoutException] {
-            throw "The Setuora Windows service did not start within 20 seconds. Check Windows Services, then try again."
+            throw (Get-ServiceStartFailureMessage -Summary "The Setuora Windows service did not start within 20 seconds.")
         }
         catch {
-            throw "Windows could not start the Setuora service. Run scripts\start_setuora.bat as Administrator. $($_.Exception.Message)"
+            throw (Get-ServiceStartFailureMessage -Summary "Windows could not start the Setuora service. Run scripts\start_setuora.bat as Administrator. $($_.Exception.Message)")
         }
     }
 
@@ -214,6 +293,7 @@ if ($serverProcesses.Count -gt 0) {
     return
 }
 
+Assert-PortAvailable -LocalPort $Port
 Write-Host "Starting Setuora QR Tally Bridge..."
 Write-Host "Open: http://${HostAddress}:$Port"
 Write-Host "Press Ctrl+C in this window to stop the app."

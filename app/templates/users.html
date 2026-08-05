@@ -178,7 +178,17 @@
             {% endif %}
           {% endfor %}
           {% if not tally_user_options %}
+          {% if cached_tally_voucher_count %}
+          <p class="empty">
+            {{ unattributed_tally_voucher_count }} saved Tally sales
+            voucher{% if unattributed_tally_voucher_count != 1 %}s{% endif %}
+            {% if unattributed_tally_voucher_count == 1 %}has{% else %}have{% endif %}
+            no Edit Log username. Use “other usernames” for older vouchers that
+            Tally cannot attribute.
+          </p>
+          {% else %}
           <p class="empty">No Tally users have been discovered yet. Refresh a company's sales book in Tally Check first.</p>
+          {% endif %}
           {% endif %}
         </div>
         {% if companies %}

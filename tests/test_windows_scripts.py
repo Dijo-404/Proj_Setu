@@ -161,6 +161,12 @@ def test_start_script_uses_state_aware_windows_helper():
     assert "sc.exe config $ServiceName start= auto" in helper
     assert "sc.exe config $CaddyServiceName start= auto depend= $ServiceName" in helper
     assert "Caddy HTTPS started and then stopped" in helper
+    assert '$legacyServiceNames = @("SetuQrTallyBridge")' in helper
+    assert "Remove-LegacySetuoraServices" in helper
+    assert 'if ($service.Status -eq "Paused")' in helper
+    assert "Assert-PortAvailable -LocalPort $Port" in helper
+    assert "Recent service log:" in helper
+    assert "that address is not currently assigned to this PC" in helper
     assert 'Wait-HealthEndpoint -Uri "http://127.0.0.1:$Port/health"' in helper
     assert 'Wait-HealthEndpoint -Uri "https://$caddyAddress/health"' in helper
     assert helper.index('Start-Service -Name $ServiceName') < helper.index(
@@ -228,6 +234,38 @@ def test_service_install_grants_localservice_access_to_base_python():
     assert "function Get-VenvBasePythonHome" in installer
     assert "pyvenv.cfg" in installer
     assert 'Grant-LocalServiceAccess -Path $basePythonHome -Access "RX"' in installer
+
+
+def test_windows_workflows_remove_the_obsolete_duplicate_app_service():
+    installer = (PROJECT_ROOT / "deployment" / "windows" / "install_service.ps1").read_text(
+        encoding="utf-8"
+    )
+    start_helper = (
+        PROJECT_ROOT / "deployment" / "windows" / "start_setuora.ps1"
+    ).read_text(encoding="utf-8")
+    stop_helper = (
+        PROJECT_ROOT / "deployment" / "windows" / "stop_setuora.ps1"
+    ).read_text(encoding="utf-8")
+    process_helper = (
+        PROJECT_ROOT / "deployment" / "windows" / "server_processes.ps1"
+    ).read_text(encoding="utf-8")
+
+    assert "function Remove-LegacySetuoraServices" in process_helper
+    assert 'Stop-Service -Name $legacyName -Force' in process_helper
+    assert '& sc.exe delete $legacyName' in process_helper
+    for script in (installer, start_helper, stop_helper):
+        assert '$legacyServiceNames = @("SetuQrTallyBridge")' in script
+        assert "Remove-LegacySetuoraServices" in script
+
+    # The replacement is configured before the old service is deleted, and
+    # setup also migrates machines which only have the old service name.
+    assert installer.index("Invoke-Nssm set $ServiceName Application") < installer.index(
+        "Remove-LegacySetuoraServices"
+    )
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+    assert '$LegacyAppServiceNames = @("SetuQrTallyBridge")' in setup_script
+    assert "if ($existingService -or $legacyServices.Count -gt 0)" in setup_script
+    assert "Migrating it to the current least-privilege service." in setup_script
 
 
 def test_service_start_surfaces_the_service_error_log():
@@ -320,6 +358,15 @@ def test_updater_restarts_the_optional_https_proxy_with_the_app_service():
     assert update_script.index("Start-Service -Name $ServiceName") < update_script.index(
         "Start-Service -Name $CaddyServiceName"
     )
+    assert "that address is not currently assigned to this PC" in update_script
+
+
+def test_setup_does_not_fail_when_caddy_is_configured_for_an_old_lan_ip():
+    setup_script = (WORKFLOWS_DIR / "setup.bat").read_text(encoding="utf-8")
+
+    assert "[Net.IPAddress]::TryParse" in setup_script
+    assert "that address is not currently assigned to this PC" in setup_script
+    assert "run Setuora.exe setup to update HTTPS for the current network" in setup_script
 
 
 def test_target_server_preflight_is_available():

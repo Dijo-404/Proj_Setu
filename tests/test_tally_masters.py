@@ -6,6 +6,7 @@ from app.services.tally_masters import (
     build_company_list_xml,
     build_ledger_list_xml,
     build_sales_book_xml,
+    build_voucher_edit_log_xml,
     collect_master_requirements,
     confirm_master,
     confirmation_lookup,
@@ -130,8 +131,20 @@ def test_ledger_and_sales_book_xml_are_scoped_to_selected_company():
     assert '<SVTODATE TYPE="Date">20260715</SVTODATE>' in sales_xml
     assert "<NATIVEMETHOD>GUID</NATIVEMETHOD>" in sales_xml
     assert "<NATIVEMETHOD>MasterID</NATIVEMETHOD>" in sales_xml
+    assert "<NATIVEMETHOD>IsEditLogPresent</NATIVEMETHOD>" in sales_xml
+    assert "EditLogs." not in sales_xml
     assert "<NATIVEMETHOD>EnteredBy</NATIVEMETHOD>" in sales_xml
     assert "$$IsSales:$VoucherTypeName" in sales_xml
+
+
+def test_voucher_edit_log_xml_is_scoped_to_voucher_master_id():
+    xml = build_voucher_edit_log_xml("Selected Company", "12425")
+
+    assert "<SVCURRENTCOMPANY>Selected Company</SVCURRENTCOMPANY>" in xml
+    assert "<TYPE>Edit Logs : Voucher</TYPE>" in xml
+    assert "<CHILDOF>12425</CHILDOF>" in xml
+    assert "<NATIVEMETHOD>Version</NATIVEMETHOD>" in xml
+    assert "<NATIVEMETHOD>EnteredBy</NATIVEMETHOD>" in xml
 
 
 class _GatewayResponse:
@@ -199,6 +212,42 @@ def test_live_tally_data_parses_companies_ledgers_and_sales_vouchers():
     assert vouchers[0].party_ledger == "Customer A"
     assert vouchers[0].remote_id == "sale-guid-42"
     assert vouchers[0].tally_user == "tally-sales-1"
+
+
+def test_sales_book_uses_latest_edit_log_user():
+    sales_response = _GatewayResponse(
+        """
+        <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+          <VOUCHER>
+            <DATE>20260715</DATE><VOUCHERNUMBER>42</VOUCHERNUMBER>
+            <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+            <MASTERID>12425</MASTERID><ISEDITLOGPRESENT>Yes</ISEDITLOGPRESENT>
+          </VOUCHER>
+        </COLLECTION></DATA></BODY></ENVELOPE>
+        """
+    )
+    edit_log_response = _GatewayResponse(
+        """
+        <ENVELOPE><HEADER><STATUS>1</STATUS></HEADER><BODY><DATA><COLLECTION>
+          <EDITLOG><VERSION>1</VERSION><ENTEREDBY>creator</ENTEREDBY></EDITLOG>
+          <EDITLOG><VERSION>3</VERSION><ENTEREDBY>latest-editor</ENTEREDBY></EDITLOG>
+          <EDITLOG><VERSION>2</VERSION><ENTEREDBY>first-editor</ENTEREDBY></EDITLOG>
+        </COLLECTION></DATA></BODY></ENVELOPE>
+        """
+    )
+
+    with patch(
+        "app.services.tally_masters.urlopen",
+        side_effect=[sales_response, edit_log_response],
+    ):
+        vouchers = fetch_tally_sales_book(
+            {"tally_host": "127.0.0.1", "tally_port": "9000"},
+            "First Company",
+            date(2026, 4, 1),
+            date(2026, 7, 15),
+        )
+
+    assert vouchers[0].tally_user == "latest-editor"
 
 
 def test_live_tally_data_removes_invalid_xml_character_references():

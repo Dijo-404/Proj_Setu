@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from urllib.error import URLError
 from urllib.request import Request, urlopen
@@ -236,6 +236,7 @@ def build_sales_book_xml(company_name: str, from_date: date, to_date: date) -> s
             "Narration",
             "GUID",
             "MasterID",
+            "IsEditLogPresent",
             "EnteredBy",
             "CreatedBy",
             "AlteredBy",
@@ -259,6 +260,23 @@ def build_sales_book_xml(company_name: str, from_date: date, to_date: date) -> s
         "$$IsSales:$VoucherTypeName "
         "AND $Date >= ##SVFromDate AND $Date <= ##SVToDate"
     )
+    return ET.tostring(envelope, encoding="unicode")
+
+
+def build_voucher_edit_log_xml(company_name: str, master_id: str) -> str:
+    envelope, tdl_message = _build_collection_export(
+        "Setuora Voucher Edit Logs",
+        "Edit Logs : Voucher",
+        (
+            "Version",
+            "EnteredBy",
+            "ObjectUpdateAction",
+            "UpdatedDateTime",
+        ),
+        company_name=company_name.strip(),
+    )
+    collection = next(node for node in tdl_message if _local_tag(node) == "COLLECTION")
+    ET.SubElement(collection, "CHILDOF").text = master_id.strip()
     return ET.tostring(envelope, encoding="unicode")
 
 
@@ -412,6 +430,58 @@ def _voucher_amount(voucher: ET.Element) -> str:
     return ""
 
 
+def _tally_user(voucher: ET.Element) -> str:
+    # Older Tally versions/customisations can expose the user directly on the
+    # voucher, so retain that as the first compatibility path.
+    direct = _direct_text(voucher, "ENTEREDBY", "CREATEDBY", "ALTEREDBY")
+    if direct:
+        return direct
+
+    # In current TallyPrime versions EnteredBy belongs to the voucher's Edit
+    # Logs sub-object. Prefer the highest version so an altered voucher is
+    # attributed to the user responsible for its current version.
+    candidates: list[tuple[int, int, str]] = []
+    for sequence, edit_log in enumerate(voucher.iter()):
+        tag = _local_tag(edit_log)
+        if edit_log is voucher or not tag.startswith("EDITLOG") or tag == "ISEDITLOGPRESENT":
+            continue
+        username = _direct_text(edit_log, "ENTEREDBY", "PERFORMEDBY")
+        if not username:
+            continue
+        raw_version = _direct_text(edit_log, "VERSION")
+        try:
+            version = int(raw_version)
+        except ValueError:
+            version = -1
+        candidates.append((version, sequence, username))
+    return max(candidates, default=(-1, -1, ""))[2]
+
+
+def _latest_edit_log_user(
+    settings: dict[str, str],
+    company_name: str,
+    master_id: str,
+) -> str:
+    if not master_id.strip():
+        return ""
+    _, root = _post_read_request(
+        settings,
+        build_voucher_edit_log_xml(company_name, master_id),
+    )
+    candidates: list[tuple[int, int, str]] = []
+    for sequence, node in enumerate(root.iter()):
+        username = _direct_text(node, "ENTEREDBY", "PERFORMEDBY")
+        if not username:
+            continue
+        raw_version = _direct_text(node, "VERSION")
+        try:
+            version = int(raw_version)
+        except ValueError:
+            version = -1
+        candidates.append((version, sequence, username))
+    return max(candidates, default=(-1, -1, ""))[2]
+
+
 def _display_tally_date(raw: str) -> str:
     clean = raw.strip()
     if len(clean) == 8 and clean.isdigit():
@@ -437,7 +507,7 @@ def fetch_tally_sales_book(
         settings,
         build_sales_book_xml(clean_company, from_date, to_date),
     )
-    vouchers: list[TallySalesVoucher] = []
+    voucher_rows: list[tuple[TallySalesVoucher, str, bool]] = []
     for node in root.iter():
         if _local_tag(node) != "VOUCHER":
             continue
@@ -449,10 +519,32 @@ def fetch_tally_sales_book(
             amount=_voucher_amount(node),
             narration=_direct_text(node, "NARRATION"),
             remote_id=_direct_text(node, "GUID", "MASTERID"),
-            tally_user=_direct_text(node, "ENTEREDBY", "CREATEDBY", "ALTEREDBY"),
+            tally_user=_tally_user(node),
         )
         if voucher.date:
-            vouchers.append(voucher)
+            voucher_rows.append(
+                (
+                    voucher,
+                    _direct_text(node, "MASTERID"),
+                    _direct_text(node, "ISEDITLOGPRESENT").casefold() == "yes",
+                )
+            )
+    vouchers: list[TallySalesVoucher] = []
+    for voucher, master_id, has_edit_log in voucher_rows:
+        if not voucher.tally_user and has_edit_log:
+            try:
+                voucher = replace(
+                    voucher,
+                    tally_user=_latest_edit_log_user(
+                        settings,
+                        clean_company,
+                        master_id,
+                    ),
+                )
+            except TallyDataError:
+                # A failed audit-history lookup must not discard the sales book.
+                pass
+        vouchers.append(voucher)
     return sorted(
         vouchers,
         key=lambda voucher: (voucher.date, voucher.voucher_number),

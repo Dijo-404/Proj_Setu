@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
@@ -357,9 +357,22 @@ def access_page_data(db: Session, users: Iterable[User]) -> dict[str, object]:
             TallySalesVoucherCache.tally_user,
         )
     ).all()
+    cached_voucher_count = db.scalar(select(func.count(TallySalesVoucherCache.id))) or 0
+    attributed_voucher_count = (
+        db.scalar(
+            select(func.count(TallySalesVoucherCache.id)).where(
+                TallySalesVoucherCache.tally_user != ""
+            )
+        )
+        or 0
+    )
     return {
         "user_access": user_access,
         "ledger_options": ledger_options,
+        "cached_tally_voucher_count": cached_voucher_count,
+        "unattributed_tally_voucher_count": (
+            cached_voucher_count - attributed_voucher_count
+        ),
         "tally_user_options": [
             {
                 "company_id": company_id,

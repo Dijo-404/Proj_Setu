@@ -84,6 +84,19 @@ function Get-CaddyAddress {
 function Wait-HealthEndpoint {
     param([string]$Uri, [string]$DisplayName)
 
+    $parsedUri = [Uri]$Uri
+    $configuredIp = [Net.IPAddress]::None
+    if (
+        [Net.IPAddress]::TryParse($parsedUri.Host, [ref]$configuredIp) -and
+        -not [Net.IPAddress]::IsLoopback($configuredIp)
+    ) {
+        $localAddress = Get-NetIPAddress -IPAddress $configuredIp.ToString() -ErrorAction SilentlyContinue
+        if (-not $localAddress) {
+            Write-Host "$DisplayName is configured for '$($parsedUri.Host)', but that address is not currently assigned to this PC. Setuora is running; run Setuora.exe setup to update HTTPS for the current network." -ForegroundColor Yellow
+            return
+        }
+    }
+
     $deadline = [DateTime]::UtcNow.AddSeconds(30)
     $lastError = $null
     while ([DateTime]::UtcNow -lt $deadline) {

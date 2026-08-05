@@ -11,6 +11,8 @@ Set-StrictMode -Version Latest
 $pythonExe = Join-Path $ProjectDir ".venv\Scripts\python.exe"
 $logDir = Join-Path $ProjectDir "logs"
 $dataDir = Join-Path $ProjectDir "data"
+$processHelper = Join-Path $PSScriptRoot "server_processes.ps1"
+$legacyServiceNames = @("SetuQrTallyBridge")
 $localServiceSid = "*S-1-5-19"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
@@ -21,6 +23,10 @@ if (-not (Test-Path -LiteralPath $pythonExe)) {
 if (-not (Test-Path -LiteralPath $NssmPath)) {
     throw "NSSM was not found at '$NssmPath'."
 }
+if (-not (Test-Path -LiteralPath $processHelper)) {
+    throw "The Setuora process helper was not found at '$processHelper'."
+}
+. $processHelper
 
 function Invoke-Nssm {
     & $NssmPath @args | Out-Host
@@ -107,3 +113,9 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Could not enable failure recovery for the Setuora Windows service."
 }
+
+# Remove the old service only after its least-privilege replacement is fully
+# configured, so a failed migration never leaves the installation unmanaged.
+Remove-LegacySetuoraServices `
+    -CanonicalServiceName $ServiceName `
+    -LegacyServiceNames $legacyServiceNames
